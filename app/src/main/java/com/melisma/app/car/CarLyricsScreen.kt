@@ -10,6 +10,7 @@ import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
+import androidx.car.app.versioning.CarAppApiLevels
 import androidx.car.app.navigation.model.MapWithContentTemplate
 import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.Lifecycle
@@ -115,7 +116,13 @@ class CarLyricsScreen(
             playing = playback.isPlaying,
             // The phone's own switch wins: somebody who asked for the plain screen gets it even where
             // the full one would work.
-            onSurface = surface.live.value && !settings.carSimpleScreen,
+            onSurface = surface.live.value &&
+                !settings.carSimpleScreen &&
+                // MapWithContentTemplate is @RequiresCarApi(7) while this app admits hosts from
+                // level 1, and a surface arrives from level 5 — so there is a real window where the
+                // app can be drawing happily and still have no template able to carry it. Asking the
+                // host what it understands is the difference between the fallback and a rejection.
+                carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_7,
         )
     }
 
@@ -197,26 +204,34 @@ class CarLyricsScreen(
         return template.build()
     }
 
+    /**
+     * The transport row, or nothing at all.
+     *
+     * Null rather than an empty strip, and that is not tidiness: `ActionStrip.Builder.build()` throws
+     * "Action strip must contain at least one action", and a session advertising only `ACTION_SEEK_TO`
+     * has `transport.any` true while earning no buttons at all — which would have taken down both car
+     * templates for that one player.
+     */
     private fun Content.transportStrip(): ActionStrip? {
-        if (!transport.any) return null
-        val strip = ActionStrip.Builder()
+        val wanted = carTransportFor(transport)
+        if (wanted.isEmpty()) return null
 
-        if (transport.skipPrevious) {
+        val strip = ActionStrip.Builder()
+        for (button in wanted) {
             strip.addAction(
-                action(R.drawable.ic_car_previous, R.string.car_previous) {
-                    container.media.skipPrevious()
-                },
-            )
-        }
-        if (transport.playPause) {
-            val icon = if (playing) R.drawable.ic_car_pause else R.drawable.ic_car_play
-            val label = if (playing) R.string.car_pause else R.string.car_play
-            strip.addAction(action(icon, label) { container.media.togglePlayPause() })
-        }
-        if (transport.skipNext) {
-            strip.addAction(
-                action(R.drawable.ic_car_next, R.string.car_next_track) {
-                    container.media.skipNext()
+                when (button) {
+                    CarTransport.PREVIOUS -> action(R.drawable.ic_car_previous, null) {
+                        container.media.skipPrevious()
+                    }
+
+                    CarTransport.PLAY_PAUSE -> action(
+                        if (playing) R.drawable.ic_car_pause else R.drawable.ic_car_play,
+                        if (playing) R.string.car_pause else R.string.car_play,
+                    ) { container.media.togglePlayPause() }
+
+                    CarTransport.NEXT -> action(R.drawable.ic_car_next, null) {
+                        container.media.skipNext()
+                    }
                 },
             )
         }
@@ -224,16 +239,19 @@ class CarLyricsScreen(
     }
 
     /**
-     * An icon and a title, both.
+     * One button, with a title only where the templates allow one.
      *
-     * `Action` has no content-description of its own, so the title is the only thing a screen reader
-     * has to say — an icon-only transport row is unusable to anyone relying on one. The host decides
-     * whether it has room to draw the words next to the glyph; that part is not ours.
+     * This started out as icon *and* title on all three, for the screen reader — `Action` has no
+     * content description of its own, so a title is the only label there is. The library says no:
+     * `PaneTemplate.setActionStrip` validates against `ACTIONS_CONSTRAINTS_SIMPLE`, which permits
+     * exactly **one** action with a custom title and throws on the second. So the one title goes to
+     * play/pause, the button whose meaning changes and the one most worth announcing, and the skips
+     * are icon-only. Both templates in use here allow at least one, so the same row works in each.
      */
-    private fun action(icon: Int, label: Int, onClick: () -> Unit): Action =
+    private fun action(icon: Int, label: Int?, onClick: () -> Unit): Action =
         Action.Builder()
             .setIcon(CarIcon.Builder(IconCompat.createWithResource(carContext, icon)).build())
-            .setTitle(carContext.getString(label))
+            .apply { label?.let { setTitle(carContext.getString(it)) } }
             .setOnClickListener {
                 onClick()
                 // The player answers by publishing a new state, which the next tick picks up — but
@@ -249,6 +267,7 @@ class CarLyricsScreen(
             .build()
 
     private companion object {
+
         /**
          * How often the playhead is re-examined. Half a second is imperceptible against a lyric line
          * that lasts three, and it is a comparison of two small values rather than any drawing.
@@ -264,4 +283,20 @@ class CarLyricsScreen(
          */
         const val MIN_REDRAW_GAP_MS = 1_000L
     }
+}
+
+/** A transport button, named before it becomes an `Action` the host can validate. */
+internal enum class CarTransport { PREVIOUS, PLAY_PAUSE, NEXT }
+
+/**
+ * Which transport buttons a session has earned, in the order they belong on screen.
+ *
+ * Separated out because the two mistakes it prevents are both invisible until a particular player is
+ * playing: a session offering only a seek would otherwise produce an empty action strip, which
+ * throws, and the count decides whether a title can be afforded at all.
+ */
+internal fun carTransportFor(transport: Transport): List<CarTransport> = buildList {
+    if (transport.skipPrevious) add(CarTransport.PREVIOUS)
+    if (transport.playPause) add(CarTransport.PLAY_PAUSE)
+    if (transport.skipNext) add(CarTransport.NEXT)
 }

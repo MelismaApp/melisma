@@ -41,6 +41,7 @@ import com.melisma.app.settings.Settings
 import com.melisma.app.settings.ViewMode
 import com.melisma.app.ui.background.DynamicBackground
 import com.melisma.app.ui.background.ArtworkColors
+import com.melisma.app.ui.components.rememberPlayheadMs
 import com.melisma.app.ui.lyrics.LyricsView
 
 /**
@@ -70,9 +71,26 @@ fun CarLyricsContent(container: AppContainer, insets: PaddingValues) {
     val searched by container.searchedArtwork.collectAsStateWithLifecycle()
     val saving by container.saving.collectAsStateWithLifecycle()
 
+    val permitted by container.media.permissionGranted.collectAsStateWithLifecycle()
+
     val artwork = extras.cover ?: searched ?: snapshot.artwork
     val colors = remember(artwork) { ArtworkColors.from(artwork) }
-    val document = (lyricsState as? LyricsState.Loaded)?.document
+
+    // The same decision the templated screen makes, from the same function, so the two car screens
+    // cannot disagree about whether there is anything to show. Drawing straight from a Loaded state
+    // instead let two cases through that it already had answers for: untimed lyrics, which arrive as
+    // a document and would sit here as a frozen page nobody can scroll, and missing notification
+    // access, which showed as "nothing playing" — true, and permanently so, with no hint why.
+    //
+    // Only the *kind* of answer is used; which line is being sung is the renderer's own business.
+    val glance = CarGlance.of(
+        state = lyricsState,
+        hasTrack = snapshot.hasTrack,
+        permissionGranted = permitted,
+        positionMs = snapshot.playback.currentMs() + settings.syncOffsetMs,
+        settings = settings,
+    )
+    val document = (lyricsState as? LyricsState.Loaded)?.document?.takeIf { glance is CarGlance.Now }
 
     Box(Modifier.fillMaxSize()) {
         DynamicBackground(
@@ -93,10 +111,7 @@ fun CarLyricsContent(container: AppContainer, insets: PaddingValues) {
         Box(Modifier.fillMaxSize().padding(insets)) {
             val track = snapshot.track
             when {
-                document == null -> CarStatus(
-                    text = statusText(lyricsState, snapshot.hasTrack),
-                    accent = colors.accent,
-                )
+                document == null -> CarStatus(text = statusText(glance), accent = colors.accent)
 
                 settings.viewMode == ViewMode.CINEMA && track != null -> CarCinema(
                     track = track,
@@ -215,9 +230,12 @@ private fun CarCinema(
 @Composable
 private fun CarProgress(playback: PlaybackPosition, accent: Color) {
     val duration = playback.durationMs.coerceAtLeast(1L)
-    // Recomputed every frame the surface draws, which is what makes it move without a ticker of its
-    // own: the lyrics are already redrawing, and this rides along.
-    val fraction = (playback.currentMs().toFloat() / duration).coerceIn(0f, 1f)
+    // A ticker, because the assumption this had before was wrong: the lyrics redraw themselves in the
+    // draw phase, which does not recompose a sibling, and a player that publishes its position only
+    // on a transition would have left this bar frozen where the song started. The phone's own bars
+    // share this helper — five updates a second, and only while a window of ours is on screen.
+    val positionMs by rememberPlayheadMs(playback)
+    val fraction = (positionMs.toFloat() / duration).coerceIn(0f, 1f)
 
     Box(
         Modifier
@@ -255,13 +273,16 @@ private fun CarStatus(text: String, accent: Color) {
  * The templated screen says the same things at more length; this is the version for a surface that is
  * mostly background, where a paragraph would be unreadable anyway.
  */
-private fun statusText(state: LyricsState, hasTrack: Boolean): String = when {
-    !hasTrack -> "Nothing playing"
-    state is LyricsState.Loading || state is LyricsState.Idle -> "Looking for the words…"
-    state is LyricsState.NotFound -> "No lyrics for this one"
-    state is LyricsState.Offline -> "No connection"
-    state is LyricsState.Failed -> "Something went wrong"
-    else -> "Looking for the words…"
+private fun statusText(glance: CarGlance): String = when (glance) {
+    CarGlance.Silent -> "Nothing playing"
+    CarGlance.Looking -> "Looking for the words…"
+    CarGlance.None -> "No lyrics for this one"
+    CarGlance.Untimed -> "These lyrics have no timings"
+    CarGlance.Offline -> "No connection"
+    CarGlance.NoPermission -> "Notification access is off — grant it on your phone"
+    is CarGlance.Failed -> "Something went wrong"
+    // Reached only if the caller drew this instead of the lyrics, which it does not.
+    is CarGlance.Now -> "Looking for the words…"
 }
 
 /** Turns the host's visible rectangle into padding, in the density the surface is drawn at. */

@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.car.app.AppManager
 import androidx.car.app.Screen
 import androidx.car.app.Session
+import androidx.car.app.versioning.CarAppApiLevels
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.savedstate.SavedStateRegistry
@@ -73,9 +74,16 @@ class MelismaSession : Session(), SavedStateRegistryOwner {
 
         // Asked for once, here, rather than when a screen appears: the host answers whenever it is
         // ready, and a callback registered later can miss the surface it already offered.
-        runCatching {
-            carContext.getCarService(AppManager::class.java)
-                .setSurfaceCallback(CarScreenSurface(this, app, surface))
+        //
+        // Not asked for at all on a host below car API 7, which is the level MapWithContentTemplate
+        // needs — the one template that can carry a surface here. An older host can still hand one
+        // over, and accepting it would mean standing up a virtual display, a presentation and a whole
+        // composition to draw something no template of ours could put on screen.
+        if (carContext.carAppApiLevel >= CarAppApiLevels.LEVEL_7) {
+            runCatching {
+                carContext.getCarService(AppManager::class.java)
+                    .setSurfaceCallback(CarScreenSurface(this, app, surface))
+            }
         }
 
         // The warning is the root screen rather than a dialog over the lyrics, which makes it the one

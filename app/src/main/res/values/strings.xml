@@ -34,6 +34,6 @@
     <string name="car_failed">Something went wrong</string>
     <string name="car_play">Play</string>
     <string name="car_pause">Pause</string>
-    <string name="car_next_track">Next track</string>
-    <string name="car_previous">Previous track</string>
+    <!-- Only play/pause is titled: PaneTemplate allows exactly one action with a custom
+         title, so the skips are icon-only whether that is ideal or not. -->
 </resources>

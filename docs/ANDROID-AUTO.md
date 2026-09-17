@@ -38,6 +38,12 @@ One time per phone, and it is the same switch any sideloaded car app needs.
 
 ## What it will not do
 
+**Only one button can have a label.** `PaneTemplate.setActionStrip` validates against
+`ACTIONS_CONSTRAINTS_SIMPLE`, which permits exactly one action with a custom title and throws on the
+second — so play/pause carries the title, being the one whose meaning changes, and the skips are
+icon-only. `Action` has no content description of its own, so that limit is also the accessibility
+ceiling; it is the library's, not a preference.
+
 **Nothing on the surface is tappable, and that is the platform being right.** A car host does not
 deliver touches to an app's surface as ordinary events — it sends map gestures through
 `SurfaceCallback` instead — so a button drawn there would be a button that does nothing. Every
@@ -50,8 +56,8 @@ phone gesture, and reaching for a lyric line at 70mph is not a feature.
 
 | | |
 |---|---|
-| **The full renderer** | The default, when the host hands over a surface. |
-| **Two lines of text** | When it does not — an older Android Auto, or a head unit that declines — or when you ask for it with *Plain screen in the car*. The words now, the words next, and the same controls. |
+| **The full renderer** | The default, when the host hands over a surface *and* understands car API level 7 — the level `MapWithContentTemplate` needs. On anything older the app does not even ask for a surface, since no template it could return would carry one. |
+| **Two lines of text** | Everything else: an older host, a head unit that declines a surface, or *Plain screen in the car*. The words now, the words next, and the same controls. |
 
 The fallback is a complete answer rather than a broken one, and it is worth knowing that the logic
 deciding *which* words appear is shared with neither screen's drawing:
