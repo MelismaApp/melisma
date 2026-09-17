@@ -9,4 +9,15 @@
         <item name="android:enforceStatusBarContrast">false</item>
         <item name="android:enforceNavigationBarContrast">false</item>
     </style>
+
+    <!--
+      The colours the car host paints its own chrome with. The same teal as the icon, so the app
+      looks like itself on a screen it does not get to draw.
+    -->
+    <style name="CarAppTheme">
+        <item name="carColorPrimary">@color/ic_launcher_background</item>
+        <item name="carColorPrimaryDark">@color/ic_launcher_background</item>
+        <item name="carColorSecondary">@color/brand_teal_light</item>
+        <item name="carColorSecondaryDark">@color/ic_launcher_background</item>
+    </style>
 </resources>

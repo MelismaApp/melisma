@@ -135,6 +135,10 @@ dependencies {
     // Injects a script before any page script runs, which is the only reliable way to see a
     // header the Spotify player sets on its own requests. The platform WebView cannot do it.
     implementation(libs.androidx.webkit)
+
+    // Android Auto. `app` alone is what a templated app needs; the projected and automotive
+    // artifacts are for functionality this does not use.
+    implementation(libs.androidx.car.app)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
@@ -152,6 +156,7 @@ dependencies {
     // The TTML parser goes through android.util.Xml, so its tests need a real
     // Android runtime rather than the stubbed one.
     testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.car.app.testing)
     // ApplicationProvider, for the handful of tests that need a real Context.
     testImplementation(libs.androidx.test.core)
 }

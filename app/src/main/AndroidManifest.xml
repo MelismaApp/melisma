@@ -14,6 +14,19 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!--
+      Android Auto. MAP_TEMPLATES buys MapWithContentTemplate, which is the one template outside the
+      navigation category that lets an app draw the screen itself rather than filling in rows;
+      ACCESS_SURFACE is what actually hands over the canvas. Both are declarations rather than
+      prompts — the host grants them by reading this file.
+
+      Drawing the lyrics on a surface meant for a map is a liberty, and taken deliberately: it is the
+      only way a car screen can show the same words moving the same way the phone does, which is the
+      whole point of the feature. See docs/ANDROID-AUTO.md.
+    -->
+    <uses-permission android:name="androidx.car.app.MAP_TEMPLATES" />
+    <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
+
+    <!--
       Android 11+ hides other installed apps from us. We do not need to *launch* other
       apps to work — the media session is enough — but we do want to name the player in
       the UI and offer to open it, so declare an interest in the two things a music app
@@ -45,6 +58,22 @@
         android:theme="@style/Theme.Melisma"
         android:enableOnBackInvokedCallback="true"
         tools:targetApi="34">
+
+        <!--
+          Android Auto. The descriptor is what makes the host look at this app at all; the API level
+          is the oldest car host this build will talk to, and the theme gives the host the app's own
+          colours for the chrome it draws itself. See docs/ANDROID-AUTO.md for what a car screen
+          shows and, more to the point, what it deliberately does not.
+        -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
+        <meta-data
+            android:name="androidx.car.app.theme"
+            android:resource="@style/CarAppTheme" />
 
         <!--
           supportsPictureInPicture + resizeableActivity are what let the lyrics carry on
@@ -87,6 +116,29 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        <!--
+          The car screen.
+          Exported because the Android Auto host is a different process and has to be able to bind
+          it; `createHostValidator` is what decides who may, which is the check that stands in for a
+          permission here.
+
+          The category is a compromise stated plainly: the Car App Library has seven, none of them
+          for lyrics. POI is the one that can reach MapWithContentTemplate, which is what gives the
+          app a surface of its own to draw the lyrics on — so the category is chosen for the template
+          it unlocks rather than for describing the app. The consequence is that this can never be a
+          Play-listed Android Auto app and needs Android Auto's own unknown-sources developer setting
+          to appear, which is the same audience an APK already has.
+        -->
+        <service
+            android:name=".car.MelismaCarAppService"
+            android:exported="true"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.POI" />
+            </intent-filter>
+        </service>
+
         <!--
           Hands the downloaded APK to the system installer. A content URI rather than a
           file path, because passing a file:// URI across processes has been forbidden

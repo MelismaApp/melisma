@@ -67,6 +67,11 @@ by the song's tempo.
 
 📋 **Copy a line** by holding it, or pick out several and copy them together.
 
+🚗 **Android Auto** — the same renderer on the car screen, moving words and all, following every
+setting on your phone so there is nothing to change from the driver's seat. With a watch-the-road
+reminder each drive, and a plain two-line mode if the animation pulls at your eyes.
+[docs/ANDROID-AUTO.md](docs/ANDROID-AUTO.md).
+
 🔋 **Stops when the music does.** Nothing animates, nothing polls, and after ten idle minutes the app
 lets go of everything keeping it alive.
 
@@ -203,6 +208,18 @@ getting kanji readings right and of translating without sending your lyrics anyw
 
 *Settings → Timing → Sync offset.* Negative for Bluetooth. See [above](#using-it).
 
+**Does it work with Android Auto?**
+
+Yes, and it is the real thing: the same renderer the phone draws, with the syllable fill, the
+background and the album art in Cinema view, following the settings you already set. The car's own
+buttons handle play and skip, because nothing on the drawn surface can be tapped. There is a
+watch-the-road reminder each drive, and *Settings → Android Auto* has a plain two-line mode.
+
+You do have to turn on **Unknown sources** in Android Auto's own developer settings first, because
+Melisma is not on Google Play and never can be for cars: the Car App Library has seven app categories
+and none of them is lyrics. [docs/ANDROID-AUTO.md](docs/ANDROID-AUTO.md) has the five steps and the
+reasoning.
+
 **Can I move my settings to a new phone?**
 
 *Settings → Storage and backup → Back up settings to a file.* You choose where the file goes. It is
@@ -233,6 +250,7 @@ More in **[docs/DEVELOPING.md](docs/DEVELOPING.md)**.
 | **[TOKENS.md](docs/TOKENS.md)** | Every optional token, step by step |
 | **[DEVELOPER-OPTIONS.md](docs/DEVELOPER-OPTIONS.md)** | The developer menu, and what each switch does |
 | **[CACHE-SERVER.md](docs/CACHE-SERVER.md)** | The request/response contract for a lyrics server of your own |
+| **[ANDROID-AUTO.md](docs/ANDROID-AUTO.md)** | The car screen: setting it up, and what it deliberately will not show |
 | **[DEVELOPING.md](docs/DEVELOPING.md)** | Building, architecture, testing without a music app |
 | **[RELEASING.md](docs/RELEASING.md)** | Tagging a release, and checking an APK is really yours |
 | **[NOTICE.md](NOTICE.md)** | What came from where |

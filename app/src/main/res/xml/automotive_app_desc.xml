@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  How Android Auto knows this app has anything to offer a car screen. Without this file the
+  CarAppService below is never looked at, whatever it declares.
+
+  "template" is the only capability claimed: the app draws through the Car App Library's
+  templates, which are the ones designed to be glanceable. It is not a media app — it plays
+  nothing — and it browses nothing.
+-->
+<automotiveApp>
+    <uses name="template" />
+</automotiveApp>

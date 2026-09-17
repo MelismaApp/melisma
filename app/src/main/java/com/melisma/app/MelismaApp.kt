@@ -27,6 +27,7 @@ import com.melisma.app.update.Updater
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -170,6 +171,26 @@ class AppContainer(context: Context) {
             if (value) lastActivityAt = System.currentTimeMillis()
         }
 
+    /**
+     * Whether a car screen of ours is up. Set by the Android Auto session.
+     *
+     * Separate from [uiVisible] rather than folded into it, because the two are independent and
+     * either one is a reason to keep watching: a phone can be face-down in a cradle with the lyrics
+     * on the car screen, and one flag would have the activity's `onStop` switch the car off.
+     */
+    private val _carConnected = MutableStateFlow(false)
+
+    var carConnected: Boolean
+        get() = _carConnected.value
+        set(value) {
+            _carConnected.value = value
+            if (value) lastActivityAt = System.currentTimeMillis()
+        }
+
+    /** Somewhere of ours is on screen — a window, a floating window, or a car. */
+    private val attention: Flow<Boolean> =
+        combine(_uiVisible, _carConnected) { window, car -> window || car }
+
     @Volatile
     private var lastActivityAt = System.currentTimeMillis()
 
@@ -191,7 +212,7 @@ class AppContainer(context: Context) {
 
             val timeout = settings.current.backgroundTimeoutMinutes
             val playing = media.snapshot.value.playback.isPlaying
-            if (timeout <= 0 || playing || uiVisible) {
+            if (timeout <= 0 || playing || uiVisible || carConnected) {
                 lastActivityAt = System.currentTimeMillis()
                 continue
             }
@@ -206,7 +227,7 @@ class AppContainer(context: Context) {
             // the rest of the process's life.
             if (!MediaNotificationListener.isBound) {
                 while (!MediaNotificationListener.isBound) {
-                    withTimeoutOrNull(IDLE_CHECK_INTERVAL_MS) { _uiVisible.first { it } }
+                    withTimeoutOrNull(IDLE_CHECK_INTERVAL_MS) { attention.first { it } }
                 }
                 continue
             }

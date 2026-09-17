@@ -428,6 +428,46 @@ fun SettingsSheet(
             }
 
             Section(
+                title = "Android Auto",
+                subtitle = "The lyrics on a car screen",
+                open = openSection == "car",
+                accent = accent,
+                onToggle = { openSection = if (openSection == "car") null else "car" },
+            ) {
+                Hint(
+                    "The car screen follows every setting on this page — view, background, " +
+                        "romanization, translation, timing — so there is nothing to set from the " +
+                        "driver's seat.",
+                )
+                Help(
+                    "Melisma is not on Google Play, so Android Auto will not load it until you allow " +
+                        "apps it did not get from the store. On the phone: Settings \u2192 Connected " +
+                        "devices \u2192 Android Auto, tap \u201cVersion and permission info\u201d about " +
+                        "ten times until it offers development settings, then in the \u22ee menu \u2192 " +
+                        "Developer settings turn on Unknown sources. One time per phone, and the same " +
+                        "switch every sideloaded car app needs.",
+                )
+
+                ToggleRow(
+                    title = "Plain screen in the car",
+                    subtitle = "Two lines of text instead of the moving lyrics",
+                    checked = settings.carSimpleScreen,
+                    accent = accent,
+                    onCheckedChange = { store.setCarSimpleScreen(it) },
+                )
+                Help(
+                    "Off, a car gets the same lyrics this phone draws: the same renderer, the same " +
+                        "background, the same album art in Cinema view. The movement is what makes " +
+                        "your place in a line readable without studying it.\n\nOn, it is two lines of " +
+                        "static text \u2014 the words now and the words next \u2014 and nothing else. " +
+                        "Reach for it if the moving version pulls at your eyes, or if your car declines " +
+                        "to give the app a screen to draw on, in which case you get this " +
+                        "anyway.\n\nEither way the controls are the car's own buttons rather than " +
+                        "ours: the host draws them, at the size it thinks a driver should be given.",
+                )
+            }
+
+            Section(
                 title = "Lyrics display",
                 subtitle = "Size, font, effects",
                 open = openSection == "display",

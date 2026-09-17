@@ -191,6 +191,19 @@ data class Settings(
     val keepScreenOn: Boolean = true,
     /** Songwriters and the lyrics source, after the last line. */
     val showCredits: Boolean = true,
+
+    /**
+     * Show the plain two-line screen on Android Auto instead of the full renderer.
+     *
+     * Off by default, so a car gets the same lyrics the phone draws — the animation included, since
+     * that is what makes a line's position readable at a glance. On, it is two lines of static text
+     * and nothing else, which is the calmer answer and the one to reach for if the moving version
+     * turns out to pull at your eyes.
+     *
+     * Set here rather than on the car screen on purpose: a car is the worst place to be toggling
+     * anything, so every choice the car screen makes is one the phone already made.
+     */
+    val carSimpleScreen: Boolean = false,
     /** False until the welcome guide has been read once. */
     val welcomeSeen: Boolean = false,
 
@@ -564,6 +577,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         viewMode = prefs.enum(KEY_VIEW_MODE, ViewMode.LYRICS),
         mediaPanelSide = prefs.enum(KEY_PANEL_SIDE, MediaPanelSide.START),
         keepScreenOn = prefs.getBoolean(KEY_KEEP_SCREEN_ON, true),
+        carSimpleScreen = prefs.getBoolean(KEY_CAR_SIMPLE, false),
         showCredits = prefs.getBoolean(KEY_SHOW_CREDITS, true),
         welcomeSeen = prefs.getBoolean(KEY_WELCOME_SEEN, false),
 
@@ -718,6 +732,8 @@ class SettingsStore(context: Context) : ProviderCredentials {
     )
 
     fun setKeepScreenOn(value: Boolean) = edit { putBoolean(KEY_KEEP_SCREEN_ON, value) }
+
+    fun setCarSimpleScreen(value: Boolean) = edit { putBoolean(KEY_CAR_SIMPLE, value) }
 
     fun setShowCredits(value: Boolean) = edit { putBoolean(KEY_SHOW_CREDITS, value) }
 
@@ -1008,6 +1024,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_VIEW_MODE = "view_mode"
         const val KEY_PANEL_SIDE = "media_panel_side"
         const val KEY_KEEP_SCREEN_ON = "keep_screen_on"
+        const val KEY_CAR_SIMPLE = "car_simple_screen"
         const val KEY_SHOW_CREDITS = "show_credits"
         const val KEY_WELCOME_SEEN = "welcome_seen"
 

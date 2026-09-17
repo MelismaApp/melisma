@@ -14,4 +14,26 @@
     <string name="lyrics_offline">You\'re offline</string>
     <string name="lyrics_error">Couldn\'t load lyrics</string>
     <string name="lyrics_unsynced_note">Unsynced lyrics — no timings available</string>
+
+    <!-- Android Auto. Short by design: every one of these is read at a glance or not at all. -->
+    <string name="car_warning_title">Keep your eyes on the road</string>
+    <string name="car_warning_body">The words move with the song, which makes them easy to glance at and easy to stare at. Glance. Nothing on this screen needs an answer while you are driving, and the buttons are the car’s own.</string>
+    <string name="car_warning_accept">Show lyrics</string>
+    <string name="car_next">Next: %1$s</string>
+    <string name="car_instrumental">Instrumental</string>
+    <string name="car_silent">Nothing playing</string>
+    <string name="car_silent_body">Start a song and the words follow it.</string>
+    <string name="car_none">No lyrics for this one</string>
+    <string name="car_none_body">Nobody has these words. The app will look again next time it plays.</string>
+    <string name="car_untimed">These lyrics have no timings</string>
+    <string name="car_untimed_body">There is nothing to follow along with, so this screen stays out of the way. The full text is on your phone.</string>
+    <string name="car_offline">No connection</string>
+    <string name="car_offline_body">Words already looked up are still shown; new ones need a signal.</string>
+    <string name="car_permission">Notification access is off</string>
+    <string name="car_permission_body">Melisma reads what is playing through notification access, and that can only be granted on the phone.</string>
+    <string name="car_failed">Something went wrong</string>
+    <string name="car_play">Play</string>
+    <string name="car_pause">Pause</string>
+    <string name="car_next_track">Next track</string>
+    <string name="car_previous">Previous track</string>
 </resources>
