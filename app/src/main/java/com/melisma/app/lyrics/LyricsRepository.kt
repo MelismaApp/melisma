@@ -661,7 +661,11 @@ class LyricsRepository(
             return Query.Broke(e.message ?: "Lookup failed")
         }
 
-        val answers = results.mapNotNull { (id, document) -> document?.let { id to it } }
+        // Correct each answer's claimed kind before anything is ranked or cached: a document whose
+        // timings run past the end of the track is describing a different recording.
+        val answers = results.mapNotNull { (id, document) ->
+            document?.let { id to TimingSanity.honestKind(it, request.durationMs) }
+        }
         // The fullest answer anybody found, which is the yardstick for the rest: a fragment can only
         // be recognised as one by comparison with something whole.
         val bestLines = answers.maxOfOrNull { (_, document) -> lineCount(document) } ?: 0
@@ -978,7 +982,10 @@ internal fun qualityScore(document: LyricsDocument, bestLines: Int = 0): Int =
  * - **Barely any of its own lines carry syllables.** `kind` is set from *any* word timing at all —
  *   see `TtmlParser` — so three word-timed lines out of forty made the whole document
  *   syllable-tier. It is a line-timed document with a few timed lines in it, and scoring it as
- *   the best thing available is how a full transcription lost to a fragment.
+ *   the best thing available is how a full transcription lost to a fragment. A line holding all
+ *   its words in one fragment does not count as carrying syllables, because the highlight lands
+ *   on the whole line at once — see [TimingSanity.hasWordTimings], which is how one source's
+ *   entire Chinese and Japanese catalogue used to claim this tier.
  * - **It has far fewer lines than another source found.** A tenth of the words with perfect
  *   timings is a truncated transcription or the wrong recording, not a better answer.
  *
@@ -993,7 +1000,7 @@ internal fun effectiveKind(document: LyricsDocument, bestLines: Int): LyricsKind
     val vocal = document.vocalLines
     if (vocal.isEmpty()) return LyricsKind.STATIC
 
-    val timed = vocal.count { it.syllables.isNotEmpty() }
+    val timed = vocal.count { TimingSanity.hasWordTimings(it) }
     if (timed.toFloat() / vocal.size < LyricsRepository.MIN_SYLLABLE_COVERAGE) return LyricsKind.LINE
 
     if (bestLines > 0 && vocal.size.toFloat() / bestLines < LyricsRepository.MIN_COMPLETENESS) {

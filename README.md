@@ -132,6 +132,12 @@ most of a song beats a scrap of one, and **after that your order decides**. Hold
 *Settings → Where lyrics come from* and drag it — moving a source up really does change which lyrics
 you get, for every song where two sources answer equally well.
 
+"Word-by-word" is checked rather than taken on trust, because a source can claim it and not mean it.
+A line whose every word arrives in one block is line timing however it is labelled — which is what
+Musixmatch returns for a lot of Chinese and Japanese — and timings that run past the end of the track
+belong to some other recording. Either one drops a source a rank for that song, so a source that
+really is word-timed wins even if you put it last.
+
 | Source | Timing | Needs |
 |---|---|---|
 | **Your own files** | up to word | `.lrc` / `.ttml` you import. Always wins. |

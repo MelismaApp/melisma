@@ -28,8 +28,13 @@ class QualityScoreTest {
         startMs = 0,
         endMs = 1_000,
         text = text,
+        // A word-timed line carries a syllable per word. One syllable holding the whole line is
+        // the shape line timing has, and `TimingSanity.hasWordTimings` reads it as such, so a
+        // fixture built that way would be testing the wrong thing.
         syllables = if (timed) {
-            listOf(Syllable(text = text, startMs = 0, endMs = 1_000))
+            text.split(' ').mapIndexed { index, word ->
+                Syllable(text = word, startMs = index * 500, endMs = index * 500 + 500)
+            }
         } else {
             emptyList()
         },

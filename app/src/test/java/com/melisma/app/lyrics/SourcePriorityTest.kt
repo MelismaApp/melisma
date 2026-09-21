@@ -37,8 +37,13 @@ class SourcePriorityTest {
                 startMs = index * 2_000,
                 endMs = index * 2_000 + 1_500,
                 text = "line $index",
+                // Per word, because one syllable spanning the whole line is line timing wearing a
+                // word-timed hat — see `TimingSanity.hasWordTimings`.
                 syllables = if (timed) {
-                    listOf(Syllable("line", index * 2_000, index * 2_000 + 750))
+                    listOf(
+                        Syllable("line", index * 2_000, index * 2_000 + 750),
+                        Syllable("$index", index * 2_000 + 750, index * 2_000 + 1_500),
+                    )
                 } else {
                     emptyList()
                 },

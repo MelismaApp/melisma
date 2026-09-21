@@ -8,6 +8,7 @@ import com.melisma.app.lyrics.model.Syllable
 import com.melisma.app.lyrics.model.inferEndTimes
 import com.melisma.app.lyrics.model.withInterludes
 import com.melisma.app.lyrics.parse.LrcParser
+import com.melisma.app.lyrics.parse.RichsyncParser
 import com.melisma.app.util.isRtlText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -302,7 +303,7 @@ class MusixmatchProvider(private val credentials: ProviderCredentials) : LyricsP
             ?: trackId?.let { fetchRichsync(it, credential) }
 
         richsyncBody?.let { body ->
-            parseRichsync(body, request.durationMs)?.let { lines ->
+            RichsyncParser.parse(body, request.durationMs)?.let { lines ->
                 return LyricsDocument(
                     kind = LyricsKind.SYLLABLE,
                     lines = lines,
@@ -351,88 +352,6 @@ class MusixmatchProvider(private val credentials: ProviderCredentials) : LyricsP
                     ?.get("richsync_body")?.jsonPrimitive?.contentOrNull
             }.getOrNull()
         }
-    }
-
-    /**
-     * `[{"ts":1.2,"te":3.4,"x":"Hello world","l":[{"c":"Hello","o":0.0},{"c":" ","o":0.5}]}]`
-     *
-     * `ts`/`te` bound the line, `o` is each fragment's offset from `ts`. Whitespace
-     * fragments are separators, not syllables.
-     */
-    private fun parseRichsync(body: String, trackDurationMs: Long): List<LyricLine>? {
-        val array = runCatching { Json.parseToJsonElement(body).jsonArray }.getOrNull()
-            ?: return null
-        if (array.isEmpty()) return null
-
-        val lines = ArrayList<LyricLine>(array.size)
-        for (element in array) {
-            val entry = runCatching { element.jsonObject }.getOrNull() ?: continue
-            val ts = entry["ts"]?.jsonPrimitive?.doubleOrNull ?: continue
-            val te = entry["te"]?.jsonPrimitive?.doubleOrNull ?: ts
-            val fullText = entry["x"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
-            val fragments = runCatching { entry["l"]?.jsonArray }.getOrNull()
-
-            val lineStart = (ts * 1000).toInt()
-            val lineEnd = (te * 1000).toInt()
-
-            if (fragments == null || fragments.isEmpty()) {
-                if (fullText.isEmpty()) continue
-                lines += LyricLine(
-                    role = LineRole.LEAD,
-                    startMs = lineStart,
-                    endMs = lineEnd,
-                    text = fullText,
-                    rtl = fullText.isRtlText(),
-                )
-                continue
-            }
-
-            // Collect (text, startMs) first so each fragment can be closed at the
-            // next one's start.
-            val raw = ArrayList<Pair<String, Int>>(fragments.size)
-            for (fragment in fragments) {
-                val obj = runCatching { fragment.jsonObject }.getOrNull() ?: continue
-                val chars = obj["c"]?.jsonPrimitive?.contentOrNull ?: continue
-                val offset = obj["o"]?.jsonPrimitive?.doubleOrNull ?: 0.0
-                raw += chars to (ts * 1000 + offset * 1000).toInt()
-            }
-
-            val syllables = ArrayList<Syllable>(raw.size)
-            val text = StringBuilder()
-            var previousEndedWithSpace = true
-            for ((index, pair) in raw.withIndex()) {
-                val (chars, start) = pair
-                val trimmed = chars.trim()
-                if (trimmed.isEmpty()) {
-                    previousEndedWithSpace = true
-                    continue
-                }
-                val end = raw.getOrNull(index + 1)?.second ?: lineEnd
-                val partOfWord = !previousEndedWithSpace && !chars.startsWith(" ")
-                syllables += Syllable(
-                    text = trimmed,
-                    startMs = start,
-                    endMs = end.coerceAtLeast(start),
-                    partOfWord = partOfWord,
-                )
-                if (!partOfWord && text.isNotEmpty()) text.append(' ')
-                text.append(trimmed)
-                previousEndedWithSpace = chars.endsWith(" ")
-            }
-
-            if (syllables.isEmpty()) continue
-            lines += LyricLine(
-                role = LineRole.LEAD,
-                startMs = minOf(lineStart, syllables.first().startMs),
-                endMs = maxOf(lineEnd, syllables.last().endMs),
-                text = text.toString().ifEmpty { fullText },
-                syllables = syllables,
-                rtl = text.toString().isRtlText(),
-            )
-        }
-
-        if (lines.isEmpty()) return null
-        return lines.sortedBy { it.startMs }.inferEndTimes(trackDurationMs).withInterludes()
     }
 
     /** `[{"text":"line","time":{"total":12.34}}]` */
