@@ -455,6 +455,13 @@ object Matching {
      * 弥渡山歌 aligned with 4% of three sources that agreed, and was the same song.
      *
      * One direction is enough — both sides go through it, so they meet in Simplified either way.
+     *
+     * **Comparison only. Never route a stored key through this.** `LyricsRepository.cacheIdentity`
+     * normalises a title independently, with a plain `lowercase().trim()`, and the two must stay
+     * independent: folding a cache key would change the key of every Chinese track already stored, so
+     * nothing would ever read those entries again and the next play would file a duplicate and re-ask
+     * every source. The cache server hit exactly that — its comparison and key-building shared one
+     * normaliser — and caught it before deploy.
      */
     private fun foldHanVariants(value: String): String {
         if (value.none { it.isHan() }) return value

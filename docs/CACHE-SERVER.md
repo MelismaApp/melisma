@@ -208,6 +208,38 @@ In both modes:
   a fresh request, which is the button to use while iterating.
 - Each provider gets 12 seconds before it is abandoned.
 
+## The contract is read-only, deliberately
+
+The app only ever asks this server questions. There is no endpoint it posts to, and that is a
+decision rather than an omission — so if you are extending either side, this is the constraint to
+design around.
+
+It came up as a real proposal: have the app report "these timings did not fit what was playing" so
+the server's cross-source checks could use playback evidence. It was declined, and the reasons are
+worth keeping:
+
+- **The server already has the evidence.** Every lookup carries `durationMs`, the length the player
+  reported, and the server stores it. Whether a document's timings run past the end of the copy
+  actually playing is therefore answerable server-side, over the whole archive, retroactively, with
+  no protocol change. The one thing the app was going to report was already in hand.
+- **A write path costs more than it returns.** A lookup needs no key on a local network, because a
+  lookup cannot expose anything. An unauthenticated *write* could be used to poison the quality data
+  the ranking depends on — flag one source as wrong on every track and you degrade every answer. So
+  it would have to demand the key, which limits it to people who configured auth.
+- **"No write path exists" is verifiable; "writes only happen when a toggle is on" is a promise.**
+  The first is a property you can confirm by reading the code. The second has to be re-audited at
+  every call site forever.
+- **The app already acts on it.** A document whose timings do not fit the track is demoted on the
+  phone, at lookup time, by `TimingSanity`. Reporting it onward so the server can agree later helps
+  nobody who has already seen it demoted.
+
+What this gives up is real but small: whether the *words* were wrong, and whether the reader was
+frustrated. Both are only reachable by inference — from seeks, from the sync offset — and neither
+survives contact with ordinary listening. People seek most in songs they like, and the sync offset is
+a Bluetooth latency control, so it says something about someone's earbuds and nothing about a
+document. **Look this track up again** is the one honest signal of "these are wrong", and it stays in
+the app, where the reader who pressed it is the one who benefits.
+
 ## Redistribution
 
 Worth being deliberate about, because caching solves a rate limit and not a licence. A

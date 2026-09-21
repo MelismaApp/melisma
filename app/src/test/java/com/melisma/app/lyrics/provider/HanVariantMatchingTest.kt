@@ -60,6 +60,29 @@ class HanVariantMatchingTest {
     }
 
     @Test
+    fun `knowing the duration exactly did not save it either`() {
+        // Raised from the cache-server side, which measured the same shape and found this row the
+        // interesting one. An exact duration match does *not* rescue a variant title once the artist
+        // is shifted too:
+        //
+        //   title  獨角獸/独角兽   0.33 x 0.5 = 0.167
+        //   artist 吳青峰/吴青峰   0.67 x 0.3 = 0.200
+        //   duration exact       1.00 x 0.2 = 0.200
+        //                                     -----
+        //                                     0.567, still under 0.62
+        //
+        // So the lyrics were being discarded even for tracks whose length was known to the
+        // millisecond, which is a wider reach than the no-duration case above.
+        val playing = request("独角兽", "吴青峰", 398_720)
+        val score = Matching.score(playing, "獨角獸", "吳青峰", 398_720)
+
+        assertTrue(
+            "scored $score, needs >= ${Matching.MATCH_THRESHOLD}",
+            score >= Matching.MATCH_THRESHOLD,
+        )
+    }
+
+    @Test
     fun `a genuinely different song is still refused`() {
         // The folding must not turn the matcher into a pushover: same artist, same duration, a title
         // that is simply another song.
