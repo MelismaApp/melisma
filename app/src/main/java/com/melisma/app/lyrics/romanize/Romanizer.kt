@@ -7,7 +7,10 @@ import com.melisma.app.lyrics.model.LyricLine
 import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.lyrics.model.Syllable
 import com.melisma.app.util.Script
+import com.melisma.app.util.containsNonLatinScript
+import com.melisma.app.util.containsRomanizableScript
 import com.melisma.app.util.detectScript
+import com.melisma.app.util.scriptRuns
 import com.melisma.app.util.needsRomanization
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -62,17 +65,31 @@ class Romanizer {
         if (!romanize && !furigana) return@withContext document
 
         val corpus = document.lines.joinToString("\n") { it.text }
-        val script = detectScript(corpus)
-        val wantFurigana = furigana && script == Script.JAPANESE
-        val wantRomaji = romanize && script.needsRomanization()
+
+        // The one thing that *is* decided for the whole song, because only the whole song can decide
+        // it: how to read a Han character. 燃 is moeru in a Japanese lyric and rán in a Chinese one,
+        // and kana anywhere is what settles it — the rule Spicy Lyrics uses too. Everything else is
+        // decided per line and per run, because a song is allowed to change language and this one
+        // used to romanize only whichever half won the vote.
+        val hanScript = if (detectScript(corpus) == Script.JAPANESE) {
+            Script.JAPANESE
+        } else {
+            Script.CHINESE
+        }
+        // Kana present is exactly what made Han Japanese above, so it is also the test for whether
+        // there is any Japanese here at all — kanji on its own is read as Chinese.
+        val anyJapanese = hanScript == Script.JAPANESE
+
+        val wantFurigana = furigana && anyJapanese
+        val wantRomaji = romanize && containsRomanizableScript(corpus, hanScript)
         if (!wantRomaji && !wantFurigana) return@withContext document
 
-        if (script == Script.JAPANESE) prepareTokenizer()
+        if (anyJapanese) prepareTokenizer()
 
         var produced = false
         val lines = document.lines.map { line ->
             if (line.isInterlude || line.text.isBlank()) return@map line
-            val annotated = annotateLine(line, script, stripDiacritics, wantRomaji)
+            val annotated = annotateLine(line, hanScript, stripDiacritics, wantRomaji)
             if (annotated !== line) produced = true
             annotated
         }
@@ -81,7 +98,9 @@ class Romanizer {
         document.copy(
             lines = lines,
             hasRomanization = document.hasRomanization || wantRomaji,
-            language = document.language ?: scriptLanguage(script),
+            // Still the dominant script: a language tag names one language, and a translator asked
+            // about a bilingual song has to be told something.
+            language = document.language ?: scriptLanguage(detectScript(corpus)),
         )
     }
 
@@ -96,24 +115,28 @@ class Romanizer {
 
     private fun annotateLine(
         line: LyricLine,
-        script: Script,
+        hanScript: Script,
         stripDiacritics: Boolean,
         wantRomaji: Boolean,
     ): LyricLine {
         if (line.syllables.isEmpty()) {
             if (!wantRomaji || !line.romanized.isNullOrBlank()) return line
-            val text = romanizeText(line.text, script, stripDiacritics) ?: return line
+            val text = romanizeMixed(line.text, hanScript, stripDiacritics) ?: return line
             return line.copy(romanized = text)
         }
 
-        val syllables = annotateSyllables(line.syllables, script, stripDiacritics, wantRomaji)
+        val syllables = annotateSyllables(line.syllables, hanScript, stripDiacritics, wantRomaji)
             ?: return line
         if (!wantRomaji) return line.copy(syllables = syllables)
 
         val joined = syllables.joinToString("") { syllable ->
             val part = syllable.romanized ?: syllable.text
             (if (syllable.partOfWord) "" else " ") + part
-        }.trim()
+        }
+            // A syllable that is itself a space contributes one, and the join adds another either
+            // side of it — so a line with a space between two words came out with three.
+            .replace(Regex("\\s{2,}"), " ")
+            .trim()
 
         return line.copy(
             syllables = syllables,
@@ -128,17 +151,22 @@ class Romanizer {
      */
     private fun annotateSyllables(
         syllables: List<Syllable>,
-        script: Script,
+        hanScript: Script,
         stripDiacritics: Boolean,
         wantRomaji: Boolean,
     ): List<Syllable>? {
-        if (script != Script.JAPANESE) {
+        val lineText = syllables.joinToString("") { it.text }
+        val japanese = hanScript == Script.JAPANESE &&
+            scriptRuns(lineText, hanScript).any { it.script == Script.JAPANESE }
+
+        if (!japanese) {
             if (!wantRomaji) return null
-            // Per-character scripts: each syllable converts independently.
+            // Per-character scripts: each syllable converts independently, and by its own script
+            // rather than the song's, so a Korean line inside a Japanese song is read as Korean.
             var changed = false
             val out = syllables.map { syllable ->
                 if (!syllable.romanized.isNullOrBlank()) return@map syllable
-                val romanized = romanizeText(syllable.text, script, stripDiacritics)
+                val romanized = romanizeMixed(syllable.text, hanScript, stripDiacritics)
                     ?: return@map syllable
                 changed = true
                 syllable.copy(romanized = romanized)
@@ -196,7 +224,31 @@ class Romanizer {
                 kana = kana,
             )
         }
-        return if (changed) out else null
+        if (!wantRomaji) return if (changed) out else null
+
+        // Second pass, for the parts of a bilingual line the analyser had nothing to say about.
+        // Kuromoji hands back the surface form of a word it does not know, so a Hangul syllable in a
+        // Japanese song comes out of the pass above still written in Hangul — which is precisely the
+        // half of "Chasing Lightning" that never got romanized. Anything still in another script gets
+        // a second go with the engine for whatever script it is actually in.
+        var fixed = false
+        val patched = out.map { syllable ->
+            if (!needsAnotherPass(syllable.romanized)) return@map syllable
+            val romanized = romanizeMixed(syllable.text, hanScript, stripDiacritics)
+                ?: return@map syllable
+            fixed = true
+            syllable.copy(
+                romanized = romanized,
+                // A foreign run inside a Japanese line is its own word, whatever the analyser made
+                // of the characters around it.
+                romanizedStartsWord = true,
+            )
+        }
+        return when {
+            fixed -> patched
+            changed -> out
+            else -> null
+        }
     }
 
     private class TokenSpan(
@@ -295,6 +347,37 @@ class Romanizer {
         }
     }
 
+    /**
+     * Romanize text that may change script partway through.
+     *
+     * Each run goes to the engine for its own script and the pieces are joined back together, so
+     * "불꽃처럼 燃えろ" comes back as Korean romanization followed by Japanese rather than half of one.
+     * A Latin run passes through untouched — there is nothing to convert, and dropping it would lose
+     * the English word in the middle of the line.
+     */
+    fun romanizeMixed(text: String, hanScript: Script, stripDiacritics: Boolean = false): String? {
+        val runs = scriptRuns(text, hanScript)
+        if (runs.isEmpty()) return null
+        if (runs.size == 1) return romanizeText(text, runs.first().script, stripDiacritics)
+
+        var converted = false
+        val out = StringBuilder()
+        for (run in runs) {
+            val piece = romanizeText(run.text, run.script, stripDiacritics)
+            if (piece != null) converted = true
+            val text = piece ?: run.text
+            if (text.isEmpty()) continue
+            // A gap between two runs, unless one of them already brought its own: `moeroBULLETPROOF`
+            // is not a reading of anything.
+            if (out.isNotEmpty() && !out.last().isWhitespace() && !text.first().isWhitespace()) {
+                out.append(' ')
+            }
+            out.append(text)
+        }
+        if (!converted) return null
+        return out.toString().replace(Regex("\\s{2,}"), " ").trim().takeIf { it.isNotEmpty() }
+    }
+
     fun romanizeText(text: String, script: Script, stripDiacritics: Boolean = false): String? {
         if (text.isBlank()) return null
         val converted = when (script) {
@@ -346,3 +429,13 @@ class Romanizer {
         }
     }
 }
+
+/**
+ * Whether a romanization still has work left in it.
+ *
+ * Blank means nothing was produced; anything still in a non-Latin script means an engine was handed
+ * text it did not understand and gave it back unchanged, which is how a Japanese dictionary answers a
+ * question about Hangul.
+ */
+internal fun needsAnotherPass(romanized: String?): Boolean =
+    romanized.isNullOrBlank() || containsNonLatinScript(romanized)

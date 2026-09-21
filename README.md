@@ -55,7 +55,8 @@ swells and glows, and a note held over a second breaks into individually animate
 there is nothing to connect and no service to log into.
 
 🈶 **Romanization and furigana** for Japanese (through a real dictionary, so kanji get the right
-reading), Chinese, Korean, Cyrillic and Greek — per syllable, so the karaoke fill still works.
+reading), Chinese, Korean, Cyrillic and Greek — per syllable, so the karaoke fill still works, and
+per *script*, so a song that switches language mid-line is romanized throughout rather than halfway.
 
 🌍 **Translation on the device** via ML Kit. The lyrics never leave your phone.
 

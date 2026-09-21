@@ -88,6 +88,79 @@ fun detectScript(text: String): Script {
     }
 }
 
+/** A stretch of text written in one script, and where it sits in the line it came from. */
+data class ScriptRun(val script: Script, val text: String, val start: Int)
+
+/**
+ * Which script a single character belongs to, or null for one that belongs to no script at all.
+ *
+ * Spaces, punctuation and digits are the null case, and they are deliberately not a script of their
+ * own: a comma between two Korean words is part of that Korean run, and making it a boundary would
+ * chop every line into a dozen fragments for the romanizer to guess at separately.
+ *
+ * @param hanScript how to read a Han character. Han is genuinely ambiguous — 燃 is *moeru* in a
+ *   Japanese song and *rán* in a Chinese one — and nothing about the character itself decides which.
+ *   Only the wider text does, which is why this has to be told.
+ */
+private fun Char.scriptOrNull(hanScript: Script): Script? = when {
+    isHiraganaOrKatakana() -> Script.JAPANESE
+    isHan() -> hanScript
+    isHangul() -> Script.KOREAN
+    isCyrillic() -> Script.CYRILLIC
+    isGreek() -> Script.GREEK
+    code < 0x250 && isLetter() -> Script.LATIN
+    else -> null
+}
+
+/**
+ * Split [text] into consecutive runs, each written in one script.
+ *
+ * This exists because [detectScript] answers a different question than romanization asks. It returns
+ * the *dominant* script, which is right for choosing a translator or comparing two artist names — and
+ * wrong for a song that changes language partway. "Chasing Lightning" is Korean and Japanese in the
+ * same breath; one kana anywhere in it made `detectScript` say Japanese for the whole song, so every
+ * Korean line went to a Japanese dictionary that had nothing to say about Hangul and came back
+ * unchanged. Half a song romanized, and no error anywhere to explain the other half.
+ *
+ * Runs rather than characters because the engines need them: a Japanese reading depends on the word
+ * around the character, so 燃えろ has to arrive at the analyser whole.
+ */
+fun scriptRuns(text: String, hanScript: Script = Script.CHINESE): List<ScriptRun> {
+    if (text.isEmpty()) return emptyList()
+
+    val runs = ArrayList<ScriptRun>(2)
+    var current: Script? = null
+    var start = 0
+
+    for ((index, c) in text.withIndex()) {
+        val script = c.scriptOrNull(hanScript) ?: continue
+        if (current == null) {
+            current = script
+            continue
+        }
+        if (script != current) {
+            runs += ScriptRun(current, text.substring(start, index), start)
+            current = script
+            start = index
+        }
+    }
+
+    // Nothing in the whole string belongs to a script: punctuation, digits, an instrumental marker.
+    val last = current ?: return listOf(ScriptRun(Script.OTHER, text, 0))
+    runs += ScriptRun(last, text.substring(start), start)
+    return runs
+}
+
+/**
+ * True when any part of [text] is written in something worth romanizing.
+ *
+ * The test to use before offering romanization at all, in place of asking whether the *dominant*
+ * script needs it — a mostly-English song with a Korean chorus needs it, and the dominant script
+ * would say no.
+ */
+fun containsRomanizableScript(text: String, hanScript: Script = Script.CHINESE): Boolean =
+    text.any { it.scriptOrNull(hanScript)?.needsRomanization() == true }
+
 /** Best-effort BCP-47 tag for a script, for handing to a translator. */
 fun Script.languageTag(): String? = when (this) {
     Script.JAPANESE -> "ja"

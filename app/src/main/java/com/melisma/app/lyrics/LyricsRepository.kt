@@ -13,6 +13,8 @@ import com.melisma.app.lyrics.provider.LyricsRequest
 import com.melisma.app.lyrics.romanize.Romanizer
 import com.melisma.app.lyrics.translate.LyricsTranslator
 import com.melisma.app.media.TrackInfo
+import com.melisma.app.util.Script
+import com.melisma.app.util.containsRomanizableScript
 import com.melisma.app.util.detectScript
 import com.melisma.app.util.needsRomanization
 import com.melisma.app.settings.CacheServerMode
@@ -730,7 +732,24 @@ class LyricsRepository(
             document.hasRomanization ||
                 document.lines.any { it.romanized != null } ||
                 document.lines.any { line -> line.syllables.any { it.romanized != null } } ||
-                detectScript(document.lines.joinToString("\n") { it.text }).needsRomanization()
+                // Any part of it, not the dominant script: a mostly-English song with a Korean
+                // chorus has a romanization worth offering, and asking which script *won* would
+                // hide the button for exactly the songs that need it most.
+                containsRomanizableScript(
+                    document.lines.joinToString("\n") { it.text },
+                    hanScriptFor(document),
+                )
+        }
+
+    /**
+     * How to read a Han character in this document: the same rule the romanizer applies, and it has to
+     * be the same one or the button could appear for a song the romanizer then declines to touch.
+     */
+    private fun hanScriptFor(document: LyricsDocument): Script =
+        if (detectScript(document.lines.joinToString("\n") { it.text }) == Script.JAPANESE) {
+            Script.JAPANESE
+        } else {
+            Script.CHINESE
         }
 
     private suspend fun deriveAnnotated(
