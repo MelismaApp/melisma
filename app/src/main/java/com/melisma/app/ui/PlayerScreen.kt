@@ -147,6 +147,14 @@ fun PlayerScreen(
         }
     }
 
+    // Anything the user asked for that has something to report — which for now is the manual
+    // re-lookup, a button that otherwise gave no sign of having worked.
+    LaunchedEffect(Unit) {
+        container.lyrics.announcements.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     // A floating window is the size of a postage stamp; whatever was covering the lyrics
     // has to get out of the way, or shrinking the app hands the user a miniature settings
     // sheet instead of the thing they wanted to keep watching.

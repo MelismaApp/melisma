@@ -28,8 +28,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapLatest
@@ -275,7 +278,33 @@ class LyricsRepository(
         fetchJob = scope.launch {
             cache.remove(request.cacheIdentity())
             fetchBase(request)
+            // Said out loud, because this was a button with no visible effect. Dropping the cached
+            // answer and asking again usually produces the same words from the same source, so the
+            // screen is identical and the only honest report is a sentence naming what answered. It
+            // is also the answer to "why does this track keep coming from Musixmatch".
+            announce()
         }
+    }
+
+    private val _announcements = MutableSharedFlow<String>(extraBufferCapacity = 4)
+
+    /**
+     * One-line reports of something the user asked for, for the UI to show and forget.
+     *
+     * Only ever emitted for a deliberate action. An automatic lookup on every track change would be a
+     * notification about the app working normally, which is noise.
+     */
+    val announcements: SharedFlow<String> = _announcements.asSharedFlow()
+
+    private suspend fun announce() {
+        val message = when (val state = base.value) {
+            is Base.Ready -> "Lyrics from ${state.document.providerName}"
+            Base.NotFound -> "Nobody has lyrics for this track"
+            Base.Offline -> "No connection — nothing to ask"
+            is Base.Failed -> state.message
+            Base.Idle, Base.Loading -> return
+        }
+        _announcements.emit(message)
     }
 
     /** Adopts a user-supplied `.lrc`/`.ttml` for the current track. */
@@ -646,20 +675,7 @@ class LyricsRepository(
                     else -> LyricsCache.Outcome.NONE
                 }
             },
-            document = answers
-                .maxWithOrNull(
-                    compareBy(
-                        { (_, document) -> qualityScore(document, bestLines) },
-                        // Earlier in the user's order wins a tie. A provider that is not
-                        // in that order at all — the cache server — is not last by
-                        // accident of `indexOf` returning -1; it is first on purpose,
-                        // because an equally good answer from the cache is the one that
-                        // cost nobody a request.
-                        { (id, _) ->
-                            settings.providerOrder.indexOf(id).let { if (it < 0) 1 else -it }
-                        },
-                    ),
-                )?.second,
+            document = pickBest(answers, settings.providerOrder, bestLines),
         )
     }
 
@@ -860,18 +876,78 @@ class LyricsRepository(
  * subtly wrong and impossible to notice.
  */
 /**
- * Which of several results to show. Word timings beat line timings beat no
- * timings; within a tier, a result that ships its own romanization or translation
- * beats one we would have to generate.
+ * Which answer to show, out of everything the sources came back with.
+ *
+ * Four questions, in this order, and the order of them is the whole design:
+ *
+ * 1. **What kind of timings does it have?** Word-by-word beats line-by-line beats none. This is the
+ *    difference between karaoke and a teleprompter, and no preference outranks it.
+ * 2. **Is it most of the song, or a scrap of it?** A source with a tenth of the words another one
+ *    found is truncated or is the wrong recording. That is a broken answer rather than a matter of
+ *    taste, so it loses however highly it is ranked.
+ * 3. **Where did the user put it?** Earlier in *Where lyrics come from* wins. Twenty lines against
+ *    twenty-one is what a preference is *for*.
+ * 4. **How complete exactly, and does it bring its own romanization?** Only as a last resort, between
+ *    sources the user never expressed an opinion about.
+ *
+ * Reported as "Musixmatch is at the bottom of the list and still wins — is the list reversed?" It was
+ * not reversed. It was barely consulted: the score used to be one number combining the tier with
+ * completeness and extras, so the user's order only broke an *exact* tie between two totals, and the
+ * fourteen points of completeness and extras almost always broke it first. A source at the bottom of
+ * the list won every time it happened to have a few more lines than the others.
+ *
+ * Worse than useless, in fact: the fullest answer *sets* the yardstick the others are measured
+ * against, so a source returning mangled, duplicated lines inflated the line count, then won the
+ * completeness it had just defined. Ranking it last did nothing.
+ *
+ * Completeness still matters where it should. A document with word timings for barely any of its lines
+ * — or a tenth of the words another source found — is demoted a whole tier by [effectiveKind], so the
+ * fragment protection is intact and lives where preferences cannot reach it.
  */
-internal fun qualityScore(document: LyricsDocument, bestLines: Int = 0): Int {
-    val tier = when (effectiveKind(document, bestLines)) {
+internal fun pickBest(
+    answers: List<Pair<String, LyricsDocument>>,
+    order: List<String>,
+    bestLines: Int,
+): LyricsDocument? = answers
+    .maxWithOrNull(
+        compareBy(
+            { (_, document) -> qualityTier(document, bestLines) },
+            { (_, document) -> completenessBand(document, bestLines) },
+            // Earlier in the user's order wins. A provider not in that order at all — one added by an
+            // update before the migration has run — sorts first rather than last, because an unknown
+            // id is not a statement of preference and silently ranking it bottom would be.
+            { (id, _) -> order.indexOf(id).let { if (it < 0) 1 else -it } },
+            { (_, document) -> qualityDetail(document, bestLines) },
+        ),
+    )?.second
+
+/**
+ * Whether a document is most of the song, or a scrap of it.
+ *
+ * Two bands rather than a score, because that is the shape of the question a preference must not be
+ * allowed to answer: 20 lines against 21 is noise the user's ranking should settle, and 4 lines
+ * against 40 is a different song. The threshold is the one [effectiveKind] already uses for the same
+ * judgement a tier higher up, so there is one idea of "enough of the song" rather than two.
+ */
+internal fun completenessBand(document: LyricsDocument, bestLines: Int): Int = when {
+    bestLines <= 0 -> 1
+    document.vocalLines.size.toFloat() / bestLines >= LyricsRepository.MIN_COMPLETENESS -> 1
+    else -> 0
+}
+
+/** The tier a document lands in: the one thing no preference may overrule. */
+internal fun qualityTier(document: LyricsDocument, bestLines: Int = 0): Int =
+    when (effectiveKind(document, bestLines)) {
         LyricsKind.SYLLABLE -> 100
         LyricsKind.LINE -> 50
         LyricsKind.STATIC -> 10
     }
-    // Within a tier, the more of the song the better. Capped below the gap between tiers, so
-    // completeness orders equals and never outranks a real difference in timing.
+
+/**
+ * How good a document is *within* its tier: how much of the song it has, and whether it brought its
+ * own romanization or translation rather than leaving us to generate one.
+ */
+internal fun qualityDetail(document: LyricsDocument, bestLines: Int = 0): Int {
     val completeness = if (bestLines <= 0) {
         9
     } else {
@@ -879,8 +955,18 @@ internal fun qualityScore(document: LyricsDocument, bestLines: Int = 0): Int {
     }
     val extras = (if (document.hasRomanization) 3 else 0) +
         (if (document.hasTranslation) 2 else 0)
-    return tier + completeness + extras
+    return completeness + extras
 }
+
+/**
+ * Tier and detail as one number.
+ *
+ * Still used where two answers from the *same* source are compared — deciding whether a fresh lookup
+ * is an improvement on what the cache already holds — where there is no preference to consult and the
+ * only question is which is better.
+ */
+internal fun qualityScore(document: LyricsDocument, bestLines: Int = 0): Int =
+    qualityTier(document, bestLines) + qualityDetail(document, bestLines)
 
 /**
  * The tier a document really belongs in, which is not always the one it claims.

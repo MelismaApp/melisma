@@ -189,9 +189,10 @@ appears in **Where lyrics come from** so it can be ranked and switched off like 
 default, because an answer it already holds cost nobody a request. A server that is down, slow or
 wrong costs nothing either way, which is what makes this the mode to develop against.
 
-Ranking only breaks ties: every source is asked at once, and quality decides first — word-synced
-beats line-synced beats untimed. So putting the server first means "when two answers are equally
-good, prefer the one already in hand", not "ignore the others".
+Ranking decides between answers of the same kind. Every source is asked at once; word-synced beats
+line-synced beats untimed, and a scrap of a song loses to most of one, because neither of those is a
+matter of taste. Past that the order rules — so putting the server first means "when two answers are
+equally good, prefer the one already in hand", not "ignore the others".
 
 In **Only the cache server** mode nothing else is asked. A track with no lyrics means the
 server could not answer it — which is the point.

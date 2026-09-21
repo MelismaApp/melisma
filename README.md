@@ -127,9 +127,10 @@ explanation under each one. There is also a welcome guide in *Settings → About
 
 ## Where the lyrics come from
 
-Every enabled source is asked **at once** and the best answer wins — word-by-word beats line-by-line
-beats unsynced. Order only breaks ties: hold a row's handle in *Settings → Where lyrics come from*
-and drag it.
+Every enabled source is asked **at once**, and then: word-by-word beats line-by-line beats unsynced,
+most of a song beats a scrap of one, and **after that your order decides**. Hold a row's handle in
+*Settings → Where lyrics come from* and drag it — moving a source up really does change which lyrics
+you get, for every song where two sources answer equally well.
 
 | Source | Timing | Needs |
 |---|---|---|
