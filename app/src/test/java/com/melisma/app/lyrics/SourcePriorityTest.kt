@@ -6,6 +6,7 @@ import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.lyrics.model.LyricsKind
 import com.melisma.app.lyrics.model.Syllable
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 /**
@@ -162,6 +163,44 @@ class SourcePriorityTest {
         assertEquals("amll", pickBest(answers, order, best)?.providerId)
         val musixmatchFirst = listOf("musixmatch") + order.filterNot { it == "musixmatch" }
         assertEquals("musixmatch", pickBest(answers, musixmatchFirst, best)?.providerId)
+    }
+
+    /**
+     * The comparison `upgradeAfter` makes when a cached track hears back from a source that had never
+     * been asked. It used to use `qualityScore`, which cannot see the user's order at all: enabling a
+     * source and moving it to the top got it asked once, its equally good answer lost by a hair of
+     * completeness, and it was then recorded as asked — so it was never offered again for the life of
+     * the cache entry and the reorder did nothing. Ties must still keep the cached answer, because
+     * swapping the words on screen for no visible gain is worse than leaving them.
+     */
+    @Test
+    fun `an equally good answer from a higher-ranked source replaces the cached one`() {
+        val cached = document("musixmatch", LyricsKind.SYLLABLE, lines = 20)
+        val arrived = document("amll", LyricsKind.SYLLABLE, lines = 20)
+        // The user has since put AMLL first.
+        val reordered = listOf("amll") + order.filterNot { it == "amll" }
+
+        assertEquals(
+            "amll",
+            pickBest(
+                listOf("musixmatch" to cached, "amll" to arrived),
+                reordered,
+                bestLines = 20,
+            )?.providerId,
+        )
+    }
+
+    @Test
+    fun `but an equal answer from an equally ranked source does not`() {
+        // Same source answering again with nothing new. Listed first, so the tie keeps it and the
+        // cache is not rewritten.
+        val cached = document("netease", LyricsKind.SYLLABLE, lines = 20)
+        val arrived = document("netease", LyricsKind.SYLLABLE, lines = 20)
+
+        assertSame(
+            cached,
+            pickBest(listOf("netease" to cached, "netease" to arrived), order, bestLines = 20),
+        )
     }
 
     @Test

@@ -137,17 +137,22 @@ object TimingSanity {
      * kind is what gets ranked, cached and shown. A document is only ever moved *down*: the
      * checks can prove a claim false and never prove one true.
      *
-     * Dropping one tier rather than to [LyricsKind.STATIC] is deliberate. When another source
-     * answered, one tier is all it takes for the genuine one to win, which is the whole point.
-     * When nothing else answered, these are still the only lyrics there are, and lines that
-     * scroll slightly wrong beat no lyrics at all.
+     * For timings that outrun the track, dropping one tier rather than going straight to
+     * [LyricsKind.STATIC] is deliberate. When another source answered, one tier is all it takes for
+     * the genuine one to win, which is the whole point. When nothing else answered, these are still
+     * the only lyrics there are, and lines that scroll slightly wrong beat no lyrics at all.
+     *
+     * No usable timings is different: there is nothing to scroll *with*, so the honest kind is
+     * unsynced outright. This has to be recorded on the document rather than worked out while
+     * ranking, because the renderer reads `kind` — a document left claiming `LINE` gets scrolled
+     * against a timestamp it repeats, and the "these lyrics are not synced" notice never appears.
      */
-    fun honestKind(document: LyricsDocument, trackDurationMs: Long): LyricsDocument =
-        if (timingsOutrunTheTrack(document, trackDurationMs)) {
+    fun honestKind(document: LyricsDocument, trackDurationMs: Long): LyricsDocument = when {
+        !hasUsableTimings(document) -> document.copy(kind = LyricsKind.STATIC)
+        timingsOutrunTheTrack(document, trackDurationMs) ->
             document.copy(kind = document.kind.oneTierDown())
-        } else {
-            document
-        }
+        else -> document
+    }
 
     private fun LyricsKind.oneTierDown(): LyricsKind = when (this) {
         LyricsKind.SYLLABLE -> LyricsKind.LINE

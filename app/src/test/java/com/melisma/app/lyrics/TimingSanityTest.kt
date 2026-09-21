@@ -189,6 +189,28 @@ class TimingSanityTest {
     }
 
     @Test
+    fun `the untimed verdict is recorded on the document, not just used to rank it`() {
+        // The renderer reads `kind`, so a demotion that only happens inside the comparator is not a
+        // demotion at all: the document would still be scrolled against a timestamp it repeats, and
+        // the "not synced" notice would never appear. Every case in the archive declared
+        // `timing="None"` and so was already handled by the parser, but the structural check exists
+        // for the ones that do not — and it has to reach the document to be worth anything.
+        val claimsLineSync = LyricsDocument(
+            kind = LyricsKind.LINE,
+            lines = listOf(
+                LyricLine(role = LineRole.LEAD, startMs = 0, endMs = 0, text = "first line here"),
+                LyricLine(role = LineRole.LEAD, startMs = 0, endMs = 0, text = "second line here"),
+                LyricLine(role = LineRole.LEAD, startMs = 0, endMs = 0, text = "third line here"),
+            ),
+            providerName = "somewhere",
+            providerId = "somewhere",
+        )
+
+        assertFalse(TimingSanity.hasUsableTimings(claimsLineSync))
+        assertEquals(LyricsKind.STATIC, TimingSanity.honestKind(claimsLineSync, 180_000).kind)
+    }
+
+    @Test
     fun `a single line is not suspicious for having a single timestamp`() {
         val one = document(YrcParser.parse(genuineYrc).take(1), "netease")
         assertTrue(TimingSanity.hasUsableTimings(one))

@@ -498,10 +498,25 @@ class LyricsRepository(
             // swap the words on screen for no gain the reader can see.
             // Both judged against the same yardstick, which has to include the answer already held:
             // otherwise a fragment looks complete simply because it arrived alone.
+            //
+            // Judged by the same comparison that picks a winner from a fresh lookup, the user's order
+            // included. `qualityScore` cannot see that order, so a source the user had just moved to
+            // the top returned an equally good answer, lost by a hair of completeness, and was
+            // recorded as asked — which meant it was never offered again for the life of the cache
+            // entry, and moving it up had no effect at all. The cached answer is listed first so a
+            // genuine tie keeps it, which is what leaves the no-churn rule intact.
             val bestLines = maxOf(lineCount(cached.document), better?.let { lineCount(it) } ?: 0)
-            if (better == null ||
-                qualityScore(better, bestLines) <= qualityScore(cached.document, bestLines)
-            ) {
+            val preferred = better?.let {
+                pickBest(
+                    listOf(
+                        cached.document.providerId to cached.document,
+                        it.providerId to it,
+                    ),
+                    settings.providerOrder,
+                    bestLines,
+                )
+            }
+            if (better == null || preferred !== better) {
                 // The document is unchanged, but these sources have now been asked — and recording
                 // that is the whole point, or every play would ask them again.
                 cache.put(key, cached.document, outcomes, cached.savedAtMs)
@@ -563,10 +578,21 @@ class LyricsRepository(
         }
 
         return Upgrade(
-            document = results.mapNotNull { it.document }.let { found ->
-                val bestLines = found.maxOfOrNull { lineCount(it) } ?: 0
-                found.maxByOrNull { qualityScore(it, bestLines) }
-            },
+            // The same two corrections a fresh lookup gets, for the same reasons: an answer that
+            // outruns the track is demoted before it can win anything, and when two of these sources
+            // both answer it is the user's order that separates them rather than a hair of
+            // completeness. Skipping either here meant an upgrade could quietly install a document a
+            // fresh lookup would have rejected.
+            document = results
+                .mapNotNull { answer ->
+                    answer.document?.let {
+                        answer.id to TimingSanity.honestKind(it, request.durationMs)
+                    }
+                }
+                .let { found ->
+                    val bestLines = found.maxOfOrNull { (_, document) -> lineCount(document) } ?: 0
+                    pickBest(found, settingsStore.current.providerOrder, bestLines)
+                },
             outcomes = results.associate { answer ->
                 answer.id to when {
                     answer.failed -> LyricsCache.Outcome.FAILED
@@ -965,9 +991,10 @@ internal fun qualityDetail(document: LyricsDocument, bestLines: Int = 0): Int {
 /**
  * Tier and detail as one number.
  *
- * Still used where two answers from the *same* source are compared — deciding whether a fresh lookup
- * is an improvement on what the cache already holds — where there is no preference to consult and the
- * only question is which is better.
+ * Kept for the tests that pin what a tier is worth against what completeness is worth, and for
+ * nothing else. Every decision between two answers now goes through [pickBest], because every one of
+ * them is a decision between *sources* — and this number cannot see the user's order, which is how
+ * the upgrade path came to ignore it.
  */
 internal fun qualityScore(document: LyricsDocument, bestLines: Int = 0): Int =
     qualityTier(document, bestLines) + qualityDetail(document, bestLines)
