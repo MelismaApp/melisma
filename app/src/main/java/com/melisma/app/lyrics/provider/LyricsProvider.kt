@@ -439,6 +439,38 @@ object Matching {
     private fun fold(value: String): String = value.lowercase()
         .replace(Regex("[\\p{Punct}\\s]+"), " ")
         .trim()
+        .let(::foldHanVariants)
+
+    /**
+     * Traditional and Simplified Chinese written the same way, so the same title in either counts as
+     * the same title.
+     *
+     * Without this they can share no characters at all. 獨角獸 and 独角兽 are the same word and differ in
+     * every one of three characters, so the title similarity is 0 — and since the score is title at
+     * 50%, artist at 30% and duration at 20%, a perfect artist and an exact duration reach only 0.50
+     * against a [MATCH_THRESHOLD] of 0.62. A correct answer was being thrown away for a script
+     * difference, which is how a Chinese track ends up reported as having no lyrics at all.
+     *
+     * Found by the cache server, which hit the same wall comparing sources to each other: its
+     * 弥渡山歌 aligned with 4% of three sources that agreed, and was the same song.
+     *
+     * One direction is enough — both sides go through it, so they meet in Simplified either way.
+     */
+    private fun foldHanVariants(value: String): String {
+        if (value.none { it.isHan() }) return value
+        val transliterator = hanFolder ?: return value
+        return runCatching { transliterator.transliterate(value) }.getOrDefault(value)
+    }
+
+    private fun Char.isHan(): Boolean = code in 0x3400..0x9FFF || code in 0xF900..0xFAFF
+
+    /**
+     * Built once. ICU is not guaranteed to have this transform, and a missing one must degrade to the
+     * old behaviour rather than take the lookup down.
+     */
+    private val hanFolder: android.icu.text.Transliterator? by lazy {
+        runCatching { android.icu.text.Transliterator.getInstance("Hant-Hans") }.getOrNull()
+    }
 
     private fun levenshtein(a: String, b: String): Int {
         var previous = IntArray(b.length + 1) { it }

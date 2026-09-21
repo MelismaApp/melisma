@@ -172,6 +172,7 @@ class NeteaseProvider(private val credentials: ProviderCredentials) : LyricsProv
         }
 
         if (lines.isEmpty()) return null
+        if (isInstrumentalPlaceholder(lines)) return null
 
         var hasTranslation = false
         translation?.let { track ->
@@ -225,5 +226,28 @@ class NeteaseProvider(private val credentials: ProviderCredentials) : LyricsProv
 
     private companion object {
         val WEB_USER_AGENT = SpotifyWebToken.WEB_USER_AGENT
+    }
+}
+
+/**
+ * Whether this is NetEase saying "no lyrics" in the form of a lyric.
+ *
+ * For a track it has nothing for, NetEase does not return an empty `lrc` — it returns one line
+ * reading 纯音乐，请欣赏, "instrumental, please enjoy". 13 of the 80 NetEase responses in the cache
+ * server's archive were this, and they are mostly not instrumentals: NewJeans' *OMG*, RADWIMPS'
+ * *Suzume*, TV Girl's *The Blonde*. Taken at face value it is a one-line document that gets shown as
+ * the lyrics, and records the track as answered so nothing asks again.
+ *
+ * Only when the placeholder is the *whole* document. A song with a line about instrumental music in
+ * the middle of it keeps every line, and a track that genuinely is an instrumental has no lyrics to
+ * lose — "nothing here" is the true answer either way.
+ */
+internal fun isInstrumentalPlaceholder(lines: List<LyricLine>): Boolean {
+    val sung = lines.filter { it.role != LineRole.INTERLUDE && it.text.isNotBlank() }
+    if (sung.isEmpty()) return false
+    return sung.all { line ->
+        val text = line.text.filterNot { it.isWhitespace() }
+        // Both the short form and the longer 此歌曲为没有填词的纯音乐，请您欣赏, and whichever comma.
+        text.contains("纯音乐") && text.contains("欣赏")
     }
 }
