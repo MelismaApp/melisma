@@ -995,10 +995,15 @@ internal fun qualityScore(document: LyricsDocument, bestLines: Int = 0): Int =
  * spine, for the same reason and against the same failure.
  */
 internal fun effectiveKind(document: LyricsDocument, bestLines: Int): LyricsKind {
-    if (document.kind != LyricsKind.SYLLABLE) return document.kind
-
     val vocal = document.vocalLines
     if (vocal.isEmpty()) return LyricsKind.STATIC
+
+    // A third way, and the one that was visible as "the lyrics never move": every line landing on
+    // the same timestamp is not line timing. Checked before the kind is trusted at all, so it
+    // applies to a line-timed claim as well as a word-timed one.
+    if (!TimingSanity.hasUsableTimings(document)) return LyricsKind.STATIC
+
+    if (document.kind != LyricsKind.SYLLABLE) return document.kind
 
     val timed = vocal.count { TimingSanity.hasWordTimings(it) }
     if (timed.toFloat() / vocal.size < LyricsRepository.MIN_SYLLABLE_COVERAGE) return LyricsKind.LINE

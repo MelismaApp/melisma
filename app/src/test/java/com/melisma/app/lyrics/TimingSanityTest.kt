@@ -6,11 +6,15 @@ import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.lyrics.model.LyricsKind
 import com.melisma.app.lyrics.model.Syllable
 import com.melisma.app.lyrics.parse.RichsyncParser
+import com.melisma.app.lyrics.parse.TtmlParser
 import com.melisma.app.lyrics.parse.YrcParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * Whether a document's timings agree with the song, calibrated against the cache server's archive
@@ -20,6 +24,8 @@ import org.junit.Test
  * Every payload below is a verbatim excerpt of what a provider actually sent, cut to a few lines
  * and otherwise untouched. Both tracks are real cases from the archive.
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class TimingSanityTest {
 
     /**
@@ -139,6 +145,53 @@ class TimingSanityTest {
         val wrong = document(YrcParser.parse(otherRecordingYrc), "netease")
         assertFalse(TimingSanity.timingsOutrunTheTrack(wrong, trackDurationMs = 0))
         assertEquals(LyricsKind.SYLLABLE, TimingSanity.honestKind(wrong, 0).kind)
+    }
+
+    /**
+     * Apple's unsynced lyrics, as it actually serves them: the same TTML as a synced track, with
+     * `itunes:timing="None"` and not one `begin` attribute. 14 of the 339 Apple documents in the
+     * archive looked like this.
+     */
+    private val untimedTtml = """
+        <tt xmlns="http://www.w3.org/ns/ttml"
+            xmlns:itunes="http://music.apple.com/lyric-ttml-internal"
+            itunes:timing="None" xml:lang="en"><body>
+        <div><p>You can just slide with him tonight</p><p>Just slide with him</p>
+        <p>I know its over</p></div>
+        <div><p>I’ll get a ride</p><p>On my own</p><p>Going home</p></div>
+        </body></tt>
+    """.trimIndent()
+
+    @Test
+    fun `lyrics with no timings are not line-synced lyrics`() {
+        val parsed = TtmlParser.parse(untimedTtml, "Apple Music", "applemusic")!!
+
+        // Every line lands on the same timestamp, because there is no timing in the document.
+        assertEquals(1, parsed.vocalLines.map { it.startMs }.distinct().size)
+        assertFalse(TimingSanity.hasUsableTimings(parsed))
+
+        // Both layers agree: the parser takes Apple at its word, and the structural check would
+        // have caught it even if the attribute were missing, which for some of the archive it was.
+        assertEquals(LyricsKind.STATIC, parsed.kind)
+        assertEquals(LyricsKind.STATIC, effectiveKind(parsed, bestLines = 0))
+    }
+
+    @Test
+    fun `and so they lose to a source that actually has them`() {
+        // The visible cost of getting this wrong: a full transcription that claims line timing
+        // outranks one that admits it has none, and then never advances off the first line.
+        val untimed = TtmlParser.parse(untimedTtml, "Apple Music", "applemusic")!!
+        val timed = yrc()
+        val answers = listOf("applemusic" to untimed, "netease" to timed)
+        val bestLines = answers.maxOf { lineCount(it.second) }
+
+        assertEquals("netease", pickBest(answers, listOf("applemusic", "netease"), bestLines)?.providerId)
+    }
+
+    @Test
+    fun `a single line is not suspicious for having a single timestamp`() {
+        val one = document(YrcParser.parse(genuineYrc).take(1), "netease")
+        assertTrue(TimingSanity.hasUsableTimings(one))
     }
 
     @Test

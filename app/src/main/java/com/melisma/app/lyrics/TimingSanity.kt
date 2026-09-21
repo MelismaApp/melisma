@@ -86,6 +86,31 @@ object TimingSanity {
     }
 
     /**
+     * Whether the document has any timing information at all, as opposed to a timestamp it repeats.
+     *
+     * Apple serves unsynced lyrics as the same TTML it uses for synced ones, with no `itunes:timing`
+     * and no `begin` anywhere — so every line parses to 0ms and the document calls itself
+     * line-synced. 14 of the 339 Apple documents in the archive were this, and the effect is the one
+     * that reads as broken timing rather than missing timing: a full transcription that claims to
+     * follow the song, outranks a source that honestly admits it has no timings, and then never
+     * advances off the first line.
+     *
+     * A single line is exempt: it cannot be out of step with itself, and one timestamp is all it has.
+     */
+    fun hasUsableTimings(document: LyricsDocument): Boolean {
+        val vocal = document.vocalLines
+        if (vocal.size < 2) return true
+
+        val seen = HashSet<Int>(4)
+        for (line in vocal) {
+            seen += line.startMs
+            for (syllable in line.syllables) seen += syllable.startMs
+            if (seen.size >= 2) return true
+        }
+        return false
+    }
+
+    /**
      * Whether enough of the timings fall outside the track to say this describes another
      * recording. Unanswerable without a duration, so a track whose player did not report one is
      * given the benefit of the doubt.

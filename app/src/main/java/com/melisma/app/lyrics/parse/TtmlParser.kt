@@ -56,6 +56,7 @@ object TtmlParser {
         parser.setInput(StringReader(xml))
 
         var wordTiming = false
+        var noTiming = false
         val agentTypes = LinkedHashMap<String, String>()
         val songWriters = ArrayList<String>()
         // itunes:key -> alternate text, for whole-line entries.
@@ -71,8 +72,13 @@ object TtmlParser {
             if (event == XmlPullParser.START_TAG) {
                 when (parser.localName()) {
                     "tt" -> {
-                        wordTiming = parser.attr("itunes:timing")
-                            ?.equals("Word", ignoreCase = true) == true
+                        val timing = parser.attr("itunes:timing")
+                        wordTiming = timing?.equals("Word", ignoreCase = true) == true
+                        // Apple serves unsynced lyrics as this same TTML and says so here. Taking
+                        // its word for it matters because the lines then all parse to 0ms, and a
+                        // document claiming line timing it does not have outranks a source that
+                        // admits it has none.
+                        noTiming = timing?.equals("None", ignoreCase = true) == true
                         language = parser.attr("xml:lang") ?: parser.attr("lang")
                     }
 
@@ -126,7 +132,11 @@ object TtmlParser {
 
         val hasSyllables = withAlternates.any { it.syllables.isNotEmpty() }
         return LyricsDocument(
-            kind = if (wordTiming || hasSyllables) LyricsKind.SYLLABLE else LyricsKind.LINE,
+            kind = when {
+                wordTiming || hasSyllables -> LyricsKind.SYLLABLE
+                noTiming -> LyricsKind.STATIC
+                else -> LyricsKind.LINE
+            },
             lines = withAlternates.withInterludes(),
             providerName = providerName,
             providerId = providerId,

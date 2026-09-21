@@ -23,17 +23,20 @@ import org.junit.Test
  */
 class QualityScoreTest {
 
-    private fun line(text: String, timed: Boolean) = LyricLine(
+    private fun line(text: String, timed: Boolean, at: Int = 0) = LyricLine(
         role = LineRole.LEAD,
-        startMs = 0,
-        endMs = 1_000,
+        // Each line at its own timestamp. Forty lines all at 0ms is not a line-timed document --
+        // it is the shape Apple's *unsynced* lyrics parse to, which `TimingSanity.hasUsableTimings`
+        // now calls untimed, so a fixture built that way would not be line-timed at all.
+        startMs = at,
+        endMs = at + 1_000,
         text = text,
         // A word-timed line carries a syllable per word. One syllable holding the whole line is
         // the shape line timing has, and `TimingSanity.hasWordTimings` reads it as such, so a
         // fixture built that way would be testing the wrong thing.
         syllables = if (timed) {
             text.split(' ').mapIndexed { index, word ->
-                Syllable(text = word, startMs = index * 500, endMs = index * 500 + 500)
+                Syllable(text = word, startMs = at + index * 500, endMs = at + index * 500 + 500)
             }
         } else {
             emptyList()
@@ -43,7 +46,9 @@ class QualityScoreTest {
     /** [timed] of [lines] lines carry syllables. */
     private fun document(lines: Int, timed: Int, kind: LyricsKind) = LyricsDocument(
         kind = kind,
-        lines = (0 until lines).map { index -> line("line $index", timed = index < timed) },
+        lines = (0 until lines).map { index ->
+            line("line $index", timed = index < timed, at = index * 2_000)
+        },
         providerName = "test",
         providerId = "test",
     )
