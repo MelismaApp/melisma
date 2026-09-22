@@ -241,6 +241,16 @@ object LyricsLayoutBuilder {
         widthPx: Float,
         useRomanization: Boolean,
         showTranslation: Boolean,
+        /**
+         * Keep the original characters, small, under a line the reading replaced.
+         *
+         * A romanization is lossy in a way a translation is not, and for Chinese it is lossy in a
+         * way nothing can repair: ICU gives each character one fixed reading with no regard for the
+         * word it is in, so 音乐 romanizes as `yin le` rather than *yinyue* and 银行 as `yin xing`
+         * rather than *yinhang*. The characters are the only thing that disambiguates, so this keeps
+         * them on screen instead of pretending the reading is complete.
+         */
+        showOriginal: Boolean = false,
         duetPadding: Boolean = true,
         showCredits: Boolean = true,
         /** Null switches furigana off; true renders it as hiragana, false as katakana. */
@@ -267,13 +277,13 @@ object LyricsLayoutBuilder {
                 line.syllables.isNotEmpty() && document.kind == LyricsKind.SYLLABLE ->
                     syllableLayout(
                         line, index, metrics, maxWidth, alignRight, y,
-                        useRomanization, showTranslation,
+                        useRomanization, showTranslation, showOriginal,
                         if (rubyRoom) furiganaHiragana else null,
                     )
 
                 else -> plainLayout(
                     line, index, metrics, maxWidth, alignRight, y,
-                    useRomanization, showTranslation,
+                    useRomanization, showTranslation, showOriginal,
                     timed = document.kind != LyricsKind.STATIC,
                 )
             }
@@ -343,6 +353,7 @@ object LyricsLayoutBuilder {
         top: Float,
         useRomanization: Boolean,
         showTranslation: Boolean,
+        showOriginal: Boolean,
         furiganaHiragana: Boolean?,
     ): LineLayout {
         val paint = metrics.paintFor(line.role)
@@ -562,9 +573,19 @@ object LyricsLayoutBuilder {
             null
         }
 
+        // Only when the reading actually took the characters' place. Where the romanization is
+        // itself a secondary row the characters are already the main text, and repeating them
+        // underneath would be showing the same line twice.
+        val original = if (showOriginal && useRomanization && hasSyllableRomanization) {
+            line.text.takeIf { it.isNotBlank() }
+        } else {
+            null
+        }
+
         val secondary = secondaryRows(
             line, metrics, maxWidth, alignRight, contentHeight, showTranslation,
             romanization = lineRomanization,
+            original = original,
         )
         val secondaryHeight = secondary.size * metrics.secondaryFontSizePx * 1.35f
 
@@ -699,16 +720,14 @@ object LyricsLayoutBuilder {
         top: Float,
         useRomanization: Boolean,
         showTranslation: Boolean,
+        showOriginal: Boolean,
         timed: Boolean,
     ): LineLayout {
         val paint = metrics.paintFor(line.role)
         val fontSize = metrics.fontSizeFor(line.role)
         val lineHeight = fontSize * 1.1818182f
-        val text = if (useRomanization) {
-            line.romanized?.takeIf { it.isNotBlank() } ?: line.text
-        } else {
-            line.text
-        }
+        val romanizedText = line.romanized?.takeIf { it.isNotBlank() }.takeIf { useRomanization }
+        val text = romanizedText ?: line.text
 
         val rows = wrap(text, paint, maxWidth)
         val contentHeight = rows.size * lineHeight
@@ -736,6 +755,11 @@ object LyricsLayoutBuilder {
         val secondary = secondaryRows(
             line, metrics, maxWidth, alignRight, contentHeight, showTranslation,
             romanization = null,
+            original = if (showOriginal && romanizedText != null) {
+                line.text.takeIf { it.isNotBlank() }
+            } else {
+                null
+            },
         )
         val secondaryHeight = secondary.size * metrics.secondaryFontSizePx * 1.35f
 
@@ -753,10 +777,12 @@ object LyricsLayoutBuilder {
     }
 
     /**
-     * The smaller rows under a line: its reading first, then its translation.
+     * The smaller rows under a line: its reading, then its characters, then its translation.
      *
      * Reading before meaning, because that is the order they are useful in — you sing
-     * from the romanization and glance at the translation.
+     * from the romanization and glance at the translation. The characters sit between the
+     * two for the same reason: they answer "which word is this", which is a question about
+     * the reading you are singing rather than about the meaning.
      */
     private fun secondaryRows(
         line: LyricLine,
@@ -766,9 +792,11 @@ object LyricsLayoutBuilder {
         contentTop: Float,
         showTranslation: Boolean,
         romanization: String?,
+        original: String? = null,
     ): List<TextRow> {
         val texts = buildList {
             romanization?.let { add(it) }
+            original?.let { add(it) }
             if (showTranslation) line.translated?.takeIf { it.isNotBlank() }?.let { add(it) }
         }
         if (texts.isEmpty()) return emptyList()

@@ -217,6 +217,15 @@ data class Settings(
     // ---- language --------------------------------------------------------
     val showRomanization: Boolean = true,
     val romanizationStripsDiacritics: Boolean = false,
+    /**
+     * Keep the original characters, small, under a line the reading replaced.
+     *
+     * Off by default because it costs a row of height per line, and most readers of a romanization
+     * cannot read the characters anyway. On, it is the only way to tell which word a reading meant:
+     * for Chinese every character gets one fixed reading regardless of the word it sits in, so 音乐
+     * comes out `yin le` where it is said *yinyue*, and nothing but the characters says so.
+     */
+    val showOriginalUnderRomanization: Boolean = false,
     /** Only applies while romanization is off — the gloss belongs over the original text. */
     val furigana: FuriganaMode = FuriganaMode.OFF,
     val translationSource: TranslationSource = TranslationSource.PROVIDER,
@@ -587,6 +596,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
 
         showRomanization = prefs.getBoolean(KEY_ROMANIZE, true),
         romanizationStripsDiacritics = prefs.getBoolean(KEY_STRIP_DIACRITICS, false),
+        showOriginalUnderRomanization = prefs.getBoolean(KEY_SHOW_ORIGINAL, false),
         furigana = prefs.enum(KEY_FURIGANA, FuriganaMode.OFF),
         translationSource = prefs.translationSource(),
         translationTarget = prefs.getString(KEY_TRANSLATE_TARGET, "en") ?: "en",
@@ -750,6 +760,9 @@ class SettingsStore(context: Context) : ProviderCredentials {
     // ---- language -----------------------------------------------------------
 
     fun setShowRomanization(value: Boolean) = edit { putBoolean(KEY_ROMANIZE, value) }
+
+    fun setShowOriginalUnderRomanization(value: Boolean) =
+        edit { putBoolean(KEY_SHOW_ORIGINAL, value) }
 
     fun setStripDiacritics(value: Boolean) = edit { putBoolean(KEY_STRIP_DIACRITICS, value) }
 
@@ -1033,6 +1046,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_SCROLL_RESUME = "scroll_resume_ms"
 
         const val KEY_ROMANIZE = "show_romanization"
+        const val KEY_SHOW_ORIGINAL = "show_original_under_romanization"
         const val KEY_STRIP_DIACRITICS = "strip_diacritics"
         const val KEY_FURIGANA = "furigana"
         /** The boolean this setting used to be. Read once, to migrate; never written. */

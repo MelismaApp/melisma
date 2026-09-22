@@ -755,6 +755,20 @@ fun SettingsSheet(
                         accent = accent,
                         onCheckedChange = { store.setStripDiacritics(it) },
                     )
+                    ToggleRow(
+                        title = "Keep the characters",
+                        subtitle = "Shown small under the reading, above any translation",
+                        checked = settings.showOriginalUnderRomanization,
+                        accent = accent,
+                        onCheckedChange = { store.setShowOriginalUnderRomanization(it) },
+                    )
+                    Help(
+                        "A reading cannot always be trusted on its own. Chinese characters are " +
+                            "given one fixed reading each, whatever word they are in — 音乐 comes " +
+                            "out `yin le` where it is said `yinyue`, and 的 is always `de` even " +
+                            "where it is `dì`. The characters are what tells you which word it " +
+                            "was. Costs a row of height per line.",
+                    )
                 }
 
                 ChipGroup(

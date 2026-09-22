@@ -122,6 +122,7 @@ fun LyricsView(
 
         val layout = remember(
             document, metrics, contentWidthPx, useRomanization, showTranslation,
+            settings.showOriginalUnderRomanization,
             settings.duetLinePadding, showCredits, furiganaHiragana,
         ) {
             LyricsLayoutBuilder.build(
@@ -130,6 +131,7 @@ fun LyricsView(
                 widthPx = contentWidthPx,
                 useRomanization = useRomanization,
                 showTranslation = showTranslation,
+                showOriginal = settings.showOriginalUnderRomanization,
                 duetPadding = settings.duetLinePadding,
                 showCredits = showCredits,
                 furiganaHiragana = furiganaHiragana,
