@@ -418,6 +418,7 @@ class LyricsRenderer(
         }
 
         drawRuby(canvas, line, isActive, opacity * roleAlpha)
+        drawUnderCharacters(canvas, line, positionMs, isActive, opacity * roleAlpha)
         drawSecondary(canvas, line, isActive, opacity)
         canvas.restore()
     }
@@ -440,6 +441,55 @@ class LyricsRenderer(
         for (unit in line.units) {
             val ruby = unit.ruby ?: continue
             canvas.drawText(ruby, unit.rubyX, unit.rubyBaseline, paint)
+        }
+    }
+
+    /**
+     * The original characters under a romanized syllable, filling in step with it.
+     *
+     * Drawn outside the active/flat split, like ruby, so they are there on every line rather than
+     * appearing when a line becomes current. Unlike ruby they take the sweep: the whole reason to
+     * show them is to see which character the reading in front of you came from, and a static row
+     * cannot say which one you are on. Same gradient percentage as the word above, over the small
+     * text's own box, so the two fill together.
+     */
+    private fun drawUnderCharacters(
+        canvas: Canvas,
+        line: LineLayout,
+        positionMs: Int,
+        isActive: Boolean,
+        opacity: Float,
+    ) {
+        if (line.units.none { it.under != null }) return
+        val source = layout.metrics.secondaryPaint
+        for (unit in line.units) {
+            val under = unit.under ?: continue
+            val state = LyricsAnim.stateOf(positionMs, unit.startMs, unit.endMs)
+            val gradient = when (state) {
+                LyricsAnim.State.ACTIVE ->
+                    GRADIENT_START + 120f * LyricsAnim.progressOf(positionMs, unit.startMs, unit.endMs)
+                LyricsAnim.State.NOT_SUNG -> GRADIENT_START
+                LyricsAnim.State.SUNG -> 100f
+            }
+            paint.reset()
+            paint.isAntiAlias = true
+            paint.textSize = source.textSize
+            paint.typeface = source.typeface
+            paint.isSubpixelText = true
+            // A line nobody is on keeps them legible but quiet, the same bargain ruby strikes.
+            val shader = buildShader(
+                unit.underGradientTop,
+                unit.underGradientHeight,
+                gradient,
+                opacity * if (isActive) 1f else 0.55f,
+            )
+            if (shader != null) {
+                paint.shader = shader
+            } else {
+                paint.color = whiteWithAlpha(opacity * if (isActive) 0.82f else 0.4f)
+            }
+            canvas.drawText(under, unit.underX, unit.underBaseline, paint)
+            paint.shader = null
         }
     }
 

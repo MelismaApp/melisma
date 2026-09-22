@@ -99,6 +99,18 @@ class PlacedUnit(
     val ruby: String? = null,
     val rubyX: Float = 0f,
     val rubyBaseline: Float = 0f,
+    /**
+     * The original characters this syllable's reading replaced, drawn small underneath it.
+     *
+     * A unit rather than a row of its own because the whole point is that you can see which
+     * character the reading in front of you came from — so it is centred on the syllable and swept
+     * on the syllable's own timings, filling in step with the word above it.
+     */
+    val under: String? = null,
+    val underX: Float = 0f,
+    val underBaseline: Float = 0f,
+    val underGradientTop: Float = 0f,
+    val underGradientHeight: Float = 0f,
 ) {
     /**
      * Wall clock (`elapsedRealtime`) at which this unit became the active one.
@@ -364,7 +376,14 @@ object LyricsLayoutBuilder {
         }
         val fontSize = metrics.fontSizeFor(line.role)
         val rubyRoom = if (furiganaHiragana != null) metrics.rubyHeightPx else 0f
-        val lineHeight = fontSize * 1.1818182f + rubyRoom
+        // Reserved per row rather than once per line, because a wrapped line needs the band under
+        // every row it occupies.
+        val underRoom = if (showOriginal && useRomanization) {
+            metrics.secondaryFontSizePx * 1.35f
+        } else {
+            0f
+        }
+        val lineHeight = fontSize * 1.1818182f + rubyRoom + underRoom
 
         // Group syllables into words: a syllable flagged partOfWord continues the
         // previous one, and a word is the smallest thing a line break may fall between.
@@ -396,6 +415,11 @@ object LyricsLayoutBuilder {
                         endMs = word.maxOf { it.endMs },
                         leadingGap = 0f,
                         ruby = null,
+                        under = if (showOriginal && useRomanization) {
+                            word.joinToString("") { it.text }.takeIf { it.isNotBlank() }
+                        } else {
+                            null
+                        },
                     ),
                 )
             } else {
@@ -421,6 +445,15 @@ object LyricsLayoutBuilder {
                             0f
                         },
                         ruby = ruby,
+                        // Only where the reading took this syllable's place. A syllable the
+                        // romanizer left alone is already showing its own characters.
+                        under = if (showOriginal && useRomanization &&
+                            !syllable.romanized.isNullOrBlank()
+                        ) {
+                            syllable.text.takeIf { it.isNotBlank() }
+                        } else {
+                            null
+                        },
                     )
                 }
             }
@@ -532,7 +565,8 @@ object LyricsLayoutBuilder {
                 gap * (row.size - 1).coerceAtLeast(0)
             val rowStartX = if (alignRight) maxWidth - widthOfRow else 0f
             var x = rowStartX
-            val baseline = rowIndex * lineHeight + rubyRoom + (lineHeight - rubyRoom) * 0.78f
+            val baseline = rowIndex * lineHeight + rubyRoom +
+                (lineHeight - rubyRoom - underRoom) * 0.78f
             val rowText = StringBuilder()
 
             val orderedRow = if (line.rtl) row.reversed() else row
@@ -553,6 +587,9 @@ object LyricsLayoutBuilder {
                         gradientTop = gradientTop,
                         rubyPaint = metrics.rubyPaint,
                         rubyBaseline = rowIndex * lineHeight + metrics.rubyFontSizePx * 1.05f,
+                        underPaint = metrics.secondaryPaint,
+                        underBaseline = rowIndex * lineHeight + lineHeight -
+                            metrics.secondaryFontSizePx * 0.35f,
                     )
                     rowText.append(piece.text)
                     x += width
@@ -573,19 +610,12 @@ object LyricsLayoutBuilder {
             null
         }
 
-        // Only when the reading actually took the characters' place. Where the romanization is
-        // itself a secondary row the characters are already the main text, and repeating them
-        // underneath would be showing the same line twice.
-        val original = if (showOriginal && useRomanization && hasSyllableRomanization) {
-            line.text.takeIf { it.isNotBlank() }
-        } else {
-            null
-        }
-
         val secondary = secondaryRows(
             line, metrics, maxWidth, alignRight, contentHeight, showTranslation,
             romanization = lineRomanization,
-            original = original,
+            // Nothing here: a syllable-timed line carries its characters per syllable, aligned
+            // under the reading they belong to, which a wrapped row of text cannot do.
+            original = null,
         )
         val secondaryHeight = secondary.size * metrics.secondaryFontSizePx * 1.35f
 
@@ -609,6 +639,7 @@ object LyricsLayoutBuilder {
         /** Extra space in front of this piece, inside its word. */
         val leadingGap: Float,
         val ruby: String?,
+        val under: String? = null,
     )
 
     /** Katakana as the analyser gives it, or hiragana if that is what was asked for. */
@@ -636,9 +667,12 @@ object LyricsLayoutBuilder {
         gradientTop: Float,
         rubyPaint: Paint,
         rubyBaseline: Float,
+        underPaint: Paint,
+        underBaseline: Float,
     ): PlacedUnit {
         val letters = emphasisLetters(piece, paint, x)
         val rubyWidth = piece.ruby?.let { rubyPaint.measureText(it) } ?: 0f
+        val underWidth = piece.under?.let { underPaint.measureText(it) } ?: 0f
         return PlacedUnit(
             text = piece.text,
             x = x,
@@ -656,6 +690,14 @@ object LyricsLayoutBuilder {
             // rather than as another line of text.
             rubyX = x + (width - rubyWidth) / 2f,
             rubyBaseline = rubyBaseline,
+            under = piece.under,
+            // Centred on the syllable for the same reason ruby is: the alignment is the message.
+            underX = x + (width - underWidth) / 2f,
+            underBaseline = underBaseline,
+            // Its own sweep box, so the gradient reads correctly on the small text instead of
+            // picking up whatever colour the word's box happens to have at that height.
+            underGradientTop = underBaseline - underPaint.textSize,
+            underGradientHeight = underPaint.textSize * 1.35f,
         )
     }
 

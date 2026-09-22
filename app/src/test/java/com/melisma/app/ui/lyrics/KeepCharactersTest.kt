@@ -64,11 +64,11 @@ class KeepCharactersTest {
         providerId = "test",
     )
 
-    private fun rowsFor(
+    private fun lineFor(
         document: LyricsDocument,
         showOriginal: Boolean,
         showTranslation: Boolean = false,
-    ): List<String> = LyricsLayoutBuilder.build(
+    ) = LyricsLayoutBuilder.build(
         document = document,
         metrics = metrics,
         widthPx = 1_000f,
@@ -76,16 +76,66 @@ class KeepCharactersTest {
         showTranslation = showTranslation,
         showOriginal = showOriginal,
         showCredits = false,
-    ).lines[0].secondaryRows.map { it.text }
+    ).lines[0]
+
+    private fun rowsFor(
+        document: LyricsDocument,
+        showOriginal: Boolean,
+        showTranslation: Boolean = false,
+    ): List<String> = lineFor(document, showOriginal, showTranslation).secondaryRows.map { it.text }
+
+    /** The characters carried per syllable, in order. */
+    private fun charactersFor(
+        document: LyricsDocument,
+        showOriginal: Boolean,
+    ): List<String> = lineFor(document, showOriginal).units.mapNotNull { it.under }
 
     @Test
-    fun `off, the characters the reading replaced are simply gone`() {
-        assertEquals(emptyList<String>(), rowsFor(syllableTimed(), showOriginal = false))
+    fun `the room for them is reserved so lines do not collide`() {
+        val without = lineFor(syllableTimed(), showOriginal = false)
+        val with = lineFor(syllableTimed(), showOriginal = true)
+        assertTrue(
+            "a line showing characters must be taller: ${with.height} vs ${without.height}",
+            with.height > without.height,
+        )
     }
 
     @Test
-    fun `on, they come back underneath`() {
-        assertEquals(listOf("音乐"), rowsFor(syllableTimed(), showOriginal = true))
+    fun `on, each syllable carries its own character`() {
+        // Per syllable, not a row of text: that is what lets you see which character the reading in
+        // front of you came from.
+        assertEquals(listOf("音", "乐"), charactersFor(syllableTimed(), showOriginal = true))
+        // And not as a wrapped secondary row, which could not be aligned or swept.
+        assertEquals(emptyList<String>(), rowsFor(syllableTimed(), showOriginal = true))
+    }
+
+    @Test
+    fun `off, no syllable carries one`() {
+        assertEquals(emptyList<String>(), charactersFor(syllableTimed(), showOriginal = false))
+    }
+
+    @Test
+    fun `each character is centred under the syllable it belongs to, and shares its timings`() {
+        // The two properties the animation needs: alignment, so the character sits under its own
+        // reading, and the syllable's own window, so the fill reaches both at the same moment.
+        val line = lineFor(syllableTimed(), showOriginal = true)
+        val timed = line.units.filter { it.under != null }
+        assertEquals(2, timed.size)
+
+        for (unit in timed) {
+            val centreOfWord = unit.x + unit.width / 2f
+            val centreOfCharacter = unit.underX + metrics.secondaryPaint.measureText(unit.under!!) / 2f
+            assertTrue(
+                "character centred at $centreOfCharacter, word at $centreOfWord",
+                kotlin.math.abs(centreOfCharacter - centreOfWord) < 0.5f,
+            )
+            assertTrue("characters sit below the reading", unit.underBaseline > unit.baseline)
+        }
+
+        assertEquals(0, timed[0].startMs)
+        assertEquals(1_000, timed[0].endMs)
+        assertEquals(1_000, timed[1].startMs)
+        assertEquals(2_000, timed[1].endMs)
     }
 
     @Test
@@ -106,9 +156,9 @@ class KeepCharactersTest {
     }
 
     @Test
-    fun `characters sit between the reading and the meaning`() {
+    fun `a translation still gets its own row underneath`() {
         assertEquals(
-            listOf("音乐", "music"),
+            listOf("music"),
             rowsFor(syllableTimed(), showOriginal = true, showTranslation = true),
         )
     }
@@ -139,6 +189,7 @@ class KeepCharactersTest {
             providerName = "test",
             providerId = "test",
         )
+        assertEquals(emptyList<String>(), charactersFor(latin, showOriginal = true))
         assertEquals(emptyList<String>(), rowsFor(latin, showOriginal = true))
     }
 }
