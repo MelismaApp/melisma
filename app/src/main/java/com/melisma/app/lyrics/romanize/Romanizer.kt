@@ -441,13 +441,23 @@ class Romanizer {
     private fun chinesePinyin(text: String): String? {
         val byWord = PinyinWords.readings(text) ?: return transliterate("Han-Latin", text)
 
+        // By code point, not by char. An emoji or an Extension-B ideograph is a surrogate pair,
+        // and stepping through UTF-16 units would read each half separately and push a separator
+        // between them, turning one character into two broken ones.
         val out = StringBuilder(text.length * 4)
-        for ((index, char) in text.withIndex()) {
-            val reading = byWord[index] ?: singleCharPinyin(char) ?: char.toString()
+        var index = 0
+        while (index < text.length) {
+            val codePoint = text.codePointAt(index)
+            val width = Character.charCount(codePoint)
+            val raw = text.substring(index, index + width)
+            val reading = byWord[index]
+                ?: (if (width == 1) singleCharPinyin(text[index]) else null)
+                ?: raw
             if (out.isNotEmpty() && !out.last().isWhitespace() && !reading.first().isWhitespace()) {
                 out.append(' ')
             }
             out.append(reading)
+            index += width
         }
         return out.toString().takeIf { it.isNotEmpty() }
     }
@@ -483,11 +493,18 @@ class Romanizer {
         if (length <= 0 || start + length > lineText.length) return null
         var covered = false
         val out = StringBuilder(length * 4)
-        for (index in start until start + length) {
+        var index = start
+        while (index < start + length) {
+            val width = Character.charCount(lineText.codePointAt(index))
             if (byWord[index] != null) covered = true
-            val reading = byWord[index] ?: singleCharPinyin(lineText[index]) ?: return null
+            // A supplementary character has no per-character reading to fall back on, so the whole
+            // syllable goes to the ordinary path rather than being read half a codepoint at a time.
+            val reading = byWord[index]
+                ?: (if (width == 1) singleCharPinyin(lineText[index]) else null)
+                ?: return null
             if (out.isNotEmpty()) out.append(' ')
             out.append(reading)
+            index += width
         }
         if (!covered) return null
         return out.toString().takeIf { it.isNotEmpty() }

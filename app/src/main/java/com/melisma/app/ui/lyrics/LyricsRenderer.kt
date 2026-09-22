@@ -466,8 +466,11 @@ class LyricsRenderer(
             val under = unit.under ?: continue
             val state = LyricsAnim.stateOf(positionMs, unit.startMs, unit.endMs)
             val gradient = when (state) {
-                LyricsAnim.State.ACTIVE ->
-                    GRADIENT_START + 120f * LyricsAnim.progressOf(positionMs, unit.startMs, unit.endMs)
+                // The same clock the word above uses. Under `TextAnimationStyle.ANIMATE` the word
+                // runs off the wall clock to smooth over the player's reporting gaps, so reading the
+                // playhead here instead would leave the word moving while its character stalled —
+                // and filling in step is the entire point of drawing them together.
+                LyricsAnim.State.ACTIVE -> GRADIENT_START + 120f * sweepProgress(unit, positionMs)
                 LyricsAnim.State.NOT_SUNG -> GRADIENT_START
                 LyricsAnim.State.SUNG -> 100f
             }

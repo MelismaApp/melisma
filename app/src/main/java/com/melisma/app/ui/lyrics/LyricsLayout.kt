@@ -376,14 +376,6 @@ object LyricsLayoutBuilder {
         }
         val fontSize = metrics.fontSizeFor(line.role)
         val rubyRoom = if (furiganaHiragana != null) metrics.rubyHeightPx else 0f
-        // Reserved per row rather than once per line, because a wrapped line needs the band under
-        // every row it occupies.
-        val underRoom = if (showOriginal && useRomanization) {
-            metrics.secondaryFontSizePx * 1.35f
-        } else {
-            0f
-        }
-        val lineHeight = fontSize * 1.1818182f + rubyRoom + underRoom
 
         // Group syllables into words: a syllable flagged partOfWord continues the
         // previous one, and a word is the smallest thing a line break may fall between.
@@ -415,7 +407,13 @@ object LyricsLayoutBuilder {
                         endMs = word.maxOf { it.endMs },
                         leadingGap = 0f,
                         ruby = null,
-                        under = if (showOriginal && useRomanization) {
+                        // Only when a reading actually replaced the text. An RTL script has no
+                        // romanizer at all, so without this check the word was drawn as itself and
+                        // then again underneath itself.
+                        under = if (
+                            showOriginal && useRomanization &&
+                            word.any { !it.romanized.isNullOrBlank() }
+                        ) {
                             word.joinToString("") { it.text }.takeIf { it.isNotBlank() }
                         } else {
                             null
@@ -525,7 +523,12 @@ object LyricsLayoutBuilder {
                 }
                 if (chunk.isEmpty()) {
                     // A gap that sat between two syllables must not indent the start of a row.
-                    chunk += DisplayPiece(piece.text, piece.startMs, piece.endMs, 0f, piece.ruby)
+                    // Everything but the gap survives: dropping `under` here lost one character
+                    // from the row underneath at every wrap, and a spaceless Chinese line is one
+                    // long word, so it wrapped often.
+                    chunk += DisplayPiece(
+                        piece.text, piece.startMs, piece.endMs, 0f, piece.ruby, piece.under,
+                    )
                     chunkWidth = bare
                 } else {
                     chunk += piece
@@ -554,6 +557,16 @@ object LyricsLayoutBuilder {
             rows.last() += wordIndex
         }
         if (rows.last().isEmpty()) rows.removeAt(rows.lastIndex)
+
+        // Reserved per row, because a wrapped line needs the band under every row it occupies —
+        // and only when this line actually has characters to put there. Reserving it for every
+        // syllable-timed line gave an empty row under the English lines of a mixed-language song.
+        val underRoom = if (layoutWords.any { pieces -> pieces.any { it.under != null } }) {
+            metrics.secondaryFontSizePx * 1.35f
+        } else {
+            0f
+        }
+        val lineHeight = fontSize * 1.1818182f + rubyRoom + underRoom
 
         val units = ArrayList<PlacedUnit>(line.syllables.size)
         val flatRows = ArrayList<TextRow>(rows.size)

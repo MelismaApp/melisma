@@ -171,6 +171,96 @@ class KeepCharactersTest {
     }
 
     @Test
+    fun `a line with nothing to show underneath is no taller`() {
+        // Reserving the band for every syllable-timed line put an empty row under the English lines
+        // of a mixed-language song, which reads as the spacing going wrong for no reason.
+        val latin = LyricsDocument(
+            kind = LyricsKind.SYLLABLE,
+            lines = listOf(
+                LyricLine(
+                    role = LineRole.LEAD,
+                    startMs = 0,
+                    endMs = 2_000,
+                    text = "hello there",
+                    syllables = listOf(Syllable("hello", 0, 1_000), Syllable("there", 1_000, 2_000)),
+                ),
+            ),
+            providerName = "test",
+            providerId = "test",
+        )
+        assertEquals(
+            lineFor(latin, showOriginal = false).height,
+            lineFor(latin, showOriginal = true).height,
+            0.01f,
+        )
+    }
+
+    @Test
+    fun `a wrapped line keeps every character underneath`() {
+        // A spaceless line is one long word, so it goes through the chunking path — which used to
+        // rebuild the first piece of each row without its character, losing one per wrap.
+        val text = "音乐音乐音乐音乐音乐音乐音乐音乐"
+        val document = LyricsDocument(
+            kind = LyricsKind.SYLLABLE,
+            lines = listOf(
+                LyricLine(
+                    role = LineRole.LEAD,
+                    startMs = 0,
+                    endMs = 8_000,
+                    text = text,
+                    syllables = text.mapIndexed { index, char ->
+                        Syllable(
+                            char.toString(),
+                            index * 500,
+                            (index + 1) * 500,
+                            partOfWord = index > 0,
+                            romanized = if (char == '音') "yīn" else "yuè",
+                        )
+                    },
+                ),
+            ),
+            providerName = "test",
+            providerId = "test",
+        )
+
+        // Narrow enough that the single word must be split across rows.
+        val line = LyricsLayoutBuilder.build(
+            document = document,
+            metrics = metrics,
+            widthPx = 60f,
+            useRomanization = true,
+            showTranslation = false,
+            showOriginal = true,
+            showCredits = false,
+        ).lines[0]
+
+        assertEquals(text.length, line.units.count { it.under != null })
+        assertEquals(text, line.units.mapNotNull { it.under }.joinToString(""))
+    }
+
+    @Test
+    fun `an RTL line with no reading is not printed twice`() {
+        // Arabic and Hebrew have no romanizer, so the word is drawn as itself — and it used to be
+        // drawn as itself underneath as well.
+        val arabic = LyricsDocument(
+            kind = LyricsKind.SYLLABLE,
+            lines = listOf(
+                LyricLine(
+                    role = LineRole.LEAD,
+                    startMs = 0,
+                    endMs = 2_000,
+                    text = "مرحبا",
+                    syllables = listOf(Syllable("مرحبا", 0, 2_000)),
+                    rtl = true,
+                ),
+            ),
+            providerName = "test",
+            providerId = "test",
+        )
+        assertEquals(emptyList<String>(), charactersFor(arabic, showOriginal = true))
+    }
+
+    @Test
     fun `nothing is added to a line that was never romanized`() {
         val latin = LyricsDocument(
             kind = LyricsKind.SYLLABLE,

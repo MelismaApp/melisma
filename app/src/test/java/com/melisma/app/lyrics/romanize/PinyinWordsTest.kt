@@ -107,6 +107,25 @@ class PinyinWordsTest {
     }
 
     @Test
+    fun `a surrogate pair survives a line that also has a table match`() {
+        // Stepping through UTF-16 units read each half of an emoji separately and pushed a separator
+        // between them, turning one character into two broken ones. Only reachable when something
+        // else in the run matched the table, which is what makes it easy to miss.
+        val note = "🎵"
+        val reading = romanizer.romanizeText("音乐" + note, Script.CHINESE)!!
+        assertTrue(reading, reading.contains("yuè"))
+        assertTrue("the pair must arrive whole: $reading", reading.contains(note))
+    }
+
+    @Test
+    fun `and so does a supplementary ideograph`() {
+        // CJK Extension B: a real character, outside the range any of this has readings for.
+        val extB = "𠀋"
+        val reading = romanizer.romanizeText("音乐" + extB, Script.CHINESE)!!
+        assertTrue("the pair must arrive whole: $reading", reading.contains(extB))
+    }
+
+    @Test
     fun `an unmatched character still gets a reading`() {
         // A stretch no word covered falls through to ICU rather than coming out blank.
         val reading = romanizer.romanizeText("錒音乐", Script.CHINESE)
