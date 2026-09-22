@@ -161,12 +161,28 @@ class Romanizer {
 
         if (!japanese) {
             if (!wantRomaji) return null
-            // Per-character scripts: each syllable converts independently, and by its own script
-            // rather than the song's, so a Korean line inside a Japanese song is read as Korean.
+
+            // A Chinese reading is decided by the word, and a word spans syllables — 音 and 乐 arrive
+            // separately and neither of them is 音乐 — so the line is read whole and each syllable
+            // takes the readings for its own characters. Without this the word table could never
+            // fire at all, which is the real reason a per-character reading was all there was.
+            val byWord = if (hanScript == Script.CHINESE) PinyinWords.readings(lineText) else null
+
+            // Per-character scripts otherwise: each syllable converts independently, and by its own
+            // script rather than the song's, so a Korean line inside a Japanese song reads as Korean.
             var changed = false
+            var offset = 0
             val out = syllables.map { syllable ->
+                val start = offset
+                offset += syllable.text.length
                 if (!syllable.romanized.isNullOrBlank()) return@map syllable
-                val romanized = romanizeMixed(syllable.text, hanScript, stripDiacritics)
+                val romanized = byWord
+                    ?.let { spanReading(it, lineText, start, syllable.text.length) }
+                    // The table stores tone marks, and this path does not go through `romanizeText`,
+                    // so "drop tone marks" has to be honoured here too or the setting would apply to
+                    // some syllables of a line and not others.
+                    ?.let { if (stripDiacritics) stripDiacritics(it) else it }
+                    ?: romanizeMixed(syllable.text, hanScript, stripDiacritics)
                     ?: return@map syllable
                 changed = true
                 syllable.copy(romanized = romanized)
@@ -391,7 +407,7 @@ class Romanizer {
                 }.getOrNull()
             }
 
-            Script.CHINESE -> transliterate("Han-Latin", text)
+            Script.CHINESE -> chinesePinyin(text)
             Script.KOREAN -> transliterate("Hangul-Latin", text)
             Script.CYRILLIC -> transliterate("Cyrillic-Latin", text)
             Script.GREEK -> transliterate("Greek-Latin", text)
@@ -405,6 +421,68 @@ class Romanizer {
         } else {
             cleaned
         }
+    }
+
+    /**
+     * Pinyin for a stretch of Chinese, by word where the word matters.
+     *
+     * [PinyinWords] holds the 31,710 words ICU reads wrongly; everything else comes from ICU, which
+     * is right about the rest. So a line is a mix, and has to be assembled a character at a time —
+     * there is no single call that knows both halves.
+     */
+    private fun chinesePinyin(text: String): String? {
+        val byWord = PinyinWords.readings(text) ?: return transliterate("Han-Latin", text)
+
+        val out = StringBuilder(text.length * 4)
+        for ((index, char) in text.withIndex()) {
+            val reading = byWord[index] ?: singleCharPinyin(char) ?: char.toString()
+            if (out.isNotEmpty() && !out.last().isWhitespace() && !reading.first().isWhitespace()) {
+                out.append(' ')
+            }
+            out.append(reading)
+        }
+        return out.toString().takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * One character through ICU, remembered.
+     *
+     * A line only reaches here for the characters no word covered, but the same few hundred
+     * characters come back on every line of every song, and a transliterator call each time is a
+     * waste of the only budget that matters while the words are moving.
+     */
+    private fun singleCharPinyin(char: Char): String? = singleChars.getOrPut(char) {
+        transliterate("Han-Latin", char.toString())?.trim().orEmpty()
+    }.takeIf { it.isNotEmpty() }
+
+    private val singleChars = HashMap<Char, String>(512)
+
+    /**
+     * The reading for one syllable's characters, taken from the line's word-level readings.
+     *
+     * Null when no word covered any of them, which leaves the syllable to the ordinary path — the
+     * table only holds what ICU gets wrong, so "not covered" means "ICU was already right".
+     */
+    private fun stripDiacritics(text: String): String =
+        diacriticStripper?.let { runCatching { it.transliterate(text) }.getOrNull() } ?: text
+
+    private fun spanReading(
+        byWord: Array<String?>,
+        lineText: String,
+        start: Int,
+        length: Int,
+    ): String? {
+        if (length <= 0 || start + length > lineText.length) return null
+        var covered = false
+        val out = StringBuilder(length * 4)
+        for (index in start until start + length) {
+            if (byWord[index] != null) covered = true
+            val reading = byWord[index] ?: singleCharPinyin(lineText[index]) ?: return null
+            if (out.isNotEmpty()) out.append(' ')
+            out.append(reading)
+        }
+        if (!covered) return null
+        return out.toString().takeIf { it.isNotEmpty() }
     }
 
     private fun transliterate(id: String, text: String): String? {
