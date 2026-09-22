@@ -6,6 +6,7 @@ import com.atilika.kuromoji.ipadic.Tokenizer
 import com.melisma.app.lyrics.model.LyricLine
 import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.lyrics.model.Syllable
+import com.melisma.app.util.HanCanonical
 import com.melisma.app.util.Script
 import com.melisma.app.util.containsNonLatinScript
 import com.melisma.app.util.containsRomanizableScript
@@ -166,7 +167,10 @@ class Romanizer {
             // separately and neither of them is 音乐 — so the line is read whole and each syllable
             // takes the readings for its own characters. Without this the word table could never
             // fire at all, which is the real reason a per-character reading was all there was.
-            val byWord = if (hanScript == Script.CHINESE) PinyinWords.readings(lineText) else null
+            // Same length by construction, so a reading still lands on the character it came
+            // from. What the provider sent is still what gets drawn.
+            val lookupText = HanCanonical.of(lineText)
+            val byWord = if (hanScript == Script.CHINESE) PinyinWords.readings(lookupText) else null
 
             // Per-character scripts otherwise: each syllable converts independently, and by its own
             // script rather than the song's, so a Korean line inside a Japanese song reads as Korean.
@@ -177,7 +181,7 @@ class Romanizer {
                 offset += syllable.text.length
                 if (!syllable.romanized.isNullOrBlank()) return@map syllable
                 val romanized = byWord
-                    ?.let { spanReading(it, lineText, start, syllable.text.length) }
+                    ?.let { spanReading(it, lookupText, start, syllable.text.length) }
                     // The table stores tone marks, and this path does not go through `romanizeText`,
                     // so "drop tone marks" has to be honoured here too or the setting would apply to
                     // some syllables of a line and not others.
@@ -396,21 +400,25 @@ class Romanizer {
 
     fun romanizeText(text: String, script: Script, stripDiacritics: Boolean = false): String? {
         if (text.isBlank()) return null
+        // A radical that depicts an ideograph is not that ideograph, and nothing has a reading for
+        // one. Canonical for the engines only; the "did anything change" test below still compares
+        // against what arrived, so a character that genuinely has no reading still reports none.
+        val source = HanCanonical.of(text)
         val converted = when (script) {
             Script.JAPANESE -> {
                 val tokenizer = this.tokenizer ?: return null
                 runCatching {
-                    tokenizer.tokenize(text).joinToString("") { token ->
+                    tokenizer.tokenize(source).joinToString("") { token ->
                         val romaji = token.romaji()
                         if (romaji.isEmpty()) "" else "$romaji "
                     }.trim()
                 }.getOrNull()
             }
 
-            Script.CHINESE -> chinesePinyin(text)
-            Script.KOREAN -> transliterate("Hangul-Latin", text)
-            Script.CYRILLIC -> transliterate("Cyrillic-Latin", text)
-            Script.GREEK -> transliterate("Greek-Latin", text)
+            Script.CHINESE -> chinesePinyin(source)
+            Script.KOREAN -> transliterate("Hangul-Latin", source)
+            Script.CYRILLIC -> transliterate("Cyrillic-Latin", source)
+            Script.GREEK -> transliterate("Greek-Latin", source)
             Script.LATIN, Script.OTHER -> null
         } ?: return null
 

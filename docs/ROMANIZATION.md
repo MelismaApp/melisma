@@ -62,6 +62,33 @@ depends on meaning rather than word membership — 行 in a name, say — is bey
 Which is why the characters can stay on screen: **Romanization → Keep the characters** shows them
 small under the reading, swept in step with it, so a reading you cannot trust is one you can check.
 
+## Characters that only look like characters
+
+Reported as "some characters just show up as characters, no romanization" — 見, 貝 and 一 coming out raw
+in 帶你飛 by 告五人, while romanizing those same characters by hand worked.
+
+They were not those characters. Apple Music sends them from the **Kangxi Radicals** block, which exists
+so dictionaries can refer to radicals, and which renders identically to the ideographs it depicts:
+
+```
+⾒ U+2F92 KANGXI RADICAL SEE     looks like 見 U+898B
+⾙ U+2F99 KANGXI RADICAL SHELL   looks like 貝 U+8C9D
+⼀ U+2F00 KANGXI RADICAL ONE     looks like 一 U+4E00
+```
+
+Nine of them in that one track. Nothing that reads Chinese has a reading for a radical — ICU returns it
+untouched, no dictionary word contains one — so the character was shown where its reading should be.
+They were not counted as Han by the script detector either, so a line made mostly of them could fail to
+register as romanizable at all.
+
+`HanCanonical` maps them back for lookups, one character in and one character out. The length has to be
+preserved because a reading is handed to its syllable by index, so full NFKC is not usable here — it
+turns a single ﷺ into thirty-odd letters and would put every later reading on the wrong character. Only
+single-character results are accepted.
+
+**What gets drawn is still what the provider sent.** The two forms are visually identical, so rewriting
+the lyrics would be an invisible change to text the app does not own.
+
 ## Where the data comes from
 
 The word readings are the non-CC-CEDICT half of

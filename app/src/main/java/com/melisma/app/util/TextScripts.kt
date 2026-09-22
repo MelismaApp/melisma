@@ -11,7 +11,10 @@ private fun Char.isHiraganaOrKatakana(): Boolean =
     this in '぀'..'ゟ' || this in '゠'..'ヿ' || this in 'ㇰ'..'ㇿ'
 
 private fun Char.isHan(): Boolean =
-    this in '一'..'鿿' || this in '㐀'..'䶿' || this in '豈'..'﫿'
+    this in '一'..'鿿' || this in '㐀'..'䶿' || this in '豈'..'﫿' ||
+        // Radicals that depict ideographs, which Apple Music sends in place of them. Counted
+        // as Han so a line written with them is still detected as Chinese; see `HanCanonical`.
+        this in '⺀'..'⻳' || this in '⼀'..'⿕'
 
 private fun Char.isHangul(): Boolean =
     this in '가'..'힣' || this in 'ᄀ'..'ᇿ' ||
