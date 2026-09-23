@@ -41,6 +41,10 @@ import kotlinx.coroutines.launch
 import com.melisma.app.media.ArtworkSearch
 import com.melisma.app.settings.ArtworkSource
 import android.graphics.Bitmap
+import com.melisma.app.media.CanvasVideo
+import com.melisma.app.media.CanvasVideoCache
+import com.melisma.app.media.SpotifyCanvas
+import com.melisma.app.settings.CanvasMode
 import com.melisma.app.media.TrackInfo
 import com.melisma.app.media.AppleArtwork
 import com.melisma.app.media.APPLE_IMAGE_SIZE
@@ -148,6 +152,20 @@ class AppContainer(context: Context) {
 
     /** True when a Spotify cookie is present, so Settings can say whether extras will work. */
     val spotifyExtrasAvailable: Boolean get() = spotifyExtras.isAvailable
+
+    private val spotifyCanvas = SpotifyCanvas(settings, available = { spotifyExtras.isAvailable })
+    private val canvasCache = CanvasVideoCache(java.io.File(context.cacheDir, "canvas"))
+    private val connectivity =
+        context.getSystemService(android.net.ConnectivityManager::class.java)
+    private val _canvasVideo = MutableStateFlow<CanvasVideo?>(null)
+
+    /**
+     * The playing track's Canvas video, on disk, when Canvas is on and Spotify has one.
+     *
+     * Null the moment the track changes, so a video never plays over the wrong song. Tagged with the
+     * track so the screen can check it is still the one playing.
+     */
+    val canvasVideo: StateFlow<CanvasVideo?> = _canvasVideo.asStateFlow()
 
     /** What the cache server says about its own sources, for the developer menu. */
     suspend fun cacheServerStatus(): List<ServerSource>? = cacheServerExtras.status()
@@ -340,6 +358,40 @@ class AppContainer(context: Context) {
                 // ended gets applied to the one that just started.
                 .collectLatest { inputs -> loadExtras(inputs) }
         }
+
+        // Canvas on its own path rather than inside the extras: it has its own switch, its own
+        // host, and nothing the extras chain would want to wait for.
+        scope.launch {
+            combine(media.snapshot, settings.settings, saving) { snapshot, settings, saving ->
+                CanvasInputs(
+                    trackId = snapshot.track?.spotifyTrackId,
+                    wanted = settings.canvasMode != CanvasMode.OFF && !saving.stillBackground,
+                    spotifyToken = settings.spotifyWebToken.orEmpty() + settings.spDcCookie.orEmpty() +
+                        settings.spotifyBrowserTokenActive,
+                )
+            }
+                .distinctUntilChanged()
+                .collectLatest { inputs -> loadCanvas(inputs) }
+        }
+    }
+
+    private data class CanvasInputs(val trackId: String?, val wanted: Boolean, val spotifyToken: String)
+
+    private suspend fun loadCanvas(inputs: CanvasInputs) {
+        _canvasVideo.value = null
+        val trackId = inputs.trackId ?: return
+        if (!inputs.wanted || !spotifyCanvas.isAvailable || dataSaverOn()) return
+        val url = spotifyCanvas.videoFor(trackId) ?: return
+        val file = canvasCache.fileFor(url) ?: return
+        _canvasVideo.value = CanvasVideo(trackId, file)
+    }
+
+    /** Data Saver on a metered network: a video per track is exactly what it asks apps not to do. */
+    private fun dataSaverOn(): Boolean {
+        val manager = connectivity ?: return false
+        return manager.isActiveNetworkMetered &&
+            manager.restrictBackgroundStatus ==
+            android.net.ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED
     }
 
     private val _searchedArtwork = MutableStateFlow<Bitmap?>(null)

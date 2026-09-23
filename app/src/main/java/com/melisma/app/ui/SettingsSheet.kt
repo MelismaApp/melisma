@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.melisma.app.AppContainer
 import com.melisma.app.settings.BackgroundStyle
+import com.melisma.app.settings.CanvasMode
 import com.melisma.app.settings.ControlsPosition
 import com.melisma.app.settings.FuriganaMode
 import com.melisma.app.settings.LyricsFont
@@ -613,6 +614,20 @@ fun SettingsSheet(
                     "The blur comes from how far the image is shrunk before being scaled back up, so 0 leaves the artwork nearly sharp and 67 leaves a wash of its colours.",
                 )
                 }
+
+                ChipGroup(
+                    label = "Spotify Canvas",
+                    options = CanvasMode.entries.map { it to it.label },
+                    selected = settings.canvasMode,
+                    accent = accent,
+                    onSelect = { store.setCanvasMode(it) },
+                )
+                if (settings.canvasMode != CanvasMode.OFF && !container.spotifyExtrasAvailable) {
+                    Hint("Canvas needs the same Spotify token as Spotify lyrics — without it, the style above shows.")
+                }
+                Help(
+                    "The looping video Spotify shows behind some tracks, in place of the style above. Tracks without one, other players, battery saver and the floating window all show the style above instead. Needs a Spotify token, and is skipped when Data Saver is on over mobile data. Blurred needs Android 12 or later.",
+                )
             }
 
             Section(
@@ -1810,6 +1825,12 @@ private fun CreditsPanel(accent: Color, onBack: () -> Unit) {
         accent = accent,
     )
     Credit(
+        title = "Kawarp — Better Lyrics (MIT)",
+        body = "The animated background: blur, noise warp and colour, as Spicy Lyrics runs it.",
+        link = "github.com/better-lyrics/kawarp",
+        accent = accent,
+    )
+    Credit(
         title = "Beautiful Lyrics — surfbryce",
         body = "Prior art and a reference point. No code from it is used — it carries no " +
             "licence grant, so it was read, not borrowed from.",
@@ -1820,6 +1841,12 @@ private fun CreditsPanel(accent: Color, onBack: () -> Unit) {
         title = "Kuromoji — Atilika (Apache-2.0)",
         body = "Japanese morphological analysis. The only reason kanji get the right reading.",
         link = "github.com/atilika/kuromoji",
+        accent = accent,
+    )
+    Credit(
+        title = "phrase-pinyin-data — mozillazg (MIT)",
+        body = "Pinyin by the word, so Chinese characters are read the way the word says them.",
+        link = "github.com/mozillazg/phrase-pinyin-data",
         accent = accent,
     )
     Credit(

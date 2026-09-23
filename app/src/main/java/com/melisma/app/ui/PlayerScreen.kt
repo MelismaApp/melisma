@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -72,10 +73,12 @@ import com.melisma.app.BuildConfig
 import com.melisma.app.lyrics.LyricsState
 import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.lyrics.model.LyricsKind
+import com.melisma.app.settings.CanvasMode
 import com.melisma.app.settings.MediaPanelSide
 import com.melisma.app.settings.Settings
 import com.melisma.app.settings.ViewMode
 import com.melisma.app.ui.background.ArtworkColors
+import com.melisma.app.ui.background.CanvasVideoBackground
 import com.melisma.app.ui.background.DynamicBackground
 import com.melisma.app.ui.components.AppIcons
 import com.melisma.app.ui.components.MediaPanel
@@ -102,6 +105,7 @@ fun PlayerScreen(
     val settings by container.settings.settings.collectAsStateWithLifecycle()
     val popup by inPopup.collectAsStateWithLifecycle()
     val extras by container.extras.collectAsStateWithLifecycle()
+    val canvas by container.canvasVideo.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
@@ -241,22 +245,41 @@ fun PlayerScreen(
         }
     }
 
+    // A floating window is small and often on screen for a long time; a still background there is
+    // both calmer and cheaper. Battery saver asks for the same thing more directly.
+    val preferStill = (popup && settings.popupStillBackground) || saving.stillBackground
+    // Only the playing track's video, and never where the background is meant to hold still.
+    val video = canvas?.takeIf {
+        settings.canvasMode != CanvasMode.OFF && !preferStill && !demoMode &&
+            it.trackId == snapshot.track?.spotifyTrackId
+    }
+    var videoShowing by remember { mutableStateOf(false) }
+
     Box(modifier.fillMaxSize()) {
         DynamicBackground(
             artwork = artwork,
             colors = colors,
             style = settings.backgroundStyle,
             blurRadius = settings.backgroundBlur,
-            // A floating window is small and often on screen for a long time; a still
-            // background there is both calmer and cheaper. Battery saver asks for the same
-            // thing more directly.
-            preferStill = (popup && settings.popupStillBackground) || saving.stillBackground,
+            preferStill = preferStill,
             // Paused music stops the drift, which stops the redraws. The demo is exempt: it
-            // exists to show the renderer off, and there is no playhead behind it to stop.
-            playing = snapshot.playback.isPlaying || demoMode,
+            // exists to show the renderer off, and there is no playhead behind it to stop. A video
+            // covering it stops it too, since nothing of it is visible.
+            playing = (snapshot.playback.isPlaying || demoMode) && !videoShowing,
             artistImage = extras.artistImage,
             tempoBpm = extras.tempo,
         )
+
+        if (video != null) {
+            key(video.file) {
+                CanvasVideoBackground(
+                    file = video.file,
+                    blurred = settings.canvasMode == CanvasMode.BLURRED,
+                    playing = snapshot.playback.isPlaying,
+                    onShowing = { videoShowing = it },
+                )
+            }
+        }
 
         if (popup) {
             PopupContent(

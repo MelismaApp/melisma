@@ -9,8 +9,11 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /** Spicy Lyrics' "Static Background" choice. */
 enum class BackgroundStyle(val label: String) {
-    /** Album art, warped and drifting. Their "off", i.e. the animated background. */
+    /** Album art, blurred and slowly warped: Spicy Lyrics' animated background, ported. */
     ANIMATED("Living"),
+
+    /** The drifting colour field Living was before the port. Lighter on the GPU. */
+    LIVING_CLASSIC("Living (classic)"),
 
     /**
      * Living normally, still where the battery settings ask for it.
@@ -36,6 +39,13 @@ enum class BackgroundStyle(val label: String) {
 
     /** Pure black — best on OLED, and for reading. */
     BLACK("Black"),
+}
+
+/** Spotify's looping Canvas video, used as the background when a track has one. */
+enum class CanvasMode(val label: String) {
+    OFF("Off"),
+    FULL("Full"),
+    BLURRED("Blurred"),
 }
 
 /**
@@ -178,6 +188,8 @@ data class Settings(
     val backgroundStyle: BackgroundStyle = BackgroundStyle.ANIMATED,
     /** Blur radius in px for [BackgroundStyle.COVER_ART]. */
     val backgroundBlur: Int = 24,
+    /** Canvas video over [backgroundStyle], which shows whenever there is no video. */
+    val canvasMode: CanvasMode = CanvasMode.OFF,
     val controlsPosition: ControlsPosition = ControlsPosition.TOP,
     val showVolumeSlider: Boolean = false,
     /**
@@ -579,6 +591,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         duetLinePadding = prefs.getBoolean(KEY_DUET_PADDING, true),
         backgroundStyle = prefs.enum(KEY_BACKGROUND, BackgroundStyle.ANIMATED),
         backgroundBlur = prefs.getInt(KEY_BACKGROUND_BLUR, 24),
+        canvasMode = prefs.enum(KEY_CANVAS, CanvasMode.OFF),
         controlsPosition = prefs.enum(KEY_CONTROLS_POSITION, ControlsPosition.TOP),
         showVolumeSlider = prefs.getBoolean(KEY_VOLUME_SLIDER, false),
         useSpotifyExtras = prefs.getBoolean(KEY_SPOTIFY_EXTRAS, true),
@@ -716,6 +729,8 @@ class SettingsStore(context: Context) : ProviderCredentials {
     fun setBackgroundStyle(style: BackgroundStyle) = edit { putString(KEY_BACKGROUND, style.name) }
 
     fun setBackgroundBlur(px: Int) = edit { putInt(KEY_BACKGROUND_BLUR, px.coerceIn(0, 67)) }
+
+    fun setCanvasMode(mode: CanvasMode) = edit { putString(KEY_CANVAS, mode.name) }
 
     fun setControlsPosition(position: ControlsPosition) =
         edit { putString(KEY_CONTROLS_POSITION, position.name) }
@@ -1030,6 +1045,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_DUET_PADDING = "duet_padding"
         const val KEY_BACKGROUND = "background_style"
         const val KEY_BACKGROUND_BLUR = "background_blur"
+        const val KEY_CANVAS = "canvas_mode"
         const val KEY_CONTROLS_POSITION = "controls_position"
         const val KEY_VOLUME_SLIDER = "volume_slider"
         const val KEY_SPOTIFY_EXTRAS = "spotify_extras"

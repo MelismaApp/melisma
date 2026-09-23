@@ -63,8 +63,8 @@ per *script*, so a song that switches language mid-line is romanized throughout 
 🪟 **Popup lyrics** in a floating window over other apps, plus **Cinema** view with the album art
 beside the words, and a **compact**, **minimal** and **simple** mode.
 
-🎨 **Living background** drawn from the album art, drifting on long non-repeating periods and paced
-by the song's tempo.
+🎨 **Living background** drawn from the album art — Spicy Lyrics' own renderer, ported — paced by
+the song's tempo. Or Spotify's **Canvas** video, full or blurred, on tracks that have one.
 
 📋 **Copy a line** by holding it, or pick out several and copy them together.
 
@@ -92,8 +92,9 @@ A port of Spicy Lyrics' visual language, down to the curve constants:
 - Sung lines fade out rather than snapping back, so a breath between lines reads as one.
 - Scrolling is spring-driven and hands control back to you the moment you drag.
 - Songwriters and the lyrics source close the song, inside the scroll rather than in the chrome.
-- Backgrounds: **Living** (the drifting colour field), **Auto**, **Cover art** with a blur slider,
-  **Artist**, **Colour**, **Black**.
+- Backgrounds: **Living**, **Living (classic)** (the older drifting colour field), **Auto**,
+  **Cover art** with a blur slider, **Artist**, **Colour**, **Black** — and **Spotify Canvas** over
+  any of them, which falls back to your chosen style on tracks without a video.
 
 </details>
 

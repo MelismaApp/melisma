@@ -53,6 +53,14 @@ https://github.com/morganherlocker/cubic-spline · MIT
 construction and the Hermite-form evaluation — so the curves lifted from Spicy Lyrics
 bend identically.
 
+## Kawarp — Better Lyrics
+
+https://github.com/better-lyrics/kawarp · MIT
+
+`ui/background/Kawarp.kt` ports the renderer Spicy Lyrics uses for its animated background: the
+eight-pass Kawase blur, the two-octave simplex-noise domain warp and the output shader's vignette
+and saturation are its work, run with the options Spicy Lyrics gives it.
+
 ## Beautiful Lyrics — surfbryce
 
 https://github.com/surfbryce/beautiful-lyrics
@@ -87,6 +95,14 @@ https://github.com/atilika/kuromoji · Apache-2.0
 
 Japanese morphological analysis. It is the only reason kanji get the right reading, and
 the IPADIC dictionary it ships is the largest single thing in the APK.
+
+## phrase-pinyin-data — mozillazg
+
+https://github.com/mozillazg/phrase-pinyin-data · MIT
+
+The source of `pinyin/words.txt`, the table that reads Chinese by the word rather than the
+character. Only its own files are used — `pinyin.txt`, `overwrite.txt`, `di.txt` and the two 汉典
+files — and not `large_pinyin.txt`, which folds in CC-CEDICT. See `docs/ROMANIZATION.md`.
 
 ## ML Kit Translation — Google
 
@@ -135,3 +151,28 @@ deliberately not derived from Spicy Lyrics' mark: the AGPL covers that project's
 logo, and a port that credits its original should not be wearing its badge. Earlier builds, under
 the name Better Lyrics, used an icon adapted from Spicy Lyrics' with Android's robot added; both
 are gone as of v2.1.0.
+
+## MIT licence texts
+
+The MIT licence asks for its notice to travel with the code. It is the same text for each; only the
+copyright line differs.
+
+- spr — Copyright (c) 2023 Fractality
+- cubic-spline — Copyright (c) 2014 Morgan Herlocker
+- Kawarp — Copyright (c) 2026 Better Lyrics
+- phrase-pinyin-data — Copyright (c) 2017 mozillazg
+
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software
+> and associated documentation files (the "Software"), to deal in the Software without
+> restriction, including without limitation the rights to use, copy, modify, merge, publish,
+> distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
+> Software is furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or
+> substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+> BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+> NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+> DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+> OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

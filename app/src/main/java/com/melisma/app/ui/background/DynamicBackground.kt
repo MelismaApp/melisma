@@ -24,26 +24,25 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.layout.onSizeChanged
 import com.melisma.app.settings.BackgroundStyle
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** ~30 fps. See the comment where it is used. */
 private const val BACKGROUND_FRAME_INTERVAL_NANOS = 33_000_000L
 
 /**
- * The living background.
+ * The background behind the lyrics, in whichever style is chosen.
  *
- * Spicy Lyrics runs the cover art through a WebGL domain-warp shader; the same result
- * comes out of something much cheaper here. The cover is reduced to a handful of
- * pixels — at which point it *is* a colour field, not a picture — and three copies of
- * that field are drifted, rotated and scaled past each other on very long periods. The
- * bilinear upscale supplies the blur for free, and saturation is pushed hard while
- * brightness is pulled down, matching the `saturate(2.5) brightness(0.65)` the
- * stylesheet applies.
- *
- * Doing it this way needs no shader support, so it looks identical on every device the
- * app runs on.
+ * Living is [Kawarp], the renderer Spicy Lyrics uses. Living (classic) is what Living was before
+ * it: the cover reduced to a handful of pixels and three copies of that colour field drifted,
+ * rotated and scaled past each other. It is kept because it is lighter, but it does not look like
+ * Spicy Lyrics — the copies are over-scaled, which pushes the cover's edges off-screen and leaves
+ * its middle to average into one colour.
  */
 @Composable
 fun DynamicBackground(
@@ -86,10 +85,9 @@ fun DynamicBackground(
         // than render an empty background.
         style == BackgroundStyle.ARTIST_HEADER && artistImage == null -> BackgroundStyle.COVER_ART
 
-        // The two styles that move are the two worth holding still.
-        preferStill &&
-            (style == BackgroundStyle.AUTO || style == BackgroundStyle.ANIMATED) ->
-            BackgroundStyle.COVER_ART
+        // The classic field has no still form, so it swaps for the cover. Living does not need
+        // to: it renders one frame and stops, which costs the same and keeps the look.
+        preferStill && style == BackgroundStyle.LIVING_CLASSIC -> BackgroundStyle.COVER_ART
 
         style == BackgroundStyle.AUTO -> BackgroundStyle.ANIMATED
 
@@ -131,8 +129,19 @@ fun DynamicBackground(
         return
     }
 
+    if (resolved == BackgroundStyle.ANIMATED) {
+        KawarpBackground(
+            artwork = artwork,
+            colors = colors,
+            moving = playing && !preferStill,
+            tempoBpm = tempoBpm,
+            modifier = modifier,
+        )
+        return
+    }
+
     val field = remember(artwork) { artwork?.toColourField() }
-    val animated = resolved == BackgroundStyle.ANIMATED
+    val animated = resolved == BackgroundStyle.LIVING_CLASSIC
 
     // Cross-fade the new cover in, matching the 850 ms cover transition.
     //
@@ -347,6 +356,116 @@ private fun drawField(
 }
 
 /**
+ * Living: the [Kawarp] port, rendered small off the main thread and scaled up.
+ *
+ * [moving] false renders what is needed — the current frame, or the rest of a crossfade — and
+ * stops, so a paused song or battery saver costs nothing per frame. The clock is playback time,
+ * scaled by tempo the way Spicy Lyrics scales it, and survives a pause.
+ */
+@Composable
+private fun KawarpBackground(
+    artwork: Bitmap?,
+    colors: ArtworkColors,
+    moving: Boolean,
+    tempoBpm: Float?,
+    modifier: Modifier,
+) {
+    var size by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    var current by remember { mutableStateOf<FloatArray?>(null) }
+    var previous by remember { mutableStateOf<FloatArray?>(null) }
+    var transitionStartMs by remember { mutableStateOf(0L) }
+
+    LaunchedEffect(artwork) {
+        val source = artwork ?: return@LaunchedEffect
+        val blurred = withContext(Dispatchers.Default) { runCatching { source.kawarpField() }.getOrNull() }
+            ?: return@LaunchedEffect
+        // The first cover appears at once; later ones cross-fade in, as in Kawarp.
+        previous = current
+        current = blurred
+        transitionStartMs = android.os.SystemClock.uptimeMillis()
+    }
+
+    val frame = remember(size) {
+        if (size.width <= 0 || size.height <= 0) {
+            null
+        } else if (size.width >= size.height) {
+            val h = (Kawarp.OUTPUT_LONG_SIDE * size.height.toFloat() / size.width).roundToInt()
+            Bitmap.createBitmap(Kawarp.OUTPUT_LONG_SIDE, h.coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+        } else {
+            val w = (Kawarp.OUTPUT_LONG_SIDE * size.width.toFloat() / size.height).roundToInt()
+            Bitmap.createBitmap(w.coerceAtLeast(1), Kawarp.OUTPUT_LONG_SIDE, Bitmap.Config.ARGB_8888)
+        }
+    }
+    var frameVersion by remember { mutableStateOf(0) }
+    var clock by remember { mutableStateOf(0f) }
+    // Spicy Lyrics' speed: tempo over 120, clamped. Without a tempo it runs at 1.
+    val speed = tempoBpm?.let { (it / 120f).coerceIn(0.1f, 3f) } ?: 1f
+
+    LaunchedEffect(frame, current, moving, speed) {
+        val bitmap = frame ?: return@LaunchedEffect
+        val cover = current ?: return@LaunchedEffect
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        var lastFrame = 0L
+        while (true) {
+            val now = withFrameNanos { it }
+            if (lastFrame != 0L && now - lastFrame < BACKGROUND_FRAME_INTERVAL_NANOS) continue
+            if (moving && lastFrame != 0L) clock += (now - lastFrame) / 1_000_000_000f * speed
+            lastFrame = now
+
+            val outgoing = previous
+            val progress = (android.os.SystemClock.uptimeMillis() - transitionStartMs).toFloat() /
+                Kawarp.TRANSITION_MS
+            val blending = outgoing != null && progress < 1f
+            val time = clock
+            withContext(Dispatchers.Default) {
+                if (blending) {
+                    Kawarp.render(pixels, bitmap.width, bitmap.height, outgoing!!, cover, Kawarp.ease(progress), time)
+                } else {
+                    Kawarp.render(pixels, bitmap.width, bitmap.height, cover, null, 0f, time)
+                }
+            }
+            bitmap.setPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+            frameVersion++
+
+            if (!blending) previous = null
+            if (!moving && !blending) break
+        }
+    }
+
+    val paint = remember { Paint().apply { isFilterBitmap = true } }
+    val bounds = remember { android.graphics.Rect() }
+    Canvas(modifier.fillMaxSize().onSizeChanged { size = it }) {
+        drawRect(colors.base)
+        val bitmap = frame
+        // Read so a new frame redraws this layer without recomposing anything.
+        if (bitmap != null && frameVersion > 0) {
+            bounds.set(0, 0, this.size.width.toInt(), this.size.height.toInt())
+            drawIntoCanvas { it.nativeCanvas.drawBitmap(bitmap, null, bounds, paint) }
+        }
+        drawFloorShade()
+    }
+}
+
+/** The cover as [Kawarp] wants it: blurred once, at 128×128. */
+private fun Bitmap.kawarpField(): FloatArray {
+    // Hardware bitmaps cannot be read back, and a large cover is only reduced to 128 anyway.
+    val longest = maxOf(width, height)
+    val readable = when {
+        longest > 512 -> Bitmap.createScaledBitmap(
+            if (config == Bitmap.Config.HARDWARE) copy(Bitmap.Config.ARGB_8888, false) else this,
+            (width * 512f / longest).roundToInt().coerceAtLeast(1),
+            (height * 512f / longest).roundToInt().coerceAtLeast(1),
+            true,
+        )
+        config == Bitmap.Config.HARDWARE -> copy(Bitmap.Config.ARGB_8888, false)
+        else -> this
+    }
+    val pixels = IntArray(readable.width * readable.height)
+    readable.getPixels(pixels, 0, readable.width, 0, 0, readable.width, readable.height)
+    return Kawarp.blurred(pixels, readable.width, readable.height)
+}
+
+/**
  * The dark floor that keeps the now-playing bar legible over any artwork, plus a lighter
  * wash at the top for the controls.
  *
@@ -364,7 +483,7 @@ private val CEILING_SHADE = Brush.verticalGradient(
     0.28f to Color.Transparent,
 )
 
-private fun DrawScope.drawFloorShade() {
+internal fun DrawScope.drawFloorShade() {
     drawRect(brush = CEILING_SHADE)
     drawRect(brush = FLOOR_SHADE)
 }
