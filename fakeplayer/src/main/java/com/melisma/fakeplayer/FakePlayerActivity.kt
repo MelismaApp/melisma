@@ -36,6 +36,8 @@ class FakePlayerActivity : Activity() {
         val artist: String,
         val album: String,
         val durationMs: Long,
+        /** Published as `spotify:track:…`, as Spotify does, for what only a Spotify track gets. */
+        val spotifyId: String? = null,
     )
 
     private val tracks = listOf(
@@ -43,6 +45,8 @@ class FakePlayerActivity : Activity() {
         Track("Lemon", "米津玄師", "Lemon", 256_000),
         Track("Ditto", "NewJeans", "OMG", 185_000),
         Track("Nonexistent Song Title Xyzzy", "No Such Artist", "Nowhere", 123_000),
+        // Has a Spotify Canvas.
+        Track("Anti-Hero", "Taylor Swift", "Midnights", 200_690, spotifyId = "0V3wPSX9ygBnCm8psDIegu"),
     )
 
     private lateinit var session: MediaSession
@@ -182,7 +186,10 @@ class FakePlayerActivity : Activity() {
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, track.artist)
                 .putString(MediaMetadata.METADATA_KEY_ALBUM, track.album)
                 .putLong(MediaMetadata.METADATA_KEY_DURATION, track.durationMs)
-                .putString(MediaMetadata.METADATA_KEY_MEDIA_ID, "fake:${track.title}")
+                .putString(
+                    MediaMetadata.METADATA_KEY_MEDIA_ID,
+                    track.spotifyId?.let { "spotify:track:$it" } ?: "fake:${track.title}",
+                )
                 .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, artworkFor(trackIndex))
                 .build(),
         )

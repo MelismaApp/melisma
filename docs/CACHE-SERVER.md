@@ -135,6 +135,7 @@ lookup it needs no key from the local network. Answer:
   "tempo": 87.5,
   "isrc": "JPU901800227",
   "canvasUrl": "https://canvaz.scdn.co/upload/artist/…/video/….cnvs.mp4",
+  "canvasVariants": [{ "width": 256, "height": 144, "url": "https://canvaz.scdn.co/…" }],
   "palette": { "bgColor": "1f1f24", "textColor1": "ffffff" },
   "analysis": { "beats": [], "bars": [], "sections": [] },
   "metadata": { "composerName": "…", "albumName": "…" }
@@ -151,6 +152,8 @@ lookup it needs no key from the local network. Answer:
   https on `*.scdn.co` and end in `.mp4`, or the app ignores it, and it is used only when the query
   carried a `spotifyId`, for that Spotify track. The app downloads the video from Spotify's CDN
   with no credential; one that no longer exists leaves the ordinary background showing.
+- `canvasVariants` are Spotify's smaller encodings of the same Canvas, smallest first. The app does
+  not read them yet.
 - `palette`, `analysis` and `metadata` are held whole and served whole. The app reads none of
   them yet; they are collected because the tokens are the scarce thing, not the storage, and
   `audio-attributes` — which carries the tempo, key, loudness and the beat, bar and section grids

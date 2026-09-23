@@ -45,7 +45,8 @@ The interesting half of this app needs a second app playing music, so two afford
 
 **`:fakeplayer`** is a separate APK that publishes a real media session with a real advancing
 playhead, so detection, extrapolation and the transport controls can be exercised on an emulator with
-nothing installed.
+nothing installed. Its *Anti-Hero* is published with a Spotify track id, as Spotify would, so
+Canvas and the other Spotify-only paths can be tested too.
 
 ```bash
 ./gradlew :fakeplayer:installDebug
