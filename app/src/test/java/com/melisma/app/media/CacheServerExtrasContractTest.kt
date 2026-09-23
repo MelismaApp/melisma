@@ -119,6 +119,24 @@ class CacheServerExtrasContractTest {
     }
 
     @Test
+    fun `a Canvas address is read, and is enough on its own`() {
+        // Not yet in a captured response: the server side is being built against this.
+        val url = "https://canvaz.scdn.co/upload/artist/06HL/video/1650.cnvs.mp4"
+        assertEquals(url, parseCachedExtras("""{"canvasUrl":"$url"}""")?.canvasUrl)
+        assertEquals(url, parseCachedExtras("""{"data":{"tempo":120.0,"canvasUrl":"$url"}}""")?.canvasUrl)
+    }
+
+    @Test
+    fun `a Canvas address that is not Spotify's video is dropped`() {
+        // The phone downloads whatever this names, so the server cannot point it anywhere else.
+        assertNull(parseCachedExtras("""{"canvasUrl":"https://example.com/video.mp4"}"""))
+        assertNull(parseCachedExtras("""{"canvasUrl":"http://canvaz.scdn.co/x.mp4"}"""))
+        val withTempo = parseCachedExtras("""{"tempo":90,"canvasUrl":"https://canvaz.scdn.co/x.jpg"}""")
+        assertEquals(90f, withTempo?.tempo)
+        assertNull(withTempo?.canvasUrl)
+    }
+
+    @Test
     fun `a nonsense tempo is refused rather than passed on`() {
         // It paces the animated background; zero or negative would stop or reverse it.
         assertNull(parseCachedExtras("""{"tempo":0}"""))

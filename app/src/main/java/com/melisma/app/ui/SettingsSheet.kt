@@ -65,6 +65,7 @@ import com.melisma.app.ui.components.AppIcons
 import com.melisma.app.ui.components.ReorderableColumn
 import com.melisma.app.settings.TranslationSource
 import com.melisma.app.settings.CacheServerMode
+import com.melisma.app.settings.ExtrasServerMode
 import com.melisma.app.lyrics.LyricsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -622,11 +623,13 @@ fun SettingsSheet(
                     accent = accent,
                     onSelect = { store.setCanvasMode(it) },
                 )
-                if (settings.canvasMode != CanvasMode.OFF && !container.spotifyExtrasAvailable) {
+                if (settings.canvasMode != CanvasMode.OFF && !container.spotifyExtrasAvailable &&
+                    !settings.cacheServerExtrasActive
+                ) {
                     Hint("Canvas needs the same Spotify token as Spotify lyrics — without it, the style above shows.")
                 }
                 Help(
-                    "The looping video Spotify shows behind some tracks, in place of the style above. Tracks without one, other players, battery saver and the floating window all show the style above instead. Needs a Spotify token, and is skipped when Data Saver is on over mobile data. Blurred needs Android 12 or later.\n\nIn the car only Blurred plays: a full video is something to watch, and a driver should not be given one.",
+                    "The looping video Spotify shows behind some tracks, in place of the style above. Tracks without one, other players, battery saver and the floating window all show the style above instead. Needs a Spotify token, or a cache server that has the track's Canvas, and is skipped when Data Saver is on over mobile data. Blurred needs Android 12 or later.\n\nIn the car only Blurred plays: a full video is something to watch, and a driver should not be given one.",
                 )
             }
 
@@ -1637,7 +1640,7 @@ fun SettingsSheet(
                     )
 
                     ToggleRow(
-                        title = "Ask the server for artwork and tempo",
+                        title = "Ask the server for artwork, tempo and Canvas",
                         subtitle = "Not just the words",
                         checked = settings.cacheServerExtras,
                         accent = accent,
@@ -1645,18 +1648,46 @@ fun SettingsSheet(
                     )
                     Help(
                         "The reason to want this: a Spotify token lasts an hour and an Apple one " +
-                            "a few months, but a cover URL, an ISRC and a tempo, once known, are " +
-                            "true forever. Your server collects them for itself every time it " +
-                            "looks a track up, so the tokens live on that one machine rather " +
-                            "than on every phone — and this asks for what it has.\n\nNothing " +
-                            "is sent from here but the track's title and artist. The phone has " +
-                            "nothing to contribute and no credential to hand over; asking is " +
-                            "all it does. Tempo comes from Spotify alone, so a server that " +
-                            "holds it is the only way to have it without a live token of your " +
-                            "own.\n\nUsed only when no token on this phone can answer — a live " +
-                            "token is about the track playing now, where the server is a record " +
-                            "of one that matched before.",
+                            "a few months, but a cover URL, an ISRC, a tempo and a Canvas " +
+                            "address, once known, last far longer. Your server collects them " +
+                            "for itself every time it looks a track up, so the tokens live on " +
+                            "that one machine rather than on every phone — and this asks for " +
+                            "what it has.\n\nNothing is sent from here but the track's title " +
+                            "and artist. The phone has nothing to contribute and no credential " +
+                            "to hand over; asking is all it does. Tempo comes from Spotify " +
+                            "alone, so a server that holds it is the only way to have it " +
+                            "without a live token of your own. A Canvas video is still " +
+                            "downloaded from Spotify's own servers; only its address comes " +
+                            "from yours.",
                     )
+                    AnimatedVisibility(visible = settings.cacheServerExtras) {
+                        Column(Modifier.fillMaxWidth()) {
+                            ChipGroup(
+                                label = "Where the extras come from",
+                                options = ExtrasServerMode.entries.map { it to it.label },
+                                selected = settings.cacheServerExtrasMode,
+                                accent = accent,
+                                onSelect = { store.setCacheServerExtrasMode(it) },
+                            )
+                            Hint(
+                                when (settings.cacheServerExtrasMode) {
+                                    ExtrasServerMode.FALLBACK ->
+                                        "Asked when no token on this phone can answer — a live " +
+                                            "token is about the track playing now, where the " +
+                                            "server is a record of one that matched before."
+                                    ExtrasServerMode.ONLY ->
+                                        "Artwork, tempo and Canvas come from the server alone, " +
+                                            "whatever tokens this phone holds. A track without " +
+                                            "them means the server does not have them."
+                                },
+                            )
+                            Help(
+                                "Separate from How to use it above, which covers the lyrics " +
+                                    "only. What the phone already remembers about a track is " +
+                                    "still used, as its cached lyrics are.",
+                            )
+                        }
+                    }
 
                     if (settings.cacheServerUrl.isNullOrBlank()) {
                         Hint("No URL set, so the cache server is not being asked.")

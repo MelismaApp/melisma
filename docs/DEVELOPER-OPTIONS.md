@@ -12,8 +12,9 @@ Turn it on: **Settings → Developer → Developer options**.
 | [Spotify web access token](#spotify-web-access-token) | Brings back Spotify's lyrics, artwork and tempo for about an hour |
 | [Renew that token automatically](#renew-that-token-automatically) | Removes the hourly errand |
 | [Cache server URL / key](#cache-server) | Points the app at a lyrics server of your own |
-| [How to use it](#how-to-use-it) | Alongside the other sources, or instead of them |
-| [Ask the server for artwork and tempo](#ask-the-server-for-artwork-and-tempo) | Reads the extras it has collected |
+| [How to use it](#how-to-use-it) | Lyrics alongside the other sources, or instead of them |
+| [Ask the server for artwork, tempo and Canvas](#ask-the-server-for-artwork-tempo-and-canvas) | Reads the extras it has collected |
+| [Where the extras come from](#where-the-extras-come-from) | After the phone's own tokens, or instead of them |
 | [Test the sources](#test-the-sources) | What every source said about the track playing now |
 | [Test the server](#test-the-server) | Which of *your server's* own sources and tokens work |
 
@@ -73,17 +74,28 @@ testing the server itself, where "nothing else could have answered" is the point
 Your own imported files win in either mode, and answers are still cached on the phone for 30 days, so
 use **Settings → This track → Look this track up again** to force a fresh request while iterating.
 
-### Ask the server for artwork and tempo
+### Ask the server for artwork, tempo and Canvas
 
-Off by default. On, the app also asks the server for a cover URL, an artist image, an ISRC and a
-tempo, and only when no token on the phone can answer.
+Off by default. On, the app also asks the server for a cover URL, an artist image, an ISRC, a tempo
+and a Canvas video address.
 
 The reason it exists: a Spotify token lasts an hour and an Apple one a few months, but a cover URL,
 an ISRC and a tempo, once known, are true forever. The server collects them for itself every time it
-looks a track up, so the tokens live on that one machine rather than on every phone.
+looks a track up, so the tokens live on that one machine rather than on every phone. A Canvas video
+is still downloaded from Spotify's CDN; only its address comes from the server.
 
 Read-only. The phone sends a title and an artist and has nothing to contribute; there is no write
 endpoint to secure.
+
+### Where the extras come from
+
+| Mode | Behaviour |
+|---|---|
+| **After the phone's own** | The server is asked when no token on the phone can answer. |
+| **Only the cache server** | Nothing else is asked for artwork, tempo or Canvas. A track without them means the server does not have them. |
+
+Separate from *How to use it*, which covers the lyrics only, for now; the two are to become one
+setting. What the phone already remembers about a track is still used in either mode.
 
 ## Test the sources
 

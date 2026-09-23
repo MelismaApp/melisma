@@ -108,10 +108,10 @@ a misconfigured server, or something in front of it, answering `200` with an err
 lyric line reading "502 Bad Gateway" is worse than finding nothing. Plain text with no
 timestamps *is* accepted, because unsynced lyrics are a real answer.
 
-## Artwork and tempo
+## Artwork, tempo and Canvas
 
-Optional, and behind its own switch — **Developer → Ask the server for artwork and tempo**. Off,
-none of this is called.
+Optional, and behind its own switch — **Developer → Ask the server for artwork, tempo and Canvas**.
+Off, none of this is called.
 
 Read-only. The server collects these for itself, every time it looks a track up, so the tokens
 live on that one machine rather than on every phone. There is nothing for the app to contribute
@@ -134,6 +134,7 @@ lookup it needs no key from the local network. Answer:
   "artistImageUrl": "https://…/artist.jpg",
   "tempo": 87.5,
   "isrc": "JPU901800227",
+  "canvasUrl": "https://canvaz.scdn.co/upload/artist/…/video/….cnvs.mp4",
   "palette": { "bgColor": "1f1f24", "textColor1": "ffffff" },
   "analysis": { "beats": [], "bars": [], "sections": [] },
   "metadata": { "composerName": "…", "albumName": "…" }
@@ -146,13 +147,20 @@ lookup it needs no key from the local network. Answer:
 - The URLs may point anywhere — including back at the server, which is how it serves a copy it
   holds rather than a link to somebody else's.
 - `tempo` is beats per minute. It paces the animated background.
+- `canvasUrl` is the track's Spotify Canvas video: the address only, never the file. It must be
+  https on `*.scdn.co` and end in `.mp4`, or the app ignores it, and it is used only when the query
+  carried a `spotifyId`, for that Spotify track. The app downloads the video from Spotify's CDN
+  with no credential; one that no longer exists leaves the ordinary background showing.
 - `palette`, `analysis` and `metadata` are held whole and served whole. The app reads none of
   them yet; they are collected because the tokens are the scarce thing, not the storage, and
   `audio-attributes` — which carries the tempo, key, loudness and the beat, bar and section grids
   — was withdrawn from Spotify's public API in November 2024, so a cached copy is the only
   durable one there is.
-- Only asked when no token on the phone can answer. A live token is about the track playing now,
-  where the server is a record of one that matched before.
+- By default only asked when no token on the phone can answer. A live token is about the track
+  playing now, where the server is a record of one that matched before.
+- **Developer → Where the extras come from → Only the cache server** asks nothing else for
+  artwork, tempo and Canvas, the way *Only the cache server* does for the lyrics. The two are
+  separate settings for now; the lyrics one does not affect the extras.
 
 ## Asking the server about itself
 

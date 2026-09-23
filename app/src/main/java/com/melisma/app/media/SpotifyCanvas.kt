@@ -39,6 +39,9 @@ class SpotifyCanvas(
 
     val isAvailable: Boolean get() = available()
 
+    /** Whether Spotify has said, video or none, rather than not having been asked or not answering. */
+    fun hasAnswered(trackId: String): Boolean = synchronized(answers) { answers.containsKey(trackId) }
+
     /** The track's Canvas video URL, or null when it has none or it could not be asked. */
     suspend fun videoFor(trackId: String): String? = withContext(Dispatchers.IO) {
         if (!available()) return@withContext null

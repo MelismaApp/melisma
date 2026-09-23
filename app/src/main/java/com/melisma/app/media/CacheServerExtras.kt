@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import com.melisma.app.lyrics.provider.Http
 import com.melisma.app.lyrics.provider.ProviderCredentials
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -34,8 +36,11 @@ internal fun parseCachedExtras(body: String): CachedExtras? = runCatching {
         artistImageUrl = data.extrasString("artistImageUrl") ?: data.extrasString("artistImage"),
         tempo = data["tempo"]?.jsonPrimitive?.floatOrNull?.takeIf { it > 0f },
         isrc = data.extrasString("isrc"),
+        // Checked here as well as before download, so a URL that is not a Canvas never gets in.
+        canvasUrl = data.extrasString("canvasUrl")?.takeIf(SpotifyCanvas::isCanvasVideo),
     ).takeIf {
-        it.coverUrl != null || it.artistImageUrl != null || it.tempo != null || it.isrc != null
+        it.coverUrl != null || it.artistImageUrl != null || it.tempo != null || it.isrc != null ||
+            it.canvasUrl != null
     }
 }.getOrNull()
 
@@ -87,10 +92,12 @@ data class CachedExtras(
      * between similar titles.
      */
     val isrc: String? = null,
+    /** The track's Spotify Canvas video, on Spotify's CDN. */
+    val canvasUrl: String? = null,
 )
 
 /**
- * Artwork and tempo through your own cache server. Asking only.
+ * Artwork, tempo and Canvas through your own cache server. Asking only.
  *
  * The server holds these because it outlives the tokens: a Spotify access token is good for
  * about an hour and an Apple developer token for a few months, but a cover art URL, an ISRC and
@@ -104,6 +111,9 @@ class CacheServerExtras(private val credentials: ProviderCredentials) {
 
     private val cache = LinkedHashMap<String, CachedExtras?>()
 
+    /** One request at a time: the extras and Canvas both ask about the same track at once. */
+    private val fetching = Mutex()
+
     val isAvailable: Boolean get() = base() != null
 
     private fun base(): String? =
@@ -113,15 +123,17 @@ class CacheServerExtras(private val credentials: ProviderCredentials) {
         val base = base() ?: return@withContext null
         if (track.isEmpty) return@withContext null
         val key = track.cacheKey
-        if (cache.containsKey(key)) return@withContext cache[key]
+        fetching.withLock {
+            if (cache.containsKey(key)) return@withContext cache[key]
 
-        val extras = runCatching {
-            Http.get("$base/v1/extras?${query(track)}", headers()) { body -> parse(body) }
-        }.getOrNull()
+            val extras = runCatching {
+                Http.get("$base/v1/extras?${query(track)}", headers()) { body -> parse(body) }
+            }.getOrNull()
 
-        if (cache.size >= CACHE_SIZE) cache.keys.firstOrNull()?.let(cache::remove)
-        cache[key] = extras
-        extras
+            if (cache.size >= CACHE_SIZE) cache.keys.firstOrNull()?.let(cache::remove)
+            cache[key] = extras
+            extras
+        }
     }
 
     /**

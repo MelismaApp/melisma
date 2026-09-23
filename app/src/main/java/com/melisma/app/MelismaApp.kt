@@ -346,7 +346,8 @@ class AppContainer(context: Context) {
                     spotifyToken = settings.spotifyWebToken.orEmpty() + settings.spDcCookie.orEmpty(),
                     appleToken = settings.appleDeveloperToken.orEmpty(),
                     server = if (settings.cacheServerExtrasActive) {
-                        settings.cacheServerUrl.orEmpty() + settings.cacheServerKey.orEmpty()
+                        settings.cacheServerUrl.orEmpty() + settings.cacheServerKey.orEmpty() +
+                            settings.cacheServerExtrasMode
                     } else {
                         ""
                     },
@@ -368,6 +369,9 @@ class AppContainer(context: Context) {
                     wanted = settings.canvasMode != CanvasMode.OFF && !saving.stillBackground,
                     spotifyToken = settings.spotifyWebToken.orEmpty() + settings.spDcCookie.orEmpty() +
                         settings.spotifyBrowserTokenActive,
+                    server = settings.cacheServerExtrasActive,
+                    serverOnly = settings.cacheServerExtrasOnly,
+                    serverAddress = settings.cacheServerUrl.orEmpty() + settings.cacheServerKey.orEmpty(),
                 )
             }
                 .distinctUntilChanged()
@@ -375,14 +379,28 @@ class AppContainer(context: Context) {
         }
     }
 
-    private data class CanvasInputs(val trackId: String?, val wanted: Boolean, val spotifyToken: String)
+    private data class CanvasInputs(
+        val trackId: String?,
+        val wanted: Boolean,
+        val spotifyToken: String,
+        val server: Boolean,
+        val serverOnly: Boolean,
+        val serverAddress: String,
+    )
 
     private suspend fun loadCanvas(inputs: CanvasInputs) {
         _canvasVideo.value = null
         val trackId = inputs.trackId ?: return
-        if (!inputs.wanted || !spotifyCanvas.isAvailable || dataSaverOn()) return
-        val url = spotifyCanvas.videoFor(trackId) ?: return
-        val file = canvasCache.fileFor(url) ?: return
+        if (!inputs.wanted || dataSaverOn()) return
+
+        // The phone's own token first, as with the artwork: it is about the track playing now. The
+        // server when the phone could not ask Spotify, or when it is to be the only source.
+        var url = if (inputs.serverOnly) null else spotifyCanvas.videoFor(trackId)
+        if (url == null && inputs.server && (inputs.serverOnly || !spotifyCanvas.hasAnswered(trackId))) {
+            val track = media.snapshot.value.track?.takeIf { it.spotifyTrackId == trackId } ?: return
+            url = runCatching { cacheServerExtras.fetch(track) }.getOrNull()?.canvasUrl
+        }
+        val file = url?.let { canvasCache.fileFor(it) } ?: return
         _canvasVideo.value = CanvasVideo(trackId, file)
     }
 
@@ -430,6 +448,9 @@ class AppContainer(context: Context) {
         val track = inputs.track?.takeIf { !it.isEmpty } ?: return
         val trackId = track.spotifyTrackId
         val settingsNow = settings.current
+        // Testing the server's extras: nothing the phone can reach itself is asked. What is already
+        // remembered on the phone still counts, as the phone's lyrics cache does for the lyrics.
+        val serverOnly = settingsNow.cacheServerExtrasOnly
 
         // What was learned about this track before anything expired. The tempo goes up immediately:
         // it needs no download, and it is the one field here that a token may never be able to
@@ -458,7 +479,7 @@ class AppContainer(context: Context) {
             }
         }
 
-        if (trackId != null) {
+        if (trackId != null && !serverOnly) {
             // Spotify's endpoints report an outage by throwing rather than returning null, so
             // a 503 here would otherwise take down the whole collector.
             val details = runCatching { spotifyExtras.extrasFor(trackId) }.getOrNull()
@@ -500,7 +521,7 @@ class AppContainer(context: Context) {
 
         // Nothing from Spotify — no token, no match, or an expired token. Apple next: it can
         // only match on name, but its token lasts months rather than an hour.
-        if (appleArtwork.isAvailable) {
+        if (appleArtwork.isAvailable && !serverOnly) {
             val images = runCatching { appleArtwork.imagesFor(track) }.getOrNull()
             if (images != null) {
                 // The developer token alone gets this, so it works without a subscription.
@@ -562,7 +583,7 @@ class AppContainer(context: Context) {
         // failure, not a nicety. It used to stand down whenever a token merely *existed*, so an
         // expired Apple token or a cache server holding nothing for this track left the screen with
         // the player's thumbnail and no way to improve on it.
-        searchForArtwork(track, inputs)
+        if (!serverOnly) searchForArtwork(track, inputs)
     }
 
     /**

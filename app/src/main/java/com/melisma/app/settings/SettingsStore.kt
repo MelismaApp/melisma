@@ -126,6 +126,18 @@ enum class CacheServerMode(val label: String) {
     ONLY("Only the cache server"),
 }
 
+/**
+ * Where artwork, tempo and Canvas come from once the cache server is asked for them.
+ *
+ * Separate from [CacheServerMode], which covers the lyrics alone, for now; the two are to become
+ * one setting. [ONLY] is for testing the server's extras the way [CacheServerMode.ONLY] tests its
+ * lyrics.
+ */
+enum class ExtrasServerMode(val label: String) {
+    FALLBACK("After the phone's own"),
+    ONLY("Only the cache server"),
+}
+
 /** Which half of the screen the album art and track info occupy in Cinema view. */
 enum class MediaPanelSide(val label: String) {
     /** Left in landscape, top in portrait. */
@@ -387,14 +399,15 @@ data class Settings(
     val artworkSource: ArtworkSource = ArtworkSource.PLAYER,
 
     /**
-     * Let the cache server hold the artwork and tempo as well as the words.
+     * Ask the cache server for artwork, tempo and Canvas as well as the words.
      *
-     * The reason to want this: a Spotify token lasts an hour and an Apple one a few months,
-     * but a cover URL and a tempo, once known, are true forever. Whenever a token does produce
-     * them the app hands them to the server, and from then on the server can answer for that
-     * track with no token at all.
+     * The reason to want this: a Spotify token lasts an hour and an Apple one a few months, but a
+     * cover URL and a tempo, once known, are true forever. The server collects them with its own
+     * tokens; the app only asks.
      */
     val cacheServerExtras: Boolean = false,
+
+    val cacheServerExtrasMode: ExtrasServerMode = ExtrasServerMode.FALLBACK,
 
     /**
      * Let a hidden WebView renew the Spotify token from the `sp_dc` cookie.
@@ -410,9 +423,13 @@ data class Settings(
     val cacheServerActive: Boolean
         get() = developerMode && !cacheServerUrl.isNullOrBlank()
 
-    /** True when that server should also hold the artwork and the tempo. */
+    /** True when that server should also be asked for artwork, tempo and Canvas. */
     val cacheServerExtrasActive: Boolean
         get() = cacheServerActive && cacheServerExtras
+
+    /** True when artwork, tempo and Canvas should come from that server and nowhere else. */
+    val cacheServerExtrasOnly: Boolean
+        get() = cacheServerExtrasActive && cacheServerExtrasMode == ExtrasServerMode.ONLY
 
     /** Only with the switch on, developer options on, and a cookie to use. */
     val spotifyBrowserTokenActive: Boolean
@@ -682,6 +699,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         spotifyWebToken = secrets.trimmed(KEY_SP_WEB_TOKEN),
         artworkSource = prefs.enum(KEY_ARTWORK_SOURCE, ArtworkSource.PLAYER),
         cacheServerExtras = prefs.getBoolean(KEY_CACHE_SERVER_EXTRAS, false),
+        cacheServerExtrasMode = prefs.enum(KEY_CACHE_SERVER_EXTRAS_MODE, ExtrasServerMode.FALLBACK),
     )
 
     /**
@@ -973,6 +991,10 @@ class SettingsStore(context: Context) : ProviderCredentials {
         putBoolean(KEY_CACHE_SERVER_EXTRAS, value)
     }
 
+    fun setCacheServerExtrasMode(mode: ExtrasServerMode) = edit {
+        putString(KEY_CACHE_SERVER_EXTRAS_MODE, mode.name)
+    }
+
     fun setArtworkSource(value: ArtworkSource) = edit {
         putString(KEY_ARTWORK_SOURCE, value.name)
     }
@@ -1140,6 +1162,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_SP_WEB_TOKEN = "sp_web_token"
         const val KEY_ARTWORK_SOURCE = "artwork_source"
         const val KEY_CACHE_SERVER_EXTRAS = "cache_server_extras"
+        const val KEY_CACHE_SERVER_EXTRAS_MODE = "cache_server_extras_mode"
         const val KEY_NETEASE_COOKIE = "netease_cookie"
         const val KEY_APPLE_DEV_TOKEN = "apple_dev_token"
         const val KEY_APPLE_USER_TOKEN = "apple_user_token"
