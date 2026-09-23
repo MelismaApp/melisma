@@ -247,7 +247,10 @@ fun PlayerScreen(
 
     // A floating window is small and often on screen for a long time; a still background there is
     // both calmer and cheaper. Battery saver asks for the same thing more directly.
-    val preferStill = (popup && settings.popupStillBackground) || saving.stillBackground
+    val popupStill = popup && settings.popupStillBackground
+    val preferStill = popupStill || saving.stillBackground
+    // The window always freezes Living rather than swapping it: at that size the two look alike.
+    val stillAsCover = saving.stillAsCover && !popupStill
     // Only the playing track's video, and never where the background is meant to hold still.
     val video = canvas?.takeIf {
         settings.canvasMode != CanvasMode.OFF && !preferStill && !demoMode &&
@@ -262,6 +265,7 @@ fun PlayerScreen(
             style = settings.backgroundStyle,
             blurRadius = settings.backgroundBlur,
             preferStill = preferStill,
+            stillAsCover = stillAsCover,
             // Paused music stops the drift, which stops the redraws. The demo is exempt: it
             // exists to show the renderer off, and there is no playhead behind it to stop. A video
             // covering it stops it too, since nothing of it is visible.

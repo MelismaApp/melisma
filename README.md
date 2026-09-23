@@ -64,7 +64,8 @@ per *script*, so a song that switches language mid-line is romanized throughout 
 beside the words, and a **compact**, **minimal** and **simple** mode.
 
 🎨 **Living background** drawn from the album art — Spicy Lyrics' own renderer, ported — paced by
-the song's tempo. Or Spotify's **Canvas** video, full or blurred, on tracks that have one.
+the song's tempo. Or Spotify's **Canvas** video, full or blurred, on tracks that have one (blurred
+only in the car).
 
 📋 **Copy a line** by holding it, or pick out several and copy them together.
 

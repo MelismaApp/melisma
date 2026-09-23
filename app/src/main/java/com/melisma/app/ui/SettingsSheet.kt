@@ -626,7 +626,7 @@ fun SettingsSheet(
                     Hint("Canvas needs the same Spotify token as Spotify lyrics — without it, the style above shows.")
                 }
                 Help(
-                    "The looping video Spotify shows behind some tracks, in place of the style above. Tracks without one, other players, battery saver and the floating window all show the style above instead. Needs a Spotify token, and is skipped when Data Saver is on over mobile data. Blurred needs Android 12 or later.",
+                    "The looping video Spotify shows behind some tracks, in place of the style above. Tracks without one, other players, battery saver and the floating window all show the style above instead. Needs a Spotify token, and is skipped when Data Saver is on over mobile data. Blurred needs Android 12 or later.\n\nIn the car only Blurred plays: a full video is something to watch, and a driver should not be given one.",
                 )
             }
 
@@ -1112,7 +1112,7 @@ fun SettingsSheet(
 
                 ToggleRow(
                     title = "Hold the background still in the floating window",
-                    subtitle = "The blurred cover instead of the drifting one",
+                    subtitle = "Living stops on a frame instead of moving",
                     checked = settings.popupStillBackground,
                     accent = accent,
                     onCheckedChange = { store.setPopupStillBackground(it) },
@@ -1200,10 +1200,25 @@ fun SettingsSheet(
                         )
                         Help(
                             "The biggest saving of the three by a distance, and the least missed: " +
-                                "the moving background is three full-screen layers redrawn thirty " +
-                                "times a second, and what replaces it is the same cover, blurred " +
-                                "and still.",
+                                "the moving background is redrawn thirty times a second, and a " +
+                                "still one is drawn once.",
                         )
+                        AnimatedVisibility(visible = settings.saverStillBackground) {
+                            Column(Modifier.fillMaxWidth()) {
+                                ToggleRow(
+                                    title = "Freeze Living on a frame",
+                                    subtitle = "Off shows the still cover art instead",
+                                    checked = settings.saverFreezeLiving,
+                                    accent = accent,
+                                    onCheckedChange = { store.setSaverFreezeLiving(it) },
+                                )
+                                Help(
+                                    "Either way it is drawn once, so this is only about the look. " +
+                                        "Living (classic) always shows the cover, having no " +
+                                        "still frame, and the floating window always freezes.",
+                                )
+                            }
+                        }
                         ToggleRow(
                             title = "Let the screen time out",
                             subtitle = "Even while the music is playing",

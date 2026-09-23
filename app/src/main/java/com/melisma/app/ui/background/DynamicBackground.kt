@@ -35,6 +35,28 @@ import kotlinx.coroutines.withContext
 /** ~30 fps. See the comment where it is used. */
 private const val BACKGROUND_FRAME_INTERVAL_NANOS = 33_000_000L
 
+/** The style actually drawn, after the fallbacks and the still-background rules. */
+internal fun resolveStyle(
+    style: BackgroundStyle,
+    preferStill: Boolean,
+    stillAsCover: Boolean,
+    hasArtistImage: Boolean,
+): BackgroundStyle = when {
+    // Without a Spotify cookie there is no artist image to show, so fall back rather than render
+    // an empty background.
+    style == BackgroundStyle.ARTIST_HEADER && !hasArtistImage -> BackgroundStyle.COVER_ART
+
+    // The classic field has no still form, so it swaps for the cover. Living renders one frame and
+    // stops, which costs the same, unless asked for the cover instead.
+    preferStill && style == BackgroundStyle.LIVING_CLASSIC -> BackgroundStyle.COVER_ART
+    preferStill && stillAsCover && (style == BackgroundStyle.ANIMATED || style == BackgroundStyle.AUTO) ->
+        BackgroundStyle.COVER_ART
+
+    style == BackgroundStyle.AUTO -> BackgroundStyle.ANIMATED
+
+    else -> style
+}
+
 /**
  * The background behind the lyrics, in whichever style is chosen.
  *
@@ -60,6 +82,8 @@ fun DynamicBackground(
      * battery saver is the system saying plainly that this is not the moment.
      */
     preferStill: Boolean = false,
+    /** When [preferStill], show Living as the still cover art rather than a frozen frame. */
+    stillAsCover: Boolean = false,
     /**
      * Whether the song is actually playing.
      *
@@ -80,19 +104,7 @@ fun DynamicBackground(
      */
     tempoBpm: Float? = null,
 ) {
-    val resolved = when {
-        // Without a Spotify cookie there is no artist image to show, so fall back rather
-        // than render an empty background.
-        style == BackgroundStyle.ARTIST_HEADER && artistImage == null -> BackgroundStyle.COVER_ART
-
-        // The classic field has no still form, so it swaps for the cover. Living does not need
-        // to: it renders one frame and stops, which costs the same and keeps the look.
-        preferStill && style == BackgroundStyle.LIVING_CLASSIC -> BackgroundStyle.COVER_ART
-
-        style == BackgroundStyle.AUTO -> BackgroundStyle.ANIMATED
-
-        else -> style
-    }
+    val resolved = resolveStyle(style, preferStill, stillAsCover, hasArtistImage = artistImage != null)
 
     // A background that never changes is worth caching: promoted to its own render node,
     // the GPU keeps the rasterised result and re-blits it instead of re-drawing the

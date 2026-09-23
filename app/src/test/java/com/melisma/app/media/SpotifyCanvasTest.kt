@@ -13,9 +13,9 @@ import org.junit.Test
 /**
  * Spotify Canvas: the request, the response, and what may be downloaded on the strength of one.
  *
- * The protocol could not be exercised end to end without a live token, so it is pinned here
- * against its definition — `EntityCanvazRequest` / `EntityCanvazResponse` — and against how the
- * endpoint answered without one: `401`, which is "bring a token", not "no such thing".
+ * Pinned against `EntityCanvazRequest` / `EntityCanvazResponse` and against the live endpoint
+ * (2026-09-23, a pasted web-player token, no client-token): a track with a Canvas answered 200 with
+ * the shape below, one without answered 200 with only `ttl_in_seconds`, and no token answered 401.
  */
 class SpotifyCanvasTest {
 
@@ -40,6 +40,37 @@ class SpotifyCanvasTest {
             })
         }
         assertEquals(mapOf("spotify:track:$trackId" to video), SpotifyCanvas.canvasUrls(response))
+    }
+
+    @Test
+    fun `the live response is read`() {
+        // Field for field what the endpoint returned for a track with a Canvas, ids shortened.
+        val video = "https://canvaz.scdn.co/upload/artist/06HL/video/1650.cnvs.mp4"
+        val response = message {
+            field(1, message {
+                field(1, "1650363f")
+                field(2, video)
+                field(3, "9fb00cb0")
+                varint(4, 3) // VIDEO_LOOPING_RANDOM
+                field(5, "spotify:track:$trackId")
+                field(6, message {
+                    field(1, "spotify:artist:06HL")
+                    field(2, "Taylor Swift")
+                    field(3, "https://i.scdn.co/image/ab67")
+                })
+                field(8, "artist")
+                field(11, "spotify:canvas:0G6u")
+                field(13, message { varint(1, 256); varint(2, 144); field(3, video) })
+                field(13, message { varint(1, 512); varint(2, 288); field(3, video) })
+            })
+            varint(2, 3600)
+        }
+        assertEquals(mapOf("spotify:track:$trackId" to video), SpotifyCanvas.canvasUrls(response))
+    }
+
+    @Test
+    fun `a track without a canvas is answered with only a ttl`() {
+        assertTrue(SpotifyCanvas.canvasUrls(message { varint(2, 3600) }).isEmpty())
     }
 
     @Test

@@ -31,7 +31,8 @@ One time per phone, and it is the same switch any sideloaded car app needs.
 | | |
 |---|---|
 | **The lyrics, moving** | The real renderer: the syllable sweep, the letter emphasis on a held note, the depth blur, the interlude dots. Your type size, font, romanization, furigana, translation and sync offset, exactly as set on the phone. |
-| **The background** | The same drifting colour field from the album art, paced by the song's tempo — held still if battery saver is on and you have left that switch alone. |
+| **The background** | The same background from the album art, paced by the song's tempo — held still if battery saver is on and you have left that switch alone. |
+| **Spotify Canvas, blurred** | If Canvas is set to *Blurred*, the blurred video plays behind the words, as on the phone (Android 12 or later). *Full* does not play in the car: a video is something to watch, and blurred it is only colour in motion. |
 | **Cinema view** | If the phone is in Cinema view, the car shows the cover, the title, the artist and a progress line beside the words, on the side the phone was told to use. |
 | **The controls** | Play, pause, previous and next, drawn by the car rather than by us — bigger targets, in the place the driver already looks for them. Only the ones the player actually accepts. |
 | **A warning** | At the start of every drive, not once ever. It is not a licence agreement to click past. |

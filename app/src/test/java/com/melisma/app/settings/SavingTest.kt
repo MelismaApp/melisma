@@ -54,6 +54,16 @@ class SavingTest {
     }
 
     @Test
+    fun `Living freezes by default, and shows the cover only when asked`() {
+        assertFalse(Saving.of(defaults, systemSaverOn = true).stillAsCover)
+        val cover = defaults.copy(saverFreezeLiving = false)
+        assertTrue(Saving.of(cover, systemSaverOn = true).stillAsCover)
+        // Nothing to show the cover in place of when the background is not held still.
+        assertFalse(Saving.of(cover.copy(saverStillBackground = false), systemSaverOn = true).stillAsCover)
+        assertFalse(Saving.of(cover, systemSaverOn = false).stillAsCover)
+    }
+
+    @Test
     fun `following with every measure off is the same as not following`() {
         // Which matters for the wording on screen: "battery saver is on now, and these are in
         // force" would be a lie.

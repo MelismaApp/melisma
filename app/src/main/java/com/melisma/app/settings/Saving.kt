@@ -14,6 +14,8 @@ package com.melisma.app.settings
 data class Saving(
     /** Hold the animated background still. */
     val stillBackground: Boolean = false,
+    /** When holding still, show Living as the still cover art rather than a frozen frame. */
+    val stillAsCover: Boolean = false,
     /** Let the screen time out even while the music plays. */
     val releaseScreen: Boolean = false,
     /** Do not look the next queued track up before it starts. */
@@ -32,6 +34,7 @@ data class Saving(
             if (!systemSaverOn || !settings.followBatterySaver) return NONE
             return Saving(
                 stillBackground = settings.saverStillBackground,
+                stillAsCover = settings.saverStillBackground && !settings.saverFreezeLiving,
                 releaseScreen = settings.saverReleaseScreen,
                 skipPrefetch = settings.saverSkipPrefetch,
             )

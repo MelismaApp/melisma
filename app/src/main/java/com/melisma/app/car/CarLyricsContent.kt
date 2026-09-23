@@ -1,6 +1,7 @@
 package com.melisma.app.car
 
 import android.graphics.Bitmap
+import android.os.Build
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -19,7 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,11 +40,13 @@ import com.melisma.app.AppContainer
 import com.melisma.app.lyrics.LyricsState
 import com.melisma.app.media.PlaybackPosition
 import com.melisma.app.media.TrackInfo
+import com.melisma.app.settings.CanvasMode
 import com.melisma.app.settings.MediaPanelSide
 import com.melisma.app.settings.Settings
 import com.melisma.app.settings.ViewMode
 import com.melisma.app.ui.background.DynamicBackground
 import com.melisma.app.ui.background.ArtworkColors
+import com.melisma.app.ui.background.CanvasVideoBackground
 import com.melisma.app.ui.components.rememberPlayheadMs
 import com.melisma.app.ui.lyrics.LyricsView
 
@@ -70,6 +76,7 @@ fun CarLyricsContent(container: AppContainer, insets: PaddingValues) {
     val extras by container.extras.collectAsStateWithLifecycle()
     val searched by container.searchedArtwork.collectAsStateWithLifecycle()
     val saving by container.saving.collectAsStateWithLifecycle()
+    val canvas by container.canvasVideo.collectAsStateWithLifecycle()
 
     val permitted by container.media.permissionGranted.collectAsStateWithLifecycle()
 
@@ -92,6 +99,15 @@ fun CarLyricsContent(container: AppContainer, insets: PaddingValues) {
     )
     val document = (lyricsState as? LyricsState.Loaded)?.document?.takeIf { glance is CarGlance.Now }
 
+    // Blurred Canvas only. Full is a picture to watch, which a driver must not be given; blurred it is
+    // colour in motion, no busier than Living. The blur needs Android 12, and unblurred is not an
+    // acceptable fallback here.
+    val video = canvas?.takeIf {
+        settings.canvasMode == CanvasMode.BLURRED && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            !saving.stillBackground && it.trackId == snapshot.track?.spotifyTrackId
+    }
+    var videoShowing by remember { mutableStateOf(false) }
+
     Box(Modifier.fillMaxSize()) {
         DynamicBackground(
             artwork = artwork,
@@ -101,10 +117,22 @@ fun CarLyricsContent(container: AppContainer, insets: PaddingValues) {
             // A car screen is on for the whole drive with the phone's own switch already applied:
             // battery saver holds it still here for the same reason it does there.
             preferStill = saving.stillBackground,
-            playing = snapshot.playback.isPlaying,
+            stillAsCover = saving.stillAsCover,
+            playing = snapshot.playback.isPlaying && !videoShowing,
             artistImage = extras.artistImage,
             tempoBpm = extras.tempo,
         )
+
+        if (video != null) {
+            key(video.file) {
+                CanvasVideoBackground(
+                    file = video.file,
+                    blurred = true,
+                    playing = snapshot.playback.isPlaying,
+                    onShowing = { videoShowing = it },
+                )
+            }
+        }
 
         // Inside the host's own idea of what is visible: it draws a header and an action strip over
         // this surface and says where, so the words go in the gap rather than under the furniture.

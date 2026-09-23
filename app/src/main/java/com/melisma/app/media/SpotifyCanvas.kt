@@ -20,8 +20,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
  *
  * Asked of `canvaz-cache` with the same web-player token the lyrics use, and nothing else. Some
  * clients also send a `client-token` minted from `clienttoken.spotify.com`; this does not, for the
- * same reason the lyrics provider does not — see [SpotifyWebToken]. If Spotify starts insisting, the
- * answer is a refusal, and a refusal here only means the chosen background shows instead.
+ * same reason the lyrics provider does not — see [SpotifyWebToken] — and the endpoint answered
+ * without one when checked. If Spotify starts insisting, the answer is a refusal, and a refusal
+ * here only means the chosen background shows instead.
  *
  * The token goes to `spclient.wg.spotify.com` and nowhere else. The video itself is on a public
  * CDN and is fetched with no credential at all.

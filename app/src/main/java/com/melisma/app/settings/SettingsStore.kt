@@ -336,6 +336,14 @@ data class Settings(
     val saverStillBackground: Boolean = true,
 
     /**
+     * How Living holds still while saving: frozen on a frame, or swapped for the still cover art.
+     *
+     * Both cost the same once drawn, so this is a matter of look. The floating window always
+     * freezes. Living (classic) always swaps, having no still form.
+     */
+    val saverFreezeLiving: Boolean = true,
+
+    /**
      * Stop holding the screen awake while saving.
      *
      * Off by default, alone among these: the screen is far and away the most expensive thing on the
@@ -659,6 +667,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         backgroundTimeoutMinutes = prefs.getInt(KEY_BACKGROUND_TIMEOUT, 10),
         followBatterySaver = prefs.getBoolean(KEY_FOLLOW_SAVER, true),
         saverStillBackground = prefs.getBoolean(KEY_SAVER_STILL_BACKGROUND, true),
+        saverFreezeLiving = prefs.getBoolean(KEY_SAVER_FREEZE_LIVING, true),
         saverReleaseScreen = prefs.getBoolean(KEY_SAVER_RELEASE_SCREEN, false),
         saverSkipPrefetch = prefs.getBoolean(KEY_SAVER_SKIP_PREFETCH, true),
         autoUpdateCheck = prefs.getBoolean(KEY_AUTO_UPDATE, true),
@@ -918,6 +927,10 @@ class SettingsStore(context: Context) : ProviderCredentials {
         putBoolean(KEY_SAVER_STILL_BACKGROUND, value)
     }
 
+    fun setSaverFreezeLiving(value: Boolean) = edit {
+        putBoolean(KEY_SAVER_FREEZE_LIVING, value)
+    }
+
     fun setSaverReleaseScreen(value: Boolean) = edit {
         putBoolean(KEY_SAVER_RELEASE_SCREEN, value)
     }
@@ -1113,6 +1126,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_BACKGROUND_TIMEOUT = "background_timeout_minutes"
         const val KEY_FOLLOW_SAVER = "follow_battery_saver"
         const val KEY_SAVER_STILL_BACKGROUND = "saver_still_background"
+        const val KEY_SAVER_FREEZE_LIVING = "saver_freeze_living"
         const val KEY_SAVER_RELEASE_SCREEN = "saver_release_screen"
         const val KEY_SAVER_SKIP_PREFETCH = "saver_skip_prefetch"
         const val KEY_AUTO_UPDATE = "auto_update_check"
