@@ -130,6 +130,9 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         container.uiVisible = true
+        // Read afresh rather than trusted: a floating window swiped away never reports leaving
+        // picture-in-picture, so a new activity would inherit "in the popup" from the last one.
+        container.inPopup = isInPictureInPictureMode
         // Ask for the notification listener back. It may have been stood down while nothing was
         // playing — see MediaNotificationListener — and nothing rebinds it on its own. Rebinding is
         // asynchronous, so the first read of the sessions can still fail; the retry backoff in
@@ -158,6 +161,7 @@ class MainActivity : ComponentActivity() {
         // the popup left the app marked visible for ever, which gates the idle timer permanently:
         // exactly the bug the timer exists to prevent.
         container.uiVisible = isInPictureInPictureMode && !isFinishing
+        if (isFinishing) container.inPopup = false
 
         // Deliberately *not* stopping the media repository here.
         //
@@ -173,6 +177,7 @@ class MainActivity : ComponentActivity() {
         // Belt and braces for the dismissal case above: whatever the state flags said, a destroyed
         // activity is not on screen.
         container.uiVisible = false
+        container.inPopup = false
         runCatching { unregisterReceiver(popupActionReceiver) }
         super.onDestroy()
     }

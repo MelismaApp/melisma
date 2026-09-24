@@ -10,6 +10,8 @@ import androidx.car.app.SurfaceContainer
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
@@ -38,6 +40,14 @@ class CarScreenSurface(
 
     private var display: VirtualDisplay? = null
     private var presentation: Presentation? = null
+
+    init {
+        // A connection that ends abruptly, a cable pulled, never delivers onSurfaceDestroyed; the
+        // session ending is the last word, and the display and presentation go with it.
+        session.lifecycle.addObserver(object : DefaultLifecycleObserver {
+            override fun onDestroy(owner: LifecycleOwner) = release()
+        })
+    }
 
     override fun onSurfaceAvailable(surfaceContainer: SurfaceContainer) {
         val surface = surfaceContainer.surface ?: return

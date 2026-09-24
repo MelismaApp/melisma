@@ -206,6 +206,11 @@ fun PlayerScreen(
         demoMode -> DemoLyrics.document
         else -> (lyricsState as? LyricsState.Loaded)?.document
     }
+    // Selected lines are indices into one document. Looking the track up again or importing a
+    // file replaces it under the same track, and the indices would then pick out other lines. A
+    // translation arriving keeps the lines, so it keeps the selection.
+    val documentLines = remember(document) { document?.lines?.map { it.text } }
+    LaunchedEffect(documentLines) { selectionMode = false }
 
     val audioManager = remember { context.getSystemService(AudioManager::class.java) }
     var volume by remember { mutableFloatStateOf(audioManager.musicVolume()) }
@@ -263,8 +268,9 @@ fun PlayerScreen(
     val framing = canvasFraming(
         landscape = LocalConfiguration.current.run { screenWidthDp > screenHeightDp },
         mode = settings.canvasMode,
-        // The conditions MainContent shows Cinema's panel under.
-        cinemaPanel = settings.viewMode == ViewMode.CINEMA && snapshot.track != null && document != null,
+        // The conditions MainContent shows Cinema's panel under; the floating window has none.
+        cinemaPanel = !popup && settings.viewMode == ViewMode.CINEMA && snapshot.track != null &&
+            document != null,
     )
     val canvasCard: (@Composable (Modifier) -> Unit)? =
         if (video != null && framing == CanvasFraming.CARD) {

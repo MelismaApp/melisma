@@ -6,6 +6,7 @@ import com.melisma.app.lyrics.provider.bearerValue
 import com.melisma.app.lyrics.provider.LyricsRequest
 import com.melisma.app.lyrics.provider.Matching
 import com.melisma.app.lyrics.provider.ProviderCredentials
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -45,15 +46,29 @@ data class AppleImages(
 class AppleArtwork(private val credentials: ProviderCredentials) {
 
     private val cache = LinkedHashMap<String, AppleImages?>()
+    private var cachedFrom: String? = null
 
     val isAvailable: Boolean get() = !credentials.appleDeveloperToken.isNullOrBlank()
 
     suspend fun imagesFor(track: TrackInfo): AppleImages? = withContext(Dispatchers.IO) {
         if (!isAvailable || track.isEmpty) return@withContext null
         val key = track.cacheKey
+        // Answers under one token or storefront say nothing about another.
+        val asking = credentials.appleDeveloperToken.orEmpty() + credentials.appleStorefront
+        if (asking != cachedFrom) {
+            cache.clear()
+            cachedFrom = asking
+        }
         if (cache.containsKey(key)) return@withContext cache[key]
 
-        val images = runCatching { lookUp(track) }.getOrNull()
+        val images = try {
+            lookUp(track)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Not remembered: an outage says nothing about the track, and it is asked again.
+            return@withContext null
+        }
         if (cache.size >= CACHE_SIZE) cache.keys.firstOrNull()?.let(cache::remove)
         cache[key] = images
         images

@@ -3,6 +3,7 @@ package com.melisma.app.media
 import android.graphics.Bitmap
 import com.melisma.app.lyrics.provider.Http
 import com.melisma.app.lyrics.provider.ProviderCredentials
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -110,6 +111,7 @@ data class CachedExtras(
 class CacheServerExtras(private val credentials: ProviderCredentials) {
 
     private val cache = LinkedHashMap<String, CachedExtras?>()
+    private var cachedFrom: String? = null
 
     /** One request at a time: the extras and Canvas both ask about the same track at once. */
     private val fetching = Mutex()
@@ -124,11 +126,22 @@ class CacheServerExtras(private val credentials: ProviderCredentials) {
         if (track.isEmpty) return@withContext null
         val key = track.cacheKey
         fetching.withLock {
+            // Answers from one server, or under one key, say nothing about another.
+            val asking = base + credentials.cacheServerKey.orEmpty()
+            if (asking != cachedFrom) {
+                cache.clear()
+                cachedFrom = asking
+            }
             if (cache.containsKey(key)) return@withContext cache[key]
 
-            val extras = runCatching {
+            val extras = try {
                 Http.get("$base/v1/extras?${query(track)}", headers()) { body -> parse(body) }
-            }.getOrNull()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // Not remembered: an outage says nothing about the track, and it is asked again.
+                return@withContext null
+            }
 
             if (cache.size >= CACHE_SIZE) cache.keys.firstOrNull()?.let(cache::remove)
             cache[key] = extras

@@ -219,7 +219,7 @@ private class CanvasPlayback(private val file: File) : TextureView.SurfaceTextur
         }
         player.setOnVideoSizeChangedListener { _, _, _ -> crop() }
         player.setOnErrorListener { _, _, _ ->
-            onFailure()
+            fail()
             true
         }
     }
@@ -238,6 +238,12 @@ private class CanvasPlayback(private val file: File) : TextureView.SurfaceTextur
             if (playing && !player.isPlaying) player.start()
             if (!playing && player.isPlaying) player.pause()
         }
+    }
+
+    /** A video that will not play shows nothing, so its player is let go at once. */
+    private fun fail() {
+        onFailure()
+        release()
     }
 
     fun release() {
@@ -288,7 +294,7 @@ private class CanvasPlayback(private val file: File) : TextureView.SurfaceTextur
                     player.seekTo(player.currentPosition.toLong(), MediaPlayer.SEEK_CLOSEST)
                 }
             }
-        }.onFailure { onFailure() }
+        }.onFailure { fail() }
     }
 
     override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) = crop()

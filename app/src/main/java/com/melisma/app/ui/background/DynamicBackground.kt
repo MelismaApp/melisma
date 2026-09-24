@@ -15,6 +15,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -188,7 +189,10 @@ fun DynamicBackground(
     // 120 BPM is the neutral point; the clamp keeps a very slow or very fast song from
     // making the background either static or frantic.
     val driftSpeed = ((tempoBpm ?: 120f) / 120f).coerceIn(0.65f, 1.7f)
+    val currentSpeed by rememberUpdatedState(driftSpeed)
 
+    // Drift time, already scaled by tempo. Scaled as it accumulates rather than when drawn, so a
+    // new track's tempo changes the pace from here on instead of rescaling everything so far.
     var timeSeconds by remember { mutableStateOf(0f) }
 
     // Elapsed *playing* time, accumulated frame by frame rather than measured from a start
@@ -208,7 +212,7 @@ fun DynamicBackground(
                 // much — and on this screen the background is the expensive part, not the
                 // lyrics.
                 if (unpublished >= BACKGROUND_FRAME_INTERVAL_NANOS) {
-                    timeSeconds += unpublished / 1_000_000_000f
+                    timeSeconds += unpublished / 1_000_000_000f * currentSpeed
                     unpublished = 0L
                 }
             }
@@ -244,10 +248,10 @@ fun DynamicBackground(
                 val previousBitmap = previous
                 if (previousBitmap != null && fade < 1f) {
                     paint.alpha = ((1f - fade) * 255).toInt()
-                    drawField(canvas.nativeCanvas, previousBitmap, matrix, paint, timeSeconds * driftSpeed)
+                    drawField(canvas.nativeCanvas, previousBitmap, matrix, paint, timeSeconds)
                 }
                 paint.alpha = (fade.coerceIn(0f, 1f) * 255).toInt()
-                drawField(canvas.nativeCanvas, bitmap, matrix, paint, timeSeconds * driftSpeed)
+                drawField(canvas.nativeCanvas, bitmap, matrix, paint, timeSeconds)
                 paint.alpha = 255
             }
         }
@@ -422,6 +426,9 @@ private fun KawarpBackground(
         }
     }
     var frameVersion by remember { mutableStateOf(0) }
+    // The last bitmap actually rendered into. A resize allocates a new, empty one, which a paused
+    // background may not render into until the size settles; until then the old one is drawn.
+    var shownFrame by remember { mutableStateOf<Bitmap?>(null) }
     var clock by remember { mutableStateOf(0f) }
     // Spicy Lyrics' speed: tempo over 120, clamped. Without a tempo it runs at 1.
     val speed = tempoBpm?.let { (it / 120f).coerceIn(0.1f, 3f) } ?: 1f
@@ -450,6 +457,7 @@ private fun KawarpBackground(
                 }
             }
             bitmap.setPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+            shownFrame = bitmap
             frameVersion++
 
             if (!blending) previous = null
@@ -461,7 +469,7 @@ private fun KawarpBackground(
     val bounds = remember { android.graphics.Rect() }
     Canvas(modifier.fillMaxSize().onSizeChanged { size = it }) {
         drawRect(colors.base)
-        val bitmap = frame
+        val bitmap = shownFrame
         // Read so a new frame redraws this layer without recomposing anything.
         if (bitmap != null && frameVersion > 0 && current != null) {
             bounds.set(0, 0, this.size.width.toInt(), this.size.height.toInt())

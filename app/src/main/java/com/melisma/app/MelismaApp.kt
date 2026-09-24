@@ -255,7 +255,10 @@ class AppContainer(context: Context) {
             // the rest of the process's life.
             if (!MediaNotificationListener.isBound) {
                 while (!MediaNotificationListener.isBound) {
-                    withTimeoutOrNull(IDLE_CHECK_INTERVAL_MS) { attention.first { it } }
+                    val onScreen = withTimeoutOrNull(IDLE_CHECK_INTERVAL_MS) { attention.first { it } }
+                    // Rebinding takes a moment after the app comes back, and until it lands the
+                    // wait above returns at once; without a pause this spun.
+                    if (onScreen != null) delay(REBIND_POLL_MS)
                 }
                 continue
             }
@@ -353,8 +356,9 @@ class AppContainer(context: Context) {
                     artworkSource = settings.artworkSource,
                     // Every credential the chain consults. Keyed on the values, so pasting a token
                     // takes effect on the track that is playing rather than the one after it.
-                    spotifyToken = settings.spotifyWebToken.orEmpty() + settings.spDcCookie.orEmpty(),
-                    appleToken = settings.appleDeveloperToken.orEmpty(),
+                    spotifyToken = settings.spotifyWebToken.orEmpty() + settings.spDcCookie.orEmpty() +
+                        settings.spotifyBrowserTokenActive,
+                    appleToken = settings.appleDeveloperToken.orEmpty() + settings.appleStorefront,
                     server = if (settings.cacheServerExtrasActive) {
                         settings.cacheServerUrl.orEmpty() + settings.cacheServerKey.orEmpty() +
                             settings.cacheServerExtrasMode
@@ -462,9 +466,19 @@ class AppContainer(context: Context) {
         val server: String,
     )
 
+    /** The track, and the way of finding its extras, that what is published belongs to. */
+    private var extrasShownFor: Any? = null
+
     private suspend fun loadExtras(inputs: ExtrasInputs) {
-        _extras.value = NowPlayingExtras()
-        _searchedArtwork.value = null
+        // A different track, or a different way of finding its extras, starts from nothing. The
+        // same track run again because its bitmap arrived or its metadata was corrected keeps what
+        // it shows until something replaces it, rather than blinking empty.
+        val shownFor = inputs.copy(track = null, playerArtworkSize = 0) to inputs.track?.cacheKey
+        if (shownFor != extrasShownFor) {
+            _extras.value = NowPlayingExtras()
+            _searchedArtwork.value = null
+            extrasShownFor = shownFor
+        }
         if (!inputs.enabled) return
 
         val track = inputs.track?.takeIf { !it.isEmpty } ?: return
@@ -480,7 +494,7 @@ class AppContainer(context: Context) {
         // artwork keeps working months after the token that found it stopped.
         val remembered = extrasStore.get(track.cacheKey)
         if (remembered != null) {
-            _extras.value = NowPlayingExtras(trackId = trackId, tempo = remembered.tempo)
+            _extras.value = _extras.value.copy(trackId = trackId, tempo = remembered.tempo)
             val cover = remembered.coverUrl?.let { url ->
                 runCatching { spotifyExtras.image(url) }.getOrNull()
             }
@@ -520,7 +534,7 @@ class AppContainer(context: Context) {
                     artistImageUrl = details.artistImageUrl,
                 )
                 // Publish the tempo straight away; the images arrive when they arrive.
-                _extras.value = NowPlayingExtras(trackId = trackId, tempo = details.tempo)
+                _extras.value = _extras.value.copy(trackId = trackId, tempo = details.tempo)
 
                 val cover = details.coverUrl?.let { url ->
                     runCatching { spotifyExtras.image(url) }.getOrNull()
@@ -619,20 +633,29 @@ class AppContainer(context: Context) {
     private suspend fun searchForArtwork(track: TrackInfo, inputs: ExtrasInputs) {
         if (inputs.artworkSource == ArtworkSource.PLAYER) return
         // Nothing above found one, so there is something to improve on by definition — but the
-        // player's own may already be good enough.
-        if (inputs.playerArtworkSize >= ARTWORK_GOOD_ENOUGH_PX) return
+        // player's own may already be good enough, including once a bitmap it sent late arrives.
+        if (inputs.playerArtworkSize >= ARTWORK_GOOD_ENOUGH_PX) {
+            _searchedArtwork.value = null
+            return
+        }
 
         val found = runCatching { artworkSearch.find(track, inputs.artworkSource) }.getOrNull()
             ?: return
         if (media.snapshot.value.track?.cacheKey != track.cacheKey) return
         // And only if it is actually an improvement on what the player gave us.
-        if (minOf(found.width, found.height) <= inputs.playerArtworkSize) return
+        if (minOf(found.width, found.height) <= inputs.playerArtworkSize) {
+            _searchedArtwork.value = null
+            return
+        }
         _searchedArtwork.value = found
     }
 
     private companion object {
         /** A minute. The timeout it serves is measured in tens of them. */
         const val IDLE_CHECK_INTERVAL_MS = 60_000L
+
+        /** How often to look for the listener's rebinding while something of ours is on screen. */
+        const val REBIND_POLL_MS = 500L
     }
 }
 

@@ -81,7 +81,8 @@ fun MediaPanel(
     var positionMs by rememberPlayheadMs(playback)
     val coverAlpha by animateFloatAsState(if (hideCover) 0f else 1f, tween(600), label = "cover")
 
-    var scrubFraction by remember { mutableFloatStateOf(-1f) }
+    // Per track: a drag still held when the song changes must not seek the next one to it.
+    var scrubFraction by remember(track.cacheKey) { mutableFloatStateOf(-1f) }
     val duration = playback.durationMs.coerceAtLeast(1L)
     val fraction = if (scrubFraction >= 0f) {
         scrubFraction

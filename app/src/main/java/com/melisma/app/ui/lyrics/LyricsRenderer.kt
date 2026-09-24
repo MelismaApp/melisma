@@ -46,6 +46,11 @@ class LyricsRenderer(
             if (field !== value) {
                 field = value
                 activeIndex = -1
+                // A scroll position the user left is in the old layout's coordinates, and would
+                // hold the page at the wrong place until the resume timeout. Back to the music.
+                userScrolling = false
+                flingVelocity = 0f
+                resumeAutoScrollAt = 0L
                 snapNextFrame = true
             }
         }
