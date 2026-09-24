@@ -4,7 +4,12 @@ import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.util.detectScript
 import com.melisma.app.util.hasLatinLetters
 import kotlinx.serialization.json.Json
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
 import kotlin.coroutines.resume
@@ -256,6 +261,28 @@ object Http {
             .apply { headers.forEach { (k, v) -> if (k != "User-Agent") header(k, v) } }
             .get()
             .build()
+
+    /**
+     * Runs [call] and hands the response to [block], cancelling the call with the coroutine.
+     *
+     * `execute()` alone ignores cancellation, and whatever replaces a cancelled load waits for it
+     * to finish, so a stalled request held up the next track until its timeout. Cancelling the
+     * call closes its socket, which ends a blocked wait or read, the body's included.
+     */
+    suspend fun <T> execute(call: Call, block: (Response) -> T): T = withContext(Dispatchers.IO) {
+        val watcher = launch(start = CoroutineStart.UNDISPATCHED) {
+            try {
+                awaitCancellation()
+            } finally {
+                call.cancel()
+            }
+        }
+        try {
+            call.execute().use(block)
+        } finally {
+            watcher.cancel()
+        }
+    }
 
     /**
      * Thrown when a service did not answer, as distinct from answering "I do not have it".

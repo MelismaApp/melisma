@@ -112,7 +112,7 @@ class SpotifyExtras(private val credentials: ProviderCredentials) {
     suspend fun image(url: String): Bitmap? = withContext(Dispatchers.IO) {
         bitmapCache[url]?.let { return@withContext it }
         val bytes = runCatching {
-            Http.client.newCall(Http.request(url)).execute().use { response ->
+            Http.execute(Http.client.newCall(Http.request(url))) { response ->
                 if (!response.isSuccessful) null else response.body?.bytes()
             }
         }.getOrNull() ?: return@withContext null

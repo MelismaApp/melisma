@@ -196,9 +196,8 @@ class CacheServerExtras(private val credentials: ProviderCredentials) {
     suspend fun image(url: String): Bitmap? = withContext(Dispatchers.IO) {
         val headers = if (isOurs(url)) headers() else mapOf("Accept" to "image/*")
         runCatching {
-            Http.client.newCall(Http.request(url, headers)).execute().use { response ->
-                if (!response.isSuccessful) return@runCatching null
-                response.body?.bytes()?.let(ArtworkDecoding::decode)
+            Http.execute(Http.client.newCall(Http.request(url, headers))) { response ->
+                if (!response.isSuccessful) null else response.body?.bytes()?.let(ArtworkDecoding::decode)
             }
         }.getOrNull()
     }

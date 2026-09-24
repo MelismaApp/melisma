@@ -12,7 +12,6 @@ import java.net.URI
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -83,7 +82,7 @@ class SpotifyCanvas(
         data object Failed : Answer
     }
 
-    private fun ask(trackId: String, token: String): Answer = runCatching {
+    private suspend fun ask(trackId: String, token: String): Answer = runCatching {
         val request = Request.Builder()
             .url("$base/canvaz-cache/v0/canvases")
             .header("Authorization", "Bearer $token")
@@ -92,7 +91,7 @@ class SpotifyCanvas(
             .header("Accept", "application/protobuf")
             .post(canvasRequest(trackId).toRequestBody(PROTOBUF))
             .build()
-        Http.client.newCall(request).execute().use { response ->
+        Http.execute(Http.client.newCall(request)) { response ->
             when {
                 response.code == 401 || response.code == 403 -> Answer.Refused
                 !response.isSuccessful -> Answer.Failed
@@ -278,9 +277,8 @@ class CanvasVideoCache(private val dir: File, private val maxBytes: Long = 80L *
     suspend fun poster(url: String): Bitmap? = withContext(Dispatchers.IO) {
         if (!SpotifyCanvas.isCanvasStill(url)) return@withContext null
         runCatching {
-            client.newCall(Http.request(url, mapOf("Accept" to "image/*"))).execute().use { response ->
-                if (!response.isSuccessful) return@runCatching null
-                response.body?.bytes()?.let(ArtworkDecoding::decode)
+            Http.execute(client.newCall(Http.request(url, mapOf("Accept" to "image/*")))) { response ->
+                if (!response.isSuccessful) null else response.body?.bytes()?.let(ArtworkDecoding::decode)
             }
         }.getOrNull()
     }
@@ -295,9 +293,9 @@ class CanvasVideoCache(private val dir: File, private val maxBytes: Long = 80L *
         }
 
         val partial = File(dir, file.name + ".part")
-        // A blocking read ignores cancellation, so it is checked between chunks: leaving the app
-        // or skipping the track stops the download rather than finishing it for nobody.
-        val ok = runCatching { download(url, partial) { !isActive } }.getOrDefault(false)
+        // Cancellable, so leaving the app or skipping the track stops the download rather than
+        // finishing it for nobody.
+        val ok = runCatching { download(url, partial) }.getOrDefault(false)
 
         if (!ok || !partial.renameTo(file)) {
             partial.delete()
@@ -307,28 +305,26 @@ class CanvasVideoCache(private val dir: File, private val maxBytes: Long = 80L *
         file
     }
 
-    /** True when [target] holds the whole video; false for a failure, a cancellation or anything over the cap. */
-    private fun download(url: String, target: File, cancelled: () -> Boolean): Boolean {
-        client.newCall(Http.request(url)).execute().use { response ->
-            val body = response.body ?: return false
-            if (!response.isSuccessful || body.contentLength() > MAX_VIDEO_BYTES) return false
+    /** True when [target] holds the whole video; false for a failure or anything over the cap. */
+    private suspend fun download(url: String, target: File): Boolean =
+        Http.execute(client.newCall(Http.request(url))) { response ->
+            val body = response.body ?: return@execute false
+            if (!response.isSuccessful || body.contentLength() > MAX_VIDEO_BYTES) return@execute false
             var written = 0L
             target.outputStream().use { out ->
                 body.byteStream().use { input ->
                     val buffer = ByteArray(64 * 1024)
                     while (true) {
-                        if (cancelled()) return false
                         val read = input.read(buffer)
                         if (read < 0) break
                         written += read
-                        if (written > MAX_VIDEO_BYTES) return false
+                        if (written > MAX_VIDEO_BYTES) return@execute false
                         out.write(buffer, 0, read)
                     }
                 }
             }
-            return written > 0
+            written > 0
         }
-    }
 
     private fun trim() {
         val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".mp4") } ?: return

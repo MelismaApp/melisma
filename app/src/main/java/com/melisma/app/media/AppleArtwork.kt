@@ -80,9 +80,8 @@ class AppleArtwork(private val credentials: ProviderCredentials) {
             // Some templates carry a format placeholder too.
             .replace("{f}", "jpg")
         runCatching {
-            Http.client.newCall(Http.request(url)).execute().use { response ->
-                if (!response.isSuccessful) return@runCatching null
-                response.body?.bytes()?.let(ArtworkDecoding::decode)
+            Http.execute(Http.client.newCall(Http.request(url))) { response ->
+                if (!response.isSuccessful) null else response.body?.bytes()?.let(ArtworkDecoding::decode)
             }
         }.getOrNull()
     }
