@@ -135,7 +135,7 @@ lookup it needs no key from the local network. Answer:
   "tempo": 87.5,
   "isrc": "JPU901800227",
   "canvasUrl": "https://canvaz.scdn.co/upload/artist/…/video/….cnvs.mp4",
-  "canvasVariants": [{ "width": 256, "height": 144, "url": "https://canvaz.scdn.co/…" }],
+  "canvasThumbnails": [{ "width": 144, "height": 256, "url": "https://i.scdn.co/image/…" }],
   "palette": { "bgColor": "1f1f24", "textColor1": "ffffff" },
   "analysis": { "beats": [], "bars": [], "sections": [] },
   "metadata": { "composerName": "…", "albumName": "…" }
@@ -152,9 +152,9 @@ lookup it needs no key from the local network. Answer:
   https on `*.scdn.co` and end in `.mp4`, or the app ignores it, and it is used only when the query
   carried a `spotifyId`, for that Spotify track. The app downloads the video from Spotify's CDN
   with no credential; one that no longer exists leaves the ordinary background showing.
-- `canvasVariants` are still JPEG thumbnails of the Canvas on `i.scdn.co`, not smaller videos,
-  smallest first. They are portrait like the video, so `width` and `height` as the server labels
-  them are swapped: the `256 × 144` one is 144 wide and 256 tall. The app does not read them yet.
+- `canvasThumbnails` are still JPEG images of the Canvas on `i.scdn.co`, not smaller videos,
+  portrait like the video and smallest first. The app does not read them yet. Servers before
+  melisma-server e4091c5 sent them as `canvasVariants`, with `width` and `height` swapped.
 - `palette`, `analysis` and `metadata` are held whole and served whole. The app reads none of
   them yet; they are collected because the tokens are the scarce thing, not the storage, and
   `audio-attributes` — which carries the tempo, key, loudness and the beat, bar and section grids

@@ -120,15 +120,15 @@ class CacheServerExtrasContractTest {
 
     @Test
     fun `a Canvas address is read, and is enough on its own`() {
-        // The shape melisma-server 7bcbe5d serves. `canvasVariants` is not read yet.
+        // The shape melisma-server e4091c5 serves. `canvasThumbnails` is not read yet.
         val url = "https://canvaz.scdn.co/upload/artist/06HL/video/1650.cnvs.mp4"
         val served = """
             {
              "coverUrl": "https://i.scdn.co/image/cover.jpg",
              "canvasUrl": "$url",
-             "canvasVariants": [
-              { "width": 256, "height": 144, "url": "https://canvaz.scdn.co/a" },
-              { "width": 512, "height": 288, "url": "https://canvaz.scdn.co/b" }
+             "canvasThumbnails": [
+              { "width": 144, "height": 256, "url": "https://i.scdn.co/image/ab67ba6900002ea6" },
+              { "width": 288, "height": 512, "url": "https://i.scdn.co/image/ab67ba6900002e9f" }
              ],
              "tempo": 120.0,
              "source": "spotify+applemusic"
