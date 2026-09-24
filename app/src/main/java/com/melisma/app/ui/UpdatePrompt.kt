@@ -82,15 +82,13 @@ fun UpdatePrompt(
             )
 
             if (release.notes.isNotBlank()) {
-                Text(
+                ReleaseNotes(
                     release.notes,
-                    color = Color.White.copy(alpha = 0.7f),
-                    fontSize = 13.sp,
                     // Release notes are as long as they are; scroll rather than truncate,
                     // but never take over the screen.
                     modifier = Modifier
                         .padding(top = 14.dp)
-                        .heightIn(max = 220.dp)
+                        .heightIn(max = 300.dp)
                         .verticalScroll(rememberScrollState()),
                 )
             }
