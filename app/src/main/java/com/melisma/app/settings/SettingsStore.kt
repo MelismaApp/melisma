@@ -813,7 +813,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
 
     // ---- timing -------------------------------------------------------------
 
-    fun setSyncOffset(ms: Int) = edit { putInt(KEY_SYNC_OFFSET, ms.coerceIn(-5_000, 5_000)) }
+    fun setSyncOffset(ms: Int) = edit { putInt(KEY_SYNC_OFFSET, ms.coerceIn(SYNC_OFFSET_RANGE)) }
 
     fun setTapLineToSeek(value: Boolean) = edit { putBoolean(KEY_TAP_TO_SEEK, value) }
 
@@ -1092,6 +1092,9 @@ class SettingsStore(context: Context) : ProviderCredentials {
     // Internal rather than private so the migration tests can plant an old install's
     // preferences without guessing at the key names.
     internal companion object {
+        /** Milliseconds either way; past five seconds the lyrics are for a different line. */
+        val SYNC_OFFSET_RANGE = -5_000..5_000
+
         const val KEY_FONT_SCALE = "font_scale"
         const val KEY_FONT = "font"
         const val KEY_LINE_BLUR = "line_blur"

@@ -66,6 +66,7 @@ import com.melisma.app.settings.MediaPanelSide
 import com.melisma.app.settings.PopupShape
 import com.melisma.app.settings.Settings
 import com.melisma.app.settings.SettingsBackup
+import com.melisma.app.settings.SettingsStore
 import com.melisma.app.settings.TextAnimationStyle
 import com.melisma.app.settings.ViewMode
 import androidx.compose.ui.geometry.Rect
@@ -672,7 +673,9 @@ fun SettingsSheet(
                     display = "${settings.syncOffsetMs}ms",
                     accent = accent,
                     onChange = { store.setSyncOffset((it / 10).toInt() * 10) },
-                    typed = TypedEntry(settings.syncOffsetMs, "ms") { store.setSyncOffset(it) },
+                    typed = TypedEntry(settings.syncOffsetMs, "ms", SettingsStore.SYNC_OFFSET_RANGE) {
+                        store.setSyncOffset(it)
+                    },
                 )
                 Hint(
                     when {
@@ -2130,12 +2133,13 @@ private fun SliderRow(
     }
 }
 
-/** A whole number that can be typed as well as slid to: the current value, its unit, and what to do with a new one. */
-private class TypedEntry(val current: Int, val unit: String, val onEnter: (Int) -> Unit)
+/** A whole number that can be typed as well as slid to: its value, unit, allowed range, and where a new one goes. */
+private class TypedEntry(val current: Int, val unit: String, val range: IntRange, val onEnter: (Int) -> Unit)
 
 /**
  * The value of a [SliderRow], boxed like the other text fields to show it can be tapped, and a
- * number field once it is. Each valid number takes effect as it is typed.
+ * number field once it is. Each valid number takes effect as it is typed; one outside the range
+ * is not accepted.
  */
 @Composable
 private fun TypedValue(entry: TypedEntry, display: String, accent: Color) {
@@ -2158,15 +2162,31 @@ private fun TypedValue(entry: TypedEntry, display: String, accent: Color) {
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     var focused by remember { mutableStateOf(false) }
+    fun accept(new: TextFieldValue) {
+        val number = new.text.toIntOrNull()
+        if (!new.text.matches(TYPED_NUMBER) || (number != null && number !in entry.range)) return
+        text = new
+        number?.let(entry.onEnter)
+    }
     Row(box.padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Compose cannot ask for a signed number pad, and not every keyboard's has a minus key.
+        if (entry.range.first < 0) {
+            Text(
+                "±",
+                color = accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clickable {
+                        val flipped = if (text.text.startsWith("-")) text.text.drop(1) else "-" + text.text
+                        accept(TextFieldValue(flipped, selection = TextRange(flipped.length)))
+                    }
+                    .padding(end = 6.dp),
+            )
+        }
         BasicTextField(
             value = text,
-            onValueChange = { new ->
-                if (new.text.matches(TYPED_NUMBER)) {
-                    text = new
-                    new.text.toIntOrNull()?.let(entry.onEnter)
-                }
-            },
+            onValueChange = ::accept,
             textStyle = TextStyle(color = Color.White, fontSize = 13.sp, textAlign = TextAlign.End),
             cursorBrush = SolidColor(accent),
             singleLine = true,
@@ -2185,8 +2205,8 @@ private fun TypedValue(entry: TypedEntry, display: String, accent: Color) {
     LaunchedEffect(Unit) { focus.requestFocus() }
 }
 
-/** A sign and up to five digits: enough for any offset, and nothing that is not a number. */
-private val TYPED_NUMBER = Regex("-?\\d{0,5}")
+/** An optional sign and digits, so a half-typed number such as "-" is allowed on the way. */
+private val TYPED_NUMBER = Regex("-?\\d{0,6}")
 
 /** One line of a test's results: what was asked, and what it said. */
 @Composable
