@@ -104,7 +104,7 @@ fun CarLyricsContent(container: AppContainer, insets: PaddingValues) {
     // acceptable fallback here.
     val video = canvas?.takeIf {
         settings.canvasMode == CanvasMode.BLURRED && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            !saving.stillBackground && it.trackId == snapshot.track?.spotifyTrackId
+            (!saving.stillBackground || it.file == null) && it.trackId == snapshot.track?.spotifyTrackId
     }
     var videoShowing by remember { mutableStateOf(false) }
 

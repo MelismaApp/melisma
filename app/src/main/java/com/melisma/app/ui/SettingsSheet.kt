@@ -628,8 +628,22 @@ fun SettingsSheet(
                 ) {
                     Hint("Canvas needs the same Spotify token as Spotify lyrics — without it, the style above shows.")
                 }
+                AnimatedVisibility(visible = settings.canvasMode != CanvasMode.OFF) {
+                    Column(Modifier.fillMaxWidth()) {
+                        ToggleRow(
+                            title = "Show its still on Data Saver",
+                            subtitle = "Off skips Canvas over mobile data",
+                            checked = settings.dataSaverStillCanvas,
+                            accent = accent,
+                            onCheckedChange = { store.setDataSaverStillCanvas(it) },
+                        )
+                        Help(
+                            "With Data Saver on over mobile data, a still of the Canvas instead of the video: a few dozen kilobytes a track rather than a few megabytes.",
+                        )
+                    }
+                }
                 Help(
-                    "The looping video Spotify shows behind some tracks, in place of the style above. Tracks without one, other players, battery saver and a floating window held still all show the style above instead, and nothing is downloaded while the app is off screen. Needs a Spotify token, or a cache server that has the track's Canvas, and is skipped when Data Saver is on over mobile data. Blurred needs Android 12 or later.\n\nA Canvas is portrait, so in landscape Full moves: into the cover's place in Cinema view, and down the middle, blurred, with the style above either side in the lyrics view.\n\nIn the car only Blurred plays: a full video is something to watch, and a driver should not be given one.",
+                    "The looping video Spotify shows behind some tracks, in place of the style above. Tracks without one, other players and a floating window held still show the style above instead, battery saver shows a still of it or the style above, as set under Battery, and nothing is downloaded while the app is off screen. Needs a Spotify token, or a cache server that has the track's Canvas. Blurred needs Android 12 or later.\n\nA Canvas is portrait, so in landscape Full moves: into the cover's place in Cinema view, and down the middle, blurred, with the style above either side in the lyrics view.\n\nIn the car only Blurred plays: a full video is something to watch, and a driver should not be given one.",
                 )
             }
 
@@ -1220,6 +1234,21 @@ fun SettingsSheet(
                                         "Living (classic) always shows the cover, having no " +
                                         "still frame, and the floating window always freezes.",
                                 )
+                                AnimatedVisibility(visible = settings.canvasMode != CanvasMode.OFF) {
+                                    Column(Modifier.fillMaxWidth()) {
+                                        ToggleRow(
+                                            title = "Show a Canvas as its still",
+                                            subtitle = "Off shows the background style instead",
+                                            checked = settings.saverStillCanvas,
+                                            accent = accent,
+                                            onCheckedChange = { store.setSaverStillCanvas(it) },
+                                        )
+                                        Help(
+                                            "A still is drawn once, like the rest of the background, " +
+                                                "and costs a few dozen kilobytes a track to fetch.",
+                                        )
+                                    }
+                                }
                             }
                         }
                         ToggleRow(

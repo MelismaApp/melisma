@@ -186,6 +186,28 @@ class SpotifyCanvasTest {
         assertFalse(showable(blurred, car = true, blur = false))
     }
 
+    @Test
+    fun `the savers allow a still or nothing, as each is set`() {
+        fun plan(held: Boolean = false, heldStill: Boolean = true, dataSaver: Boolean = false, dataSaverStill: Boolean = false) =
+            canvasPlan(held, heldStill, dataSaver, dataSaverStill)
+
+        assertEquals(CanvasPlan.VIDEO, plan())
+        // A switch that only applies under a saver changes nothing without one.
+        assertEquals(CanvasPlan.VIDEO, plan(heldStill = false, dataSaverStill = true))
+
+        // The defaults: battery saver shows the still, Data Saver skips Canvas.
+        assertEquals(CanvasPlan.STILL, plan(held = true))
+        assertEquals(CanvasPlan.NONE, plan(dataSaver = true))
+
+        assertEquals(CanvasPlan.NONE, plan(held = true, heldStill = false))
+        assertEquals(CanvasPlan.STILL, plan(dataSaver = true, dataSaverStill = true))
+
+        // Both on: either one saying no is no.
+        assertEquals(CanvasPlan.NONE, plan(held = true, dataSaver = true))
+        assertEquals(CanvasPlan.NONE, plan(held = true, heldStill = false, dataSaver = true, dataSaverStill = true))
+        assertEquals(CanvasPlan.STILL, plan(held = true, dataSaver = true, dataSaverStill = true))
+    }
+
     // ---- a minimal protobuf writer, independent of the one under test ----
 
     private class Writer {

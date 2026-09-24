@@ -16,6 +16,8 @@ data class Saving(
     val stillBackground: Boolean = false,
     /** When holding still, show Living as the still cover art rather than a frozen frame. */
     val stillAsCover: Boolean = false,
+    /** When holding still, show a Canvas as its still rather than the style under it. */
+    val stillCanvas: Boolean = false,
     /** Let the screen time out even while the music plays. */
     val releaseScreen: Boolean = false,
     /** Do not look the next queued track up before it starts. */
@@ -35,6 +37,7 @@ data class Saving(
             return Saving(
                 stillBackground = settings.saverStillBackground,
                 stillAsCover = settings.saverStillBackground && !settings.saverFreezeLiving,
+                stillCanvas = settings.saverStillBackground && settings.saverStillCanvas,
                 releaseScreen = settings.saverReleaseScreen,
                 skipPrefetch = settings.saverSkipPrefetch,
             )

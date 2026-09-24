@@ -42,9 +42,11 @@ import com.melisma.app.media.ArtworkSearch
 import com.melisma.app.settings.ArtworkSource
 import android.graphics.Bitmap
 import com.melisma.app.media.CanvasLink
+import com.melisma.app.media.CanvasPlan
 import com.melisma.app.media.CanvasVideo
 import com.melisma.app.media.CanvasVideoCache
 import com.melisma.app.media.SpotifyCanvas
+import com.melisma.app.media.canvasPlan
 import com.melisma.app.media.canvasShowable
 import com.melisma.app.settings.CanvasMode
 import com.melisma.app.media.TrackInfo
@@ -388,7 +390,7 @@ class AppContainer(context: Context) {
                     // Only while something on screen would show it: music playing with the app
                     // closed, or behind a floating window held still, would otherwise download a
                     // video for every track. Coming back fetches the one playing then.
-                    wanted = !saving.stillBackground && canvasShowable(
+                    wanted = canvasShowable(
                         settings,
                         window = window,
                         popup = popup,
@@ -400,6 +402,9 @@ class AppContainer(context: Context) {
                     server = settings.cacheServerExtrasActive,
                     serverOnly = settings.cacheServerExtrasOnly,
                     serverAddress = settings.cacheServerUrl.orEmpty() + settings.cacheServerKey.orEmpty(),
+                    held = saving.stillBackground,
+                    heldStill = saving.stillCanvas,
+                    dataSaverStill = settings.dataSaverStillCanvas,
                 )
             }
                 .distinctUntilChanged()
@@ -414,12 +419,17 @@ class AppContainer(context: Context) {
         val server: Boolean,
         val serverOnly: Boolean,
         val serverAddress: String,
+        val held: Boolean,
+        val heldStill: Boolean,
+        val dataSaverStill: Boolean,
     )
 
     private suspend fun loadCanvas(inputs: CanvasInputs) {
         _canvasVideo.value = null
         val trackId = inputs.trackId ?: return
-        if (!inputs.wanted || dataSaverOn()) return
+        if (!inputs.wanted) return
+        val plan = canvasPlan(inputs.held, inputs.heldStill, dataSaverOn(), inputs.dataSaverStill)
+        if (plan == CanvasPlan.NONE) return
 
         // The phone's own token first, as with the artwork: it is about the track playing now. The
         // server when the phone could not ask Spotify, or when it is to be the only source.
@@ -430,6 +440,12 @@ class AppContainer(context: Context) {
             link = extras?.canvasUrl?.let { CanvasLink(it, extras.canvasPosterUrl) }
         }
         val canvas = link ?: return
+
+        if (plan == CanvasPlan.STILL) {
+            val poster = canvas.posterUrl?.let { canvasCache.poster(it) } ?: return
+            _canvasVideo.value = CanvasVideo(trackId, file = null, poster = poster)
+            return
+        }
 
         // A video played before is on disk already. One that is not shows its still while it
         // downloads, and keeps showing it if the download never finishes.

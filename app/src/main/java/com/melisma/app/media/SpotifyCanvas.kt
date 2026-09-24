@@ -360,6 +360,35 @@ data class CanvasLink(val videoUrl: String, val posterUrl: String? = null)
  */
 data class CanvasVideo(val trackId: String, val file: File?, val poster: Bitmap? = null)
 
+/** How much of a Canvas to fetch and show. */
+enum class CanvasPlan {
+    NONE,
+
+    /** Only its still: a few dozen kilobytes, drawn once. */
+    STILL,
+
+    /** The video, with its still while it downloads. */
+    VIDEO,
+}
+
+/**
+ * What a Canvas may cost right now.
+ *
+ * Battery saver holding the background still, and Data Saver over mobile data, each allow the
+ * still or nothing, as their own switch says; with both on, both have to allow it.
+ */
+internal fun canvasPlan(
+    held: Boolean,
+    heldStill: Boolean,
+    dataSaver: Boolean,
+    dataSaverStill: Boolean,
+): CanvasPlan = when {
+    held && !heldStill -> CanvasPlan.NONE
+    dataSaver && !dataSaverStill -> CanvasPlan.NONE
+    held || dataSaver -> CanvasPlan.STILL
+    else -> CanvasPlan.VIDEO
+}
+
 /**
  * Whether anything on screen would show a Canvas, so one is worth fetching.
  *

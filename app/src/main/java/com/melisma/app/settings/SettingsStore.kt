@@ -202,6 +202,14 @@ data class Settings(
     val backgroundBlur: Int = 24,
     /** Canvas video over [backgroundStyle], which shows whenever there is no video. */
     val canvasMode: CanvasMode = CanvasMode.OFF,
+
+    /**
+     * On Data Saver over mobile data, show a Canvas's still instead of nothing.
+     *
+     * A few dozen kilobytes a track against the video's megabytes, but still a download Data Saver
+     * asks apps not to make, so it is asked for rather than assumed.
+     */
+    val dataSaverStillCanvas: Boolean = false,
     val controlsPosition: ControlsPosition = ControlsPosition.TOP,
     val showVolumeSlider: Boolean = false,
     /**
@@ -354,6 +362,14 @@ data class Settings(
      * freezes. Living (classic) always swaps, having no still form.
      */
     val saverFreezeLiving: Boolean = true,
+
+    /**
+     * While saving, show a Canvas as its still rather than the style under it.
+     *
+     * Drawn once, like a frozen Living, so it costs no more to show; the one cost is the still's
+     * download, a few dozen kilobytes a track.
+     */
+    val saverStillCanvas: Boolean = true,
 
     /**
      * Stop holding the screen awake while saving.
@@ -617,6 +633,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         backgroundStyle = prefs.enum(KEY_BACKGROUND, BackgroundStyle.ANIMATED),
         backgroundBlur = prefs.getInt(KEY_BACKGROUND_BLUR, 24),
         canvasMode = prefs.enum(KEY_CANVAS, CanvasMode.OFF),
+        dataSaverStillCanvas = prefs.getBoolean(KEY_DATA_SAVER_STILL_CANVAS, false),
         controlsPosition = prefs.enum(KEY_CONTROLS_POSITION, ControlsPosition.TOP),
         showVolumeSlider = prefs.getBoolean(KEY_VOLUME_SLIDER, false),
         useSpotifyExtras = prefs.getBoolean(KEY_SPOTIFY_EXTRAS, true),
@@ -685,6 +702,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         followBatterySaver = prefs.getBoolean(KEY_FOLLOW_SAVER, true),
         saverStillBackground = prefs.getBoolean(KEY_SAVER_STILL_BACKGROUND, true),
         saverFreezeLiving = prefs.getBoolean(KEY_SAVER_FREEZE_LIVING, true),
+        saverStillCanvas = prefs.getBoolean(KEY_SAVER_STILL_CANVAS, true),
         saverReleaseScreen = prefs.getBoolean(KEY_SAVER_RELEASE_SCREEN, false),
         saverSkipPrefetch = prefs.getBoolean(KEY_SAVER_SKIP_PREFETCH, true),
         autoUpdateCheck = prefs.getBoolean(KEY_AUTO_UPDATE, true),
@@ -758,6 +776,8 @@ class SettingsStore(context: Context) : ProviderCredentials {
     fun setBackgroundBlur(px: Int) = edit { putInt(KEY_BACKGROUND_BLUR, px.coerceIn(0, 67)) }
 
     fun setCanvasMode(mode: CanvasMode) = edit { putString(KEY_CANVAS, mode.name) }
+
+    fun setDataSaverStillCanvas(value: Boolean) = edit { putBoolean(KEY_DATA_SAVER_STILL_CANVAS, value) }
 
     fun setControlsPosition(position: ControlsPosition) =
         edit { putString(KEY_CONTROLS_POSITION, position.name) }
@@ -945,6 +965,8 @@ class SettingsStore(context: Context) : ProviderCredentials {
         putBoolean(KEY_SAVER_STILL_BACKGROUND, value)
     }
 
+    fun setSaverStillCanvas(value: Boolean) = edit { putBoolean(KEY_SAVER_STILL_CANVAS, value) }
+
     fun setSaverFreezeLiving(value: Boolean) = edit {
         putBoolean(KEY_SAVER_FREEZE_LIVING, value)
     }
@@ -1081,6 +1103,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_BACKGROUND = "background_style"
         const val KEY_BACKGROUND_BLUR = "background_blur"
         const val KEY_CANVAS = "canvas_mode"
+        const val KEY_DATA_SAVER_STILL_CANVAS = "data_saver_still_canvas"
         const val KEY_CONTROLS_POSITION = "controls_position"
         const val KEY_VOLUME_SLIDER = "volume_slider"
         const val KEY_SPOTIFY_EXTRAS = "spotify_extras"
@@ -1149,6 +1172,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_FOLLOW_SAVER = "follow_battery_saver"
         const val KEY_SAVER_STILL_BACKGROUND = "saver_still_background"
         const val KEY_SAVER_FREEZE_LIVING = "saver_freeze_living"
+        const val KEY_SAVER_STILL_CANVAS = "saver_still_canvas"
         const val KEY_SAVER_RELEASE_SCREEN = "saver_release_screen"
         const val KEY_SAVER_SKIP_PREFETCH = "saver_skip_prefetch"
         const val KEY_AUTO_UPDATE = "auto_update_check"

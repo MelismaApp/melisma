@@ -64,6 +64,14 @@ class SavingTest {
     }
 
     @Test
+    fun `a Canvas shows as its still by default, and only while the background is held`() {
+        assertTrue(Saving.of(defaults, systemSaverOn = true).stillCanvas)
+        assertFalse(Saving.of(defaults.copy(saverStillCanvas = false), systemSaverOn = true).stillCanvas)
+        assertFalse(Saving.of(defaults.copy(saverStillBackground = false), systemSaverOn = true).stillCanvas)
+        assertFalse(Saving.of(defaults, systemSaverOn = false).stillCanvas)
+    }
+
+    @Test
     fun `following with every measure off is the same as not following`() {
         // Which matters for the wording on screen: "battery saver is on now, and these are in
         // force" would be a lie.

@@ -259,9 +259,10 @@ fun PlayerScreen(
     val preferStill = popupStill || saving.stillBackground
     // The window always freezes Living rather than swapping it: at that size the two look alike.
     val stillAsCover = saving.stillAsCover && !popupStill
-    // Only the playing track's video, and never where the background is meant to hold still.
+    // Only the playing track's, and where the background is held still, only a still of it.
     val video = canvas?.takeIf {
-        settings.canvasMode != CanvasMode.OFF && !preferStill && !demoMode &&
+        settings.canvasMode != CanvasMode.OFF && !popupStill && !demoMode &&
+            (!saving.stillBackground || it.file == null) &&
             it.trackId == snapshot.track?.spotifyTrackId
     }
     var videoShowing by remember { mutableStateOf(false) }
