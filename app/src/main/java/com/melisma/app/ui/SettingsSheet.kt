@@ -1395,7 +1395,7 @@ fun SettingsSheet(
                         is Updater.State.Available ->
                             "You have ${updater.currentVersion} · tap to download and install"
                         is Updater.State.ReadyToInstall ->
-                            "Downloaded · tap to open the installer again"
+                            "Downloaded · tap to install"
                         is Updater.State.Failed -> state.message
                         is Updater.State.UpToDate -> "${updater.currentVersion} is the newest release"
                         else -> "Asks GitHub for the newest release"

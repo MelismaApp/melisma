@@ -7,11 +7,13 @@
 
     <!--
       Installed from an APK rather than a store, so the app has to be able to offer its own
-      updates: this is what lets it hand a downloaded release to the system installer. It
-      grants nothing beyond that — Android still shows its own confirmation screen, and
-      still refuses an APK signed with a different key, which is what makes it safe.
+      updates: this is what lets it install a downloaded release. It grants nothing beyond
+      that — Android still refuses an APK signed with a different key, which is what makes
+      it safe.
     -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Lets an update install without Android's confirmation screen; see Updater.installSession. -->
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 
     <!--
       Android Auto. MAP_TEMPLATES buys MapWithContentTemplate, which is the one template outside the

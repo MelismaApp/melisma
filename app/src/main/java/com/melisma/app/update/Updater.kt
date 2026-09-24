@@ -1,10 +1,18 @@
 package com.melisma.app.update
 
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.IntentSender
+import android.content.pm.PackageInstaller
 import android.net.Uri
+import android.os.Build
 import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.content.IntentCompat
 import com.melisma.app.BuildConfig
 import com.melisma.app.lyrics.provider.Http
 import com.melisma.app.settings.SettingsStore
@@ -26,10 +34,8 @@ import java.util.concurrent.TimeUnit
  *
  * The app is installed from an APK rather than a store, so there is no update mechanism
  * unless it brings its own. This is that: a check against the releases API, a download, and
- * then Android's ordinary install screen — the same one the user saw when they installed it
- * the first time. Nothing is installed silently, and nothing can be: handing the APK to the
- * system installer is the only route an app without privileged permissions has, and the
- * confirmation it shows is the user's veto.
+ * an install session. Pressing Install in the app is the confirmation; Android asks again with
+ * its own screen only when it insists — see [installSession].
  *
  * Two things it deliberately does not do. It does not install a differently signed APK —
  * Android refuses that outright, which is the protection that makes this safe at all. And it
@@ -80,7 +86,7 @@ class Updater(
         /** [fraction] is -1 while the total size is unknown. */
         data class Downloading(val release: AvailableRelease, val fraction: Float) : State
 
-        /** The APK is on disk and the system installer has been asked to take it. */
+        /** The APK is on disk and Android has been asked to install it. */
         data class ReadyToInstall(val release: AvailableRelease) : State
 
         data class Failed(val message: String) : State
@@ -216,10 +222,10 @@ class Updater(
         }
 
         _state.value = State.ReadyToInstall(release)
-        if (!(handOver ?: ::openInstaller)(file)) {
+        if (!(handOver ?: { installSession(it) || openInstaller(it) })(file)) {
             _state.value = State.Failed(
-                "Could not open the installer. The APK is downloaded — " +
-                    "install it from your Downloads or Files app.",
+                "Could not start the install. The update is downloaded — " +
+                    "check for updates to try again without downloading it twice.",
             )
         }
     }
@@ -303,7 +309,90 @@ class Updater(
     }
 
     /**
-     * Ask Android to install [file].
+     * Install [file] through a [PackageInstaller] session, without Android's confirmation screen.
+     *
+     * Android 12 and later can skip the screen for an app updating itself. When it will not — older
+     * Android, the install-apps permission not yet granted, or a store owning the app's updates —
+     * the session reports that it needs the user and [onInstallStatus] shows Android's usual
+     * screen. Android closes the app to replace it.
+     */
+    private fun installSession(file: File): Boolean = runCatching {
+        val installer = context.packageManager.packageInstaller
+        // One left by an attempt that never finished would otherwise linger.
+        installer.mySessions.forEach { runCatching { installer.abandonSession(it.sessionId) } }
+
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+            setAppPackageName(context.packageName)
+            setSize(file.length())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+            }
+        }
+        val id = installer.createSession(params)
+        installer.openSession(id).use { session ->
+            session.openWrite("base.apk", 0, file.length()).use { out ->
+                file.inputStream().use { it.copyTo(out) }
+                session.fsync(out)
+            }
+            session.commit(statusSender(id))
+        }
+        true
+    }.getOrElse {
+        Log.w(TAG, "could not start an install session: ${it.message}")
+        false
+    }
+
+    private val statusAction = "${context.packageName}.UPDATE_STATUS"
+
+    /** Not exported: only the session's own status, sent through [statusSender], reaches it. */
+    private val statusReceiver: BroadcastReceiver by lazy {
+        object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) = onInstallStatus(
+                intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE),
+                intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE),
+                IntentCompat.getParcelableExtra(intent, Intent.EXTRA_INTENT, Intent::class.java),
+            )
+        }.also {
+            ContextCompat.registerReceiver(context, it, IntentFilter(statusAction), ContextCompat.RECEIVER_NOT_EXPORTED)
+        }
+    }
+
+    private fun statusSender(sessionId: Int): IntentSender {
+        statusReceiver
+        val intent = Intent(statusAction).setPackage(context.packageName)
+        // Mutable because Android fills the status in.
+        val mutable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+        return PendingIntent.getBroadcast(context, sessionId, intent, PendingIntent.FLAG_UPDATE_CURRENT or mutable)
+            .intentSender
+    }
+
+    /**
+     * What Android said about an install session.
+     *
+     * [confirm] is Android's own screen, sent when it wants the user after all. Unlike the screen
+     * [openInstaller] opens, a session reports being cancelled, so Install is offered again.
+     */
+    internal fun onInstallStatus(status: Int, message: String?, confirm: Intent?) {
+        when (status) {
+            PackageInstaller.STATUS_PENDING_USER_ACTION -> confirm?.let {
+                runCatching { context.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    .onFailure { e -> Log.w(TAG, "could not show the install confirmation: ${e.message}") }
+            }
+
+            // Android closes the app to replace it, so there is nothing to show.
+            PackageInstaller.STATUS_SUCCESS -> Unit
+
+            // Declined on Android's screen: the file is still on disk for the next press.
+            PackageInstaller.STATUS_FAILURE_ABORTED -> Unit
+
+            else -> _state.value = State.Failed(
+                "Android did not install the update" + (message?.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ""),
+            )
+        }
+    }
+
+    /**
+     * Ask Android to install [file] with its own screen, when a session could not be started.
      *
      * `ACTION_VIEW` on a content URI from our own FileProvider, which is what shows the
      * familiar "do you want to install this update?" screen. The system checks the signature

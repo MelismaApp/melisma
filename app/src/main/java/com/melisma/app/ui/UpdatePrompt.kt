@@ -119,14 +119,13 @@ fun UpdatePrompt(
 
                 else -> {
                     if (state is Updater.State.ReadyToInstall) {
-                        // Covers both moments this state is on screen: just before Android's screen
-                        // appears, and after it has been dismissed. The app cannot tell those apart
-                        // — nothing is reported back either way — so it says something true of both
-                        // rather than guessing.
+                        // Covers every moment this state is on screen: while Android installs,
+                        // before its confirmation appears when it asks for one, and after that has
+                        // been dismissed. So it says something true of all of them.
                         Text(
-                            "Downloaded. Android's own installer confirms it — if it did not " +
-                                "appear, or you closed it, press Install again. It will not " +
-                                "download a second time.",
+                            "Installing. Melisma closes while Android updates it — open it again " +
+                                "afterwards. If Android asked you to confirm and you closed that, " +
+                                "press Install again; it will not download a second time.",
                             color = Color.White.copy(alpha = 0.7f),
                             fontSize = 13.sp,
                             modifier = Modifier.padding(bottom = 14.dp),
