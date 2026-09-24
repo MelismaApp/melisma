@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.contentDescription
@@ -78,7 +79,9 @@ import com.melisma.app.settings.MediaPanelSide
 import com.melisma.app.settings.Settings
 import com.melisma.app.settings.ViewMode
 import com.melisma.app.ui.background.ArtworkColors
+import com.melisma.app.ui.background.CanvasFraming
 import com.melisma.app.ui.background.CanvasVideoBackground
+import com.melisma.app.ui.background.canvasFraming
 import com.melisma.app.ui.background.DynamicBackground
 import com.melisma.app.ui.components.AppIcons
 import com.melisma.app.ui.components.MediaPanel
@@ -257,6 +260,29 @@ fun PlayerScreen(
             it.trackId == snapshot.track?.spotifyTrackId
     }
     var videoShowing by remember { mutableStateOf(false) }
+    val framing = canvasFraming(
+        landscape = LocalConfiguration.current.run { screenWidthDp > screenHeightDp },
+        mode = settings.canvasMode,
+        // The conditions MainContent shows Cinema's panel under.
+        cinemaPanel = settings.viewMode == ViewMode.CINEMA && snapshot.track != null && document != null,
+    )
+    val canvasCard: (@Composable (Modifier) -> Unit)? =
+        if (video != null && framing == CanvasFraming.CARD) {
+            { mod ->
+                key(video.file) {
+                    CanvasVideoBackground(
+                        file = video.file,
+                        blurred = false,
+                        playing = snapshot.playback.isPlaying,
+                        onShowing = { videoShowing = it },
+                        modifier = mod,
+                        framing = CanvasFraming.CARD,
+                    )
+                }
+            }
+        } else {
+            null
+        }
 
     Box(modifier.fillMaxSize()) {
         DynamicBackground(
@@ -269,18 +295,20 @@ fun PlayerScreen(
             // Paused music stops the drift, which stops the redraws. The demo is exempt: it
             // exists to show the renderer off, and there is no playhead behind it to stop. A video
             // covering it stops it too, since nothing of it is visible.
-            playing = (snapshot.playback.isPlaying || demoMode) && !videoShowing,
+            playing = (snapshot.playback.isPlaying || demoMode) &&
+                !(videoShowing && framing == CanvasFraming.FILL),
             artistImage = extras.artistImage,
             tempoBpm = extras.tempo,
         )
 
-        if (video != null) {
+        if (video != null && framing != CanvasFraming.CARD) {
             key(video.file) {
                 CanvasVideoBackground(
                     file = video.file,
-                    blurred = settings.canvasMode == CanvasMode.BLURRED,
+                    blurred = settings.canvasMode == CanvasMode.BLURRED || framing == CanvasFraming.COLUMN,
                     playing = snapshot.playback.isPlaying,
                     onShowing = { videoShowing = it },
+                    framing = framing,
                 )
             }
         }
@@ -371,6 +399,8 @@ fun PlayerScreen(
                         },
                         onGrantPermission = onOpenNotificationAccess,
                         onStartDemo = { demoMode = true },
+                        canvasCard = canvasCard,
+                        canvasShowing = videoShowing,
                     )
                 }
 
@@ -552,6 +582,9 @@ private fun MainContent(
     onLongPressLine: (com.melisma.app.lyrics.model.LyricLine) -> Unit,
     onGrantPermission: () -> Unit,
     onStartDemo: () -> Unit,
+    /** A Canvas for Cinema's panel, in place of the cover. */
+    canvasCard: (@Composable (Modifier) -> Unit)?,
+    canvasShowing: Boolean,
 ) {
     when {
         !permissionGranted && !demoMode -> PermissionGate(
@@ -607,6 +640,8 @@ private fun MainContent(
                             onSeek = { container.media.seekTo(it) },
                             onOpenSource = { container.media.openSourceApp() },
                             modifier = mod,
+                            backdrop = canvasCard,
+                            hideCover = canvasCard != null && canvasShowing,
                         )
                     },
                     lyrics = lyrics,

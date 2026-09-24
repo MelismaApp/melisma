@@ -9,7 +9,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -18,24 +21,48 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.melisma.app.settings.CanvasMode
 import java.io.File
 
 /**
- * A Spotify Canvas video as the background: muted, looping, cropped to fill.
+ * Where a Canvas sits.
+ *
+ * Every Canvas is portrait, 9:16. Filled across a landscape phone it is cropped to the middle
+ * quarter of its height at four times its size.
+ */
+enum class CanvasFraming {
+    /** Cropped to fill the screen. */
+    FILL,
+
+    /** Full height down the middle, edges faded into the background either side. */
+    COLUMN,
+
+    /** Cropped to the bounds it is given, fading out downward: Cinema's side panel. */
+    CARD,
+}
+
+/**
+ * A Spotify Canvas video as the background: muted, looping, placed by [framing].
  *
  * Fades in on its first decoded frame, over whatever background is beneath it, so a slow load or a
  * file that will not play simply leaves that background showing. [onShowing] reports when it is
- * covering the screen, so the background underneath can stop animating.
+ * showing, so what it covers can stop animating.
  *
  * [blurred] uses a render effect, which Android 12 introduced; before that it plays unblurred.
  */
@@ -46,6 +73,7 @@ fun CanvasVideoBackground(
     playing: Boolean,
     onShowing: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    framing: CanvasFraming = CanvasFraming.FILL,
 ) {
     val playback = remember(file) { CanvasPlayback(file) }
     val reportShowing by rememberUpdatedState(onShowing)
@@ -78,20 +106,81 @@ fun CanvasVideoBackground(
 
     val alpha by animateFloatAsState(if (showing) 1f else 0f, tween(durationMillis = 600), label = "canvas")
 
-    Box(modifier.fillMaxSize().graphicsLayer { this.alpha = alpha }) {
+    val video = @Composable {
         AndroidView(
             factory = { context -> TextureView(context).apply { playback.attach(this) } },
             modifier = Modifier
                 .fillMaxSize()
                 .then(if (blurred) Modifier.blur(28.dp, BlurredEdgeTreatment.Rectangle) else Modifier),
         )
-        // Spicy Lyrics dims a Canvas to brightness(0.65); the lyrics need the same headroom here.
+    }
+    // Spicy Lyrics dims a Canvas to brightness(0.65); the lyrics need the same headroom here.
+    val dim = @Composable {
         Canvas(Modifier.fillMaxSize()) {
             drawRect(Color.Black.copy(alpha = 0.35f))
             drawFloorShade()
         }
     }
+
+    when (framing) {
+        CanvasFraming.FILL -> Box(modifier.fillMaxSize().graphicsLayer { this.alpha = alpha }) {
+            video()
+            dim()
+        }
+
+        CanvasFraming.COLUMN -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .fillMaxHeight()
+                    .aspectRatio(PORTRAIT, matchHeightConstraintsFirst = true)
+                    .mask(alpha, Brush.horizontalGradient(0f to Color.Transparent, 0.2f to Color.Black, 0.8f to Color.Black, 1f to Color.Transparent)),
+            ) {
+                video()
+                dim()
+            }
+        }
+
+        // Spicy Lyrics masks the Canvas in Spotify's own side panel the same way, fading it out
+        // toward the track details below it.
+        CanvasFraming.CARD -> Box(
+            modifier
+                .clip(RoundedCornerShape(16.dp))
+                .mask(alpha, Brush.verticalGradient(0f to Color.Black, 0.45f to Color.Black, 1f to Color.Transparent)),
+        ) {
+            video()
+            // The track details and the scrubber sit over the lower half.
+            Canvas(Modifier.fillMaxSize()) {
+                drawRect(Brush.verticalGradient(0.3f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.55f)))
+            }
+        }
+    }
 }
+
+/**
+ * Where a Canvas goes on this screen.
+ *
+ * Blurred fills everywhere, since blurred the crop does not show. Full fills a portrait screen; on
+ * a landscape one it takes the cover's place in Cinema's panel, or else runs down the middle,
+ * blurred, with the background either side.
+ */
+internal fun canvasFraming(landscape: Boolean, mode: CanvasMode, cinemaPanel: Boolean): CanvasFraming = when {
+    !landscape || mode == CanvasMode.BLURRED -> CanvasFraming.FILL
+    cinemaPanel -> CanvasFraming.CARD
+    else -> CanvasFraming.COLUMN
+}
+
+private const val PORTRAIT = 9f / 16f
+
+/** Fades the content by [alpha] and by [shape]'s own alpha, drawn offscreen so the mask cuts it. */
+private fun Modifier.mask(alpha: Float, shape: Brush): Modifier = this
+    .graphicsLayer {
+        this.alpha = alpha
+        compositingStrategy = CompositingStrategy.Offscreen
+    }
+    .drawWithContent {
+        drawContent()
+        drawRect(shape, blendMode = BlendMode.DstIn)
+    }
 
 /** One video's player and surface, owned by the composable that shows it. */
 private class CanvasPlayback(private val file: File) : TextureView.SurfaceTextureListener {

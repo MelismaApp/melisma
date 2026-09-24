@@ -1,6 +1,8 @@
 package com.melisma.app.ui.components
 
 import android.graphics.Bitmap
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,6 +37,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -70,8 +73,13 @@ fun MediaPanel(
     onSeek: (Long) -> Unit,
     onOpenSource: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Drawn behind the whole panel: a Canvas in landscape, which takes the cover's place. */
+    backdrop: (@Composable (Modifier) -> Unit)? = null,
+    /** Fade the cover out, keeping its space, while [backdrop] is showing through it. */
+    hideCover: Boolean = false,
 ) {
     var positionMs by rememberPlayheadMs(playback)
+    val coverAlpha by animateFloatAsState(if (hideCover) 0f else 1f, tween(600), label = "cover")
 
     var scrubFraction by remember { mutableFloatStateOf(-1f) }
     val duration = playback.durationMs.coerceAtLeast(1L)
@@ -94,6 +102,8 @@ fun MediaPanel(
         val roomForTransport = panelHeight > 210.dp
         val roomForOpen = panelHeight > 360.dp
 
+        backdrop?.invoke(Modifier.matchParentSize())
+
         Column(
             Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
@@ -109,6 +119,7 @@ fun MediaPanel(
                 Box(
                     Modifier
                         .size(side)
+                        .graphicsLayer { alpha = coverAlpha }
                         .clip(RoundedCornerShape(16.dp))
                         .background(Color.White.copy(alpha = 0.07f)),
                     contentAlignment = Alignment.Center,
