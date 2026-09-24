@@ -152,8 +152,9 @@ lookup it needs no key from the local network. Answer:
   https on `*.scdn.co` and end in `.mp4`, or the app ignores it, and it is used only when the query
   carried a `spotifyId`, for that Spotify track. The app downloads the video from Spotify's CDN
   with no credential; one that no longer exists leaves the ordinary background showing.
-- `canvasVariants` are Spotify's smaller encodings of the same Canvas, smallest first. The app does
-  not read them yet.
+- `canvasVariants` are still JPEG thumbnails of the Canvas on `i.scdn.co`, not smaller videos,
+  smallest first. They are portrait like the video, so `width` and `height` as the server labels
+  them are swapped: the `256 × 144` one is 144 wide and 256 tall. The app does not read them yet.
 - `palette`, `analysis` and `metadata` are held whole and served whole. The app reads none of
   them yet; they are collected because the tokens are the scarce thing, not the storage, and
   `audio-attributes` — which carries the tempo, key, loudness and the beat, bar and section grids
