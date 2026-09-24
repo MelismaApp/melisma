@@ -188,6 +188,10 @@ private class CanvasPlayback(private val file: File) : TextureView.SurfaceTextur
     private val player = MediaPlayer()
     private var view: TextureView? = null
     private var surface: Surface? = null
+    private var texture: SurfaceTexture? = null
+    /** The player's surface after its view let it go, kept until the next one takes over. */
+    private var orphan: SurfaceTexture? = null
+    private var loading = false
     private var prepared = false
     private var shown = false
     private var released = false
@@ -242,29 +246,65 @@ private class CanvasPlayback(private val file: File) : TextureView.SurfaceTextur
         runCatching { player.release() }
         surface?.release()
         surface = null
+        texture = null
+        orphan?.release()
+        orphan = null
         view?.surfaceTextureListener = null
         view = null
     }
 
+    /**
+     * A surface to draw into: the first, or a later one for the same video.
+     *
+     * Later ones come when the view is replaced — the framing changes on rotating, or on entering
+     * and leaving the floating window — or when the window comes back after being hidden. The
+     * player carries on into the new one.
+     */
     override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
-        if (released || surface != null) return
+        if (released) return
+        val previous = surface
+        val previousOrphan = orphan
         val created = Surface(texture)
         surface = created
+        this.texture = texture
+        orphan = null
         runCatching {
+            // Straight from the old surface to the new: a player given none in between stops
+            // drawing video, and does not start again when given another.
             player.setSurface(created)
-            player.setDataSource(file.path)
-            player.isLooping = true
-            // A Canvas has no sound track, and the song is playing elsewhere; never add to it.
-            player.setVolume(0f, 0f)
-            player.prepareAsync()
+            previous?.release()
+            previousOrphan?.release()
+            if (!loading) {
+                loading = true
+                player.setDataSource(file.path)
+                player.isLooping = true
+                // A Canvas has no sound track, and the song is playing elsewhere; never add to it.
+                player.setVolume(0f, 0f)
+                player.prepareAsync()
+            } else if (prepared) {
+                crop()
+                // A paused player draws nothing into a new surface until asked to.
+                if (!player.isPlaying) {
+                    player.seekTo(player.currentPosition.toLong(), MediaPlayer.SEEK_CLOSEST)
+                }
+            }
         }.onFailure { onFailure() }
     }
 
     override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) = crop()
 
+    /**
+     * Never the player: a view is torn down as its replacement arrives, and the video carries on
+     * into the new one.
+     *
+     * The player's current surface is kept, not released, until the next arrives. A replaced
+     * view's surface can go after its successor's has come, and that one is simply let go.
+     */
     override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
-        release()
-        return true
+        if (released || texture !== this.texture) return true
+        orphan = texture
+        this.texture = null
+        return false
     }
 
     override fun onSurfaceTextureUpdated(texture: SurfaceTexture) = Unit
