@@ -17,6 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -41,7 +43,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -662,6 +672,7 @@ fun SettingsSheet(
                     display = "${settings.syncOffsetMs}ms",
                     accent = accent,
                     onChange = { store.setSyncOffset((it / 10).toInt() * 10) },
+                    typed = TypedEntry(settings.syncOffsetMs, "ms") { store.setSyncOffset(it) },
                 )
                 Hint(
                     when {
@@ -677,7 +688,8 @@ fun SettingsSheet(
                         "almost always the first case, and needs a negative value. The player " +
                         "reports where it is in the file, but the earbuds are 150 to 250 " +
                         "milliseconds behind that — so the lyrics are running ahead of your ears " +
-                        "and need holding back.\n\nThe scrubber and the times either side of it " +
+                        "and need holding back.\n\nTap the number to type an exact offset, to the " +
+                        "millisecond.\n\nThe scrubber and the times either side of it " +
                         "are deliberately not shifted. They report where the player actually is, " +
                         "which is what you want when tapping a line to jump.",
                 )
@@ -1740,6 +1752,8 @@ fun SettingsSheet(
                             }
                         },
                     )
+                    // Under its own button, so it cannot be mistaken for the server's.
+                    probe?.forEach { report -> ProbeRow(report.name, report.outcome, working = false) }
                     Help(
                         "A source that is switched off, one that cannot reach its endpoint, and " +
                             "one that reached it and found nothing all look identical from the " +
@@ -1748,7 +1762,7 @@ fun SettingsSheet(
                             "cache, and prints what it said.",
                     )
 
-                        // ---- and what the server says about its own ------------------
+                    // ---- and what the server says about its own ------------------
                     var serverProbe by remember { mutableStateOf<List<ServerSource>?>(null) }
                     var serverProbing by remember { mutableStateOf(false) }
                     var serverFailed by remember { mutableStateOf(false) }
@@ -1772,6 +1786,23 @@ fun SettingsSheet(
                             }
                         },
                     )
+                    if (serverFailed) {
+                        Hint(
+                            "No answer. Check the URL and, if the server is not on this network, " +
+                                "the key.",
+                        )
+                    }
+                    serverProbe?.forEach { source ->
+                        ProbeRow(
+                            source.name,
+                            buildString {
+                                append(if (source.ok) "✓ " else "· ")
+                                append(source.detail.ifBlank { if (source.ok) "working" else "no" })
+                                source.ms?.let { append(" (").append(it).append("ms)") }
+                            },
+                            working = source.ok,
+                        )
+                    }
                     Help(
                         "The test above cannot answer this one. Pointing the app at a server puts " +
                             "every source behind one hop, and \u201cthe server returned no " +
@@ -1780,61 +1811,6 @@ fun SettingsSheet(
                             "This asks the server to test each of its own sources and report back. " +
                             "No token comes back, only whether one works.",
                     )
-
-                    if (serverFailed) {
-                        Hint(
-                            "No answer. Check the URL and, if the server is not on this network, " +
-                                "the key.",
-                        )
-                    }
-
-                    serverProbe?.forEach { source ->
-                        Row(
-                            Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                            verticalAlignment = Alignment.Top,
-                        ) {
-                            Text(
-                                source.name,
-                                color = Color.White.copy(alpha = 0.8f),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.width(112.dp),
-                            )
-                            Text(
-                                buildString {
-                                    append(if (source.ok) "✓ " else "· ")
-                                    append(source.detail.ifBlank { if (source.ok) "working" else "no" })
-                                    source.ms?.let { append(" (").append(it).append("ms)") }
-                                },
-                                color = Color.White.copy(
-                                    alpha = if (source.ok) 0.7f else 0.5f,
-                                ),
-                                fontSize = 12.sp,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                    }
-
-                    probe?.forEach { report ->
-                        Row(
-                            Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                            verticalAlignment = Alignment.Top,
-                        ) {
-                            Text(
-                                report.name,
-                                color = Color.White.copy(alpha = 0.8f),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.width(112.dp),
-                            )
-                            Text(
-                                report.outcome,
-                                color = Color.White.copy(alpha = 0.55f),
-                                fontSize = 12.sp,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                    }
                 }
             }
 
@@ -2129,11 +2105,17 @@ private fun SliderRow(
     display: String,
     accent: Color,
     onChange: (Float) -> Unit,
+    /** When set, tapping the value types one in, for a slider too coarse to land on it. */
+    typed: TypedEntry? = null,
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Row(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(label, color = Color.White, fontSize = 15.sp, modifier = Modifier.weight(1f))
-            Text(display, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+            if (typed == null) {
+                Text(display, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+            } else {
+                TypedValue(typed, display, accent)
+            }
         }
         Slider(
             value = value.coerceIn(range.start, range.endInclusive),
@@ -2144,6 +2126,84 @@ private fun SliderRow(
                 activeTrackColor = accent,
                 inactiveTrackColor = Color.White.copy(alpha = 0.16f),
             ),
+        )
+    }
+}
+
+/** A whole number that can be typed as well as slid to: the current value, its unit, and what to do with a new one. */
+private class TypedEntry(val current: Int, val unit: String, val onEnter: (Int) -> Unit)
+
+/**
+ * The value of a [SliderRow], boxed like the other text fields to show it can be tapped, and a
+ * number field once it is. Each valid number takes effect as it is typed.
+ */
+@Composable
+private fun TypedValue(entry: TypedEntry, display: String, accent: Color) {
+    var editing by remember { mutableStateOf(false) }
+    val box = Modifier
+        .clip(RoundedCornerShape(8.dp))
+        .background(Color.White.copy(alpha = 0.07f))
+    if (!editing) {
+        Text(
+            display,
+            color = Color.White.copy(alpha = 0.6f),
+            fontSize = 13.sp,
+            modifier = box.clickable { editing = true }.padding(horizontal = 8.dp, vertical = 3.dp),
+        )
+        return
+    }
+
+    val start = entry.current.toString()
+    var text by remember { mutableStateOf(TextFieldValue(start, selection = TextRange(0, start.length))) }
+    val focus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    var focused by remember { mutableStateOf(false) }
+    Row(box.padding(horizontal = 8.dp, vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+        BasicTextField(
+            value = text,
+            onValueChange = { new ->
+                if (new.text.matches(TYPED_NUMBER)) {
+                    text = new
+                    new.text.toIntOrNull()?.let(entry.onEnter)
+                }
+            },
+            textStyle = TextStyle(color = Color.White, fontSize = 13.sp, textAlign = TextAlign.End),
+            cursorBrush = SolidColor(accent),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+            modifier = Modifier
+                .width(48.dp)
+                .focusRequester(focus)
+                .onFocusChanged {
+                    if (focused && !it.isFocused) editing = false
+                    focused = it.isFocused
+                },
+        )
+        Text(entry.unit, color = Color.White.copy(alpha = 0.6f), fontSize = 13.sp)
+    }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+}
+
+/** A sign and up to five digits: enough for any offset, and nothing that is not a number. */
+private val TYPED_NUMBER = Regex("-?\\d{0,5}")
+
+/** One line of a test's results: what was asked, and what it said. */
+@Composable
+private fun ProbeRow(name: String, outcome: String, working: Boolean) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.Top) {
+        Text(
+            name,
+            color = Color.White.copy(alpha = 0.8f),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.width(112.dp),
+        )
+        Text(
+            outcome,
+            color = Color.White.copy(alpha = if (working) 0.7f else 0.55f),
+            fontSize = 12.sp,
+            modifier = Modifier.weight(1f),
         )
     }
 }
