@@ -629,7 +629,7 @@ fun SettingsSheet(
                     Hint("Canvas needs the same Spotify token as Spotify lyrics — without it, the style above shows.")
                 }
                 Help(
-                    "The looping video Spotify shows behind some tracks, in place of the style above. Tracks without one, other players, battery saver and the floating window all show the style above instead. Needs a Spotify token, or a cache server that has the track's Canvas, and is skipped when Data Saver is on over mobile data. Blurred needs Android 12 or later.\n\nA Canvas is portrait, so in landscape Full moves: into the cover's place in Cinema view, and down the middle, blurred, with the style above either side in the lyrics view.\n\nIn the car only Blurred plays: a full video is something to watch, and a driver should not be given one.",
+                    "The looping video Spotify shows behind some tracks, in place of the style above. Tracks without one, other players, battery saver and a floating window held still all show the style above instead, and nothing is downloaded while the app is off screen. Needs a Spotify token, or a cache server that has the track's Canvas, and is skipped when Data Saver is on over mobile data. Blurred needs Android 12 or later.\n\nA Canvas is portrait, so in landscape Full moves: into the cover's place in Cinema view, and down the middle, blurred, with the style above either side in the lyrics view.\n\nIn the car only Blurred plays: a full video is something to watch, and a driver should not be given one.",
                 )
             }
 

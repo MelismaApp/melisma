@@ -1,5 +1,7 @@
 package com.melisma.app.media
 
+import com.melisma.app.settings.CanvasMode
+import com.melisma.app.settings.Settings
 import java.io.ByteArrayOutputStream
 import java.nio.file.Files
 import kotlinx.coroutines.runBlocking
@@ -137,6 +139,28 @@ class SpotifyCanvasTest {
         } finally {
             dir.deleteRecursively()
         }
+    }
+
+    @Test
+    fun `nothing is fetched that nothing on screen would show`() {
+        val full = Settings(canvasMode = CanvasMode.FULL)
+        val blurred = Settings(canvasMode = CanvasMode.BLURRED)
+        fun showable(s: Settings, window: Boolean = false, popup: Boolean = false, car: Boolean = false, blur: Boolean = true) =
+            canvasShowable(s, window = window, popup = popup, car = car, blurAvailable = blur)
+
+        // The app closed with music playing: the case that downloaded a video per track.
+        assertFalse(showable(full))
+        assertTrue(showable(full, window = true))
+        assertFalse(showable(Settings(canvasMode = CanvasMode.OFF), window = true, car = true))
+
+        // A floating window shows one only when its background is allowed to move.
+        assertFalse(showable(full, window = true, popup = true))
+        assertTrue(showable(full.copy(popupStillBackground = false), window = true, popup = true))
+
+        // The car plays Blurred only, and only with the render effect to blur it.
+        assertFalse(showable(full, car = true))
+        assertTrue(showable(blurred, car = true))
+        assertFalse(showable(blurred, car = true, blur = false))
     }
 
     // ---- a minimal protobuf writer, independent of the one under test ----

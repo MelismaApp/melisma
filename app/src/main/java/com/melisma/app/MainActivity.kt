@@ -335,6 +335,7 @@ class MainActivity : ComponentActivity() {
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         _inPopup.value = isInPictureInPictureMode
+        container.inPopup = isInPictureInPictureMode
     }
 
     private fun popupSupported(): Boolean =

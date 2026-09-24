@@ -30,10 +30,14 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /** ~30 fps. See the comment where it is used. */
 private const val BACKGROUND_FRAME_INTERVAL_NANOS = 33_000_000L
+
+/** How long Living holds the last cover while the next track's is missing. */
+private const val ARTWORK_GAP_MS = 2_000L
 
 /** The style actually drawn, after the fallbacks and the still-background rules. */
 internal fun resolveStyle(
@@ -388,7 +392,16 @@ private fun KawarpBackground(
     var transitionStartMs by remember { mutableStateOf(0L) }
 
     LaunchedEffect(artwork) {
-        val source = artwork ?: return@LaunchedEffect
+        val source = artwork
+        if (source == null) {
+            // Usually the next cover on its way: a player that publishes a URI sends the track
+            // before its bitmap, and holding the last one keeps the crossfade. A cover that never
+            // comes must not leave the previous track's showing.
+            delay(ARTWORK_GAP_MS)
+            previous = null
+            current = null
+            return@LaunchedEffect
+        }
         val blurred = withContext(Dispatchers.Default) { runCatching { source.kawarpField() }.getOrNull() }
             ?: return@LaunchedEffect
         // The first cover appears at once; later ones cross-fade in, as in Kawarp.
@@ -450,7 +463,7 @@ private fun KawarpBackground(
         drawRect(colors.base)
         val bitmap = frame
         // Read so a new frame redraws this layer without recomposing anything.
-        if (bitmap != null && frameVersion > 0) {
+        if (bitmap != null && frameVersion > 0 && current != null) {
             bounds.set(0, 0, this.size.width.toInt(), this.size.height.toInt())
             drawIntoCanvas { it.nativeCanvas.drawBitmap(bitmap, null, bounds, paint) }
         }

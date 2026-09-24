@@ -44,6 +44,7 @@ import android.graphics.Bitmap
 import com.melisma.app.media.CanvasVideo
 import com.melisma.app.media.CanvasVideoCache
 import com.melisma.app.media.SpotifyCanvas
+import com.melisma.app.media.canvasShowable
 import com.melisma.app.settings.CanvasMode
 import com.melisma.app.media.TrackInfo
 import com.melisma.app.media.AppleArtwork
@@ -205,6 +206,15 @@ class AppContainer(context: Context) {
             if (value) lastActivityAt = System.currentTimeMillis()
         }
 
+    /** Whether the window on screen is the floating one. Set by the activity. */
+    private val _inPopup = MutableStateFlow(false)
+
+    var inPopup: Boolean
+        get() = _inPopup.value
+        set(value) {
+            _inPopup.value = value
+        }
+
     /** Somewhere of ours is on screen — a window, a floating window, or a car. */
     private val attention: Flow<Boolean> =
         combine(_uiVisible, _carConnected) { window, car -> window || car }
@@ -363,10 +373,22 @@ class AppContainer(context: Context) {
         // Canvas on its own path rather than inside the extras: it has its own switch, its own
         // host, and nothing the extras chain would want to wait for.
         scope.launch {
-            combine(media.snapshot, settings.settings, saving) { snapshot, settings, saving ->
+            val surfaces = combine(_uiVisible, _inPopup, _carConnected) { window, popup, car ->
+                Triple(window, popup, car)
+            }
+            combine(media.snapshot, settings.settings, saving, surfaces) { snapshot, settings, saving, (window, popup, car) ->
                 CanvasInputs(
                     trackId = snapshot.track?.spotifyTrackId,
-                    wanted = settings.canvasMode != CanvasMode.OFF && !saving.stillBackground,
+                    // Only while something on screen would show it: music playing with the app
+                    // closed, or behind a floating window held still, would otherwise download a
+                    // video for every track. Coming back fetches the one playing then.
+                    wanted = !saving.stillBackground && canvasShowable(
+                        settings,
+                        window = window,
+                        popup = popup,
+                        car = car,
+                        blurAvailable = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S,
+                    ),
                     spotifyToken = settings.spotifyWebToken.orEmpty() + settings.spDcCookie.orEmpty() +
                         settings.spotifyBrowserTokenActive,
                     server = settings.cacheServerExtrasActive,

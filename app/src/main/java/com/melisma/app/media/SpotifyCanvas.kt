@@ -3,12 +3,15 @@ package com.melisma.app.media
 import com.melisma.app.lyrics.provider.Http
 import com.melisma.app.lyrics.provider.ProviderCredentials
 import com.melisma.app.lyrics.provider.SpotifyWebToken
+import com.melisma.app.settings.CanvasMode
+import com.melisma.app.settings.Settings
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.URI
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -237,7 +240,9 @@ class CanvasVideoCache(private val dir: File, private val maxBytes: Long = 80L *
         }
 
         val partial = File(dir, file.name + ".part")
-        val ok = runCatching { download(url, partial) }.getOrDefault(false)
+        // A blocking read ignores cancellation, so it is checked between chunks: leaving the app
+        // or skipping the track stops the download rather than finishing it for nobody.
+        val ok = runCatching { download(url, partial) { !isActive } }.getOrDefault(false)
 
         if (!ok || !partial.renameTo(file)) {
             partial.delete()
@@ -247,8 +252,8 @@ class CanvasVideoCache(private val dir: File, private val maxBytes: Long = 80L *
         file
     }
 
-    /** True when [target] holds the whole video; false for a failure or anything over the cap. */
-    private fun download(url: String, target: File): Boolean {
+    /** True when [target] holds the whole video; false for a failure, a cancellation or anything over the cap. */
+    private fun download(url: String, target: File, cancelled: () -> Boolean): Boolean {
         client.newCall(Http.request(url)).execute().use { response ->
             val body = response.body ?: return false
             if (!response.isSuccessful || body.contentLength() > MAX_VIDEO_BYTES) return false
@@ -257,6 +262,7 @@ class CanvasVideoCache(private val dir: File, private val maxBytes: Long = 80L *
                 body.byteStream().use { input ->
                     val buffer = ByteArray(64 * 1024)
                     while (true) {
+                        if (cancelled()) return false
                         val read = input.read(buffer)
                         if (read < 0) break
                         written += read
@@ -291,3 +297,22 @@ class CanvasVideoCache(private val dir: File, private val maxBytes: Long = 80L *
 
 /** A Canvas video ready to play, and the track it belongs to. */
 data class CanvasVideo(val trackId: String, val file: File)
+
+/**
+ * Whether anything on screen would show a Canvas, so one is worth fetching.
+ *
+ * The screens' own rules, restated: a floating window holding its background still shows none,
+ * and the car shows only Blurred, which needs the render effect.
+ */
+internal fun canvasShowable(
+    settings: Settings,
+    window: Boolean,
+    popup: Boolean,
+    car: Boolean,
+    blurAvailable: Boolean,
+): Boolean {
+    if (settings.canvasMode == CanvasMode.OFF) return false
+    val inWindow = window && !(popup && settings.popupStillBackground)
+    val inCar = car && settings.canvasMode == CanvasMode.BLURRED && blurAvailable
+    return inWindow || inCar
+}
