@@ -41,6 +41,7 @@ import kotlinx.coroutines.launch
 import com.melisma.app.media.ArtworkSearch
 import com.melisma.app.settings.ArtworkSource
 import android.graphics.Bitmap
+import com.melisma.app.media.CanvasLink
 import com.melisma.app.media.CanvasVideo
 import com.melisma.app.media.CanvasVideoCache
 import com.melisma.app.media.SpotifyCanvas
@@ -161,7 +162,8 @@ class AppContainer(context: Context) {
     private val _canvasVideo = MutableStateFlow<CanvasVideo?>(null)
 
     /**
-     * The playing track's Canvas video, on disk, when Canvas is on and Spotify has one.
+     * The playing track's Canvas, when Canvas is on and Spotify has one: a still of it while the
+     * video downloads, then the video on disk.
      *
      * Null the moment the track changes, so a video never plays over the wrong song. Tagged with the
      * track so the screen can check it is still the one playing.
@@ -421,13 +423,24 @@ class AppContainer(context: Context) {
 
         // The phone's own token first, as with the artwork: it is about the track playing now. The
         // server when the phone could not ask Spotify, or when it is to be the only source.
-        var url = if (inputs.serverOnly) null else spotifyCanvas.videoFor(trackId)
-        if (url == null && inputs.server && (inputs.serverOnly || !spotifyCanvas.hasAnswered(trackId))) {
+        var link = if (inputs.serverOnly) null else spotifyCanvas.canvasFor(trackId)
+        if (link == null && inputs.server && (inputs.serverOnly || !spotifyCanvas.hasAnswered(trackId))) {
             val track = media.snapshot.value.track?.takeIf { it.spotifyTrackId == trackId } ?: return
-            url = runCatching { cacheServerExtras.fetch(track) }.getOrNull()?.canvasUrl
+            val extras = runCatching { cacheServerExtras.fetch(track) }.getOrNull()
+            link = extras?.canvasUrl?.let { CanvasLink(it, extras.canvasPosterUrl) }
         }
-        val file = url?.let { canvasCache.fileFor(it) } ?: return
-        _canvasVideo.value = CanvasVideo(trackId, file)
+        val canvas = link ?: return
+
+        // A video played before is on disk already. One that is not shows its still while it
+        // downloads, and keeps showing it if the download never finishes.
+        canvasCache.cached(canvas.videoUrl)?.let {
+            _canvasVideo.value = CanvasVideo(trackId, it)
+            return
+        }
+        val poster = canvas.posterUrl?.let { canvasCache.poster(it) }
+        if (poster != null) _canvasVideo.value = CanvasVideo(trackId, file = null, poster = poster)
+        val file = canvasCache.fileFor(canvas.videoUrl) ?: return
+        _canvasVideo.value = CanvasVideo(trackId, file, poster)
     }
 
     /** Data Saver on a metered network: a video per track is exactly what it asks apps not to do. */

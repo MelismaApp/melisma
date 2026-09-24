@@ -39,11 +39,28 @@ internal fun parseCachedExtras(body: String): CachedExtras? = runCatching {
         isrc = data.extrasString("isrc"),
         // Checked here as well as before download, so a URL that is not a Canvas never gets in.
         canvasUrl = data.extrasString("canvasUrl")?.takeIf(SpotifyCanvas::isCanvasVideo),
-    ).takeIf {
+        canvasPosterUrl = data.largestStill("canvasThumbnails") ?: data.largestStill("canvasVariants"),
+    ).let { if (it.canvasUrl == null) it.copy(canvasPosterUrl = null) else it }.takeIf {
         it.coverUrl != null || it.artistImageUrl != null || it.tempo != null || it.isrc != null ||
             it.canvasUrl != null
     }
 }.getOrNull()
+
+/**
+ * The largest of a Canvas's stills. Only the area is compared, so it does not matter that servers
+ * before `canvasThumbnails` sent `canvasVariants` with width and height swapped.
+ */
+private fun kotlinx.serialization.json.JsonObject.largestStill(key: String): String? =
+    runCatching { get(key)?.jsonArray }.getOrNull()
+        ?.mapNotNull { element ->
+            val still = runCatching { element.jsonObject }.getOrNull() ?: return@mapNotNull null
+            val url = still.extrasString("url")?.takeIf(SpotifyCanvas::isCanvasStill) ?: return@mapNotNull null
+            val width = still["width"]?.jsonPrimitive?.intOrNull ?: 0
+            val height = still["height"]?.jsonPrimitive?.intOrNull ?: 0
+            url to width.toLong() * height
+        }
+        ?.maxByOrNull { it.second }
+        ?.first
 
 private fun kotlinx.serialization.json.JsonObject.extrasString(key: String): String? =
     runCatching { get(key)?.jsonPrimitive?.contentOrNull }.getOrNull()
@@ -95,6 +112,8 @@ data class CachedExtras(
     val isrc: String? = null,
     /** The track's Spotify Canvas video, on Spotify's CDN. */
     val canvasUrl: String? = null,
+    /** A still of that video, to show while it downloads. */
+    val canvasPosterUrl: String? = null,
 )
 
 /**

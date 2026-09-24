@@ -41,7 +41,7 @@ class SpotifyCanvasTest {
                 field(5, "spotify:track:$trackId")
             })
         }
-        assertEquals(mapOf("spotify:track:$trackId" to video), SpotifyCanvas.canvasUrls(response))
+        assertEquals(mapOf("spotify:track:$trackId" to CanvasLink(video)), SpotifyCanvas.canvasLinks(response))
     }
 
     @Test
@@ -62,17 +62,19 @@ class SpotifyCanvasTest {
                 })
                 field(8, "artist")
                 field(11, "spotify:canvas:0G6u")
-                field(13, message { varint(1, 256); varint(2, 144); field(3, video) })
-                field(13, message { varint(1, 512); varint(2, 288); field(3, video) })
+                // Stills, not videos: height first, then width, then the image.
+                field(13, message { varint(1, 256); varint(2, 144); field(3, "https://i.scdn.co/image/ab67ba6900002ea6") })
+                field(13, message { varint(1, 512); varint(2, 288); field(3, "https://i.scdn.co/image/ab67ba6900002e9f") })
             })
             varint(2, 3600)
         }
-        assertEquals(mapOf("spotify:track:$trackId" to video), SpotifyCanvas.canvasUrls(response))
+        val link = CanvasLink(video, posterUrl = "https://i.scdn.co/image/ab67ba6900002e9f")
+        assertEquals(mapOf("spotify:track:$trackId" to link), SpotifyCanvas.canvasLinks(response))
     }
 
     @Test
     fun `a track without a canvas is answered with only a ttl`() {
-        assertTrue(SpotifyCanvas.canvasUrls(message { varint(2, 3600) }).isEmpty())
+        assertTrue(SpotifyCanvas.canvasLinks(message { varint(2, 3600) }).isEmpty())
     }
 
     @Test
@@ -88,7 +90,7 @@ class SpotifyCanvasTest {
                 field(5, "spotify:track:two")
             })
         }
-        assertTrue(SpotifyCanvas.canvasUrls(response).isEmpty())
+        assertTrue(SpotifyCanvas.canvasLinks(response).isEmpty())
     }
 
     @Test
@@ -106,7 +108,7 @@ class SpotifyCanvasTest {
                 field(5, "spotify:track:$trackId")
             })
         }
-        assertEquals(video, SpotifyCanvas.canvasUrls(response)["spotify:track:$trackId"])
+        assertEquals(video, SpotifyCanvas.canvasLinks(response)["spotify:track:$trackId"]?.videoUrl)
     }
 
     @Test
@@ -117,8 +119,8 @@ class SpotifyCanvasTest {
                 field(5, "spotify:track:$trackId")
             })
         }
-        for (cut in 1 until good.size) SpotifyCanvas.canvasUrls(good.copyOf(cut))
-        assertTrue(SpotifyCanvas.canvasUrls(byteArrayOf(0x0f, 0x7f, 0x7f)).isEmpty())
+        for (cut in 1 until good.size) SpotifyCanvas.canvasLinks(good.copyOf(cut))
+        assertTrue(SpotifyCanvas.canvasLinks(byteArrayOf(0x0f, 0x7f, 0x7f)).isEmpty())
     }
 
     @Test
@@ -128,6 +130,27 @@ class SpotifyCanvasTest {
         assertFalse(SpotifyCanvas.isCanvasVideo("https://canvaz.scdn.co.example.com/x.mp4"))
         assertFalse(SpotifyCanvas.isCanvasVideo("https://canvaz.scdn.co/upload/x.jpg"))
         assertFalse(SpotifyCanvas.isCanvasVideo("not a url"))
+    }
+
+    @Test
+    fun `only https images on Spotify's CDN count as stills`() {
+        assertTrue(SpotifyCanvas.isCanvasStill("https://i.scdn.co/image/ab67ba6900002e9f"))
+        assertFalse(SpotifyCanvas.isCanvasStill("http://i.scdn.co/image/ab67"))
+        assertFalse(SpotifyCanvas.isCanvasStill("https://i.scdn.co.example.com/image/ab67"))
+        assertFalse(SpotifyCanvas.isCanvasStill("https://canvaz.scdn.co/upload/x.mp4"))
+    }
+
+    @Test
+    fun `a still that is not an image is not a poster`() {
+        val video = "https://canvaz.scdn.co/upload/x.mp4"
+        val response = message {
+            field(1, message {
+                field(2, video)
+                field(5, "spotify:track:$trackId")
+                field(13, message { varint(1, 512); varint(2, 288); field(3, "https://example.com/x.jpg") })
+            })
+        }
+        assertEquals(CanvasLink(video), SpotifyCanvas.canvasLinks(response)["spotify:track:$trackId"])
     }
 
     @Test

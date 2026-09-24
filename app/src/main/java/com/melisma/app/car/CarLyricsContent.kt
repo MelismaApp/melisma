@@ -124,9 +124,11 @@ fun CarLyricsContent(container: AppContainer, insets: PaddingValues) {
         )
 
         if (video != null) {
-            key(video.file) {
+            // The track, not the file: the still and then the video are one Canvas.
+            key(video.trackId) {
                 CanvasVideoBackground(
                     file = video.file,
+                    poster = video.poster,
                     blurred = true,
                     playing = snapshot.playback.isPlaying,
                     onShowing = { videoShowing = it },

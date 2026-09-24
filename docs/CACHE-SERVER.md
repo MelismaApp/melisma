@@ -153,8 +153,10 @@ lookup it needs no key from the local network. Answer:
   carried a `spotifyId`, for that Spotify track. The app downloads the video from Spotify's CDN
   with no credential; one that no longer exists leaves the ordinary background showing.
 - `canvasThumbnails` are still JPEG images of the Canvas on `i.scdn.co`, not smaller videos,
-  portrait like the video and smallest first. The app does not read them yet. Servers before
-  melisma-server e4091c5 sent them as `canvasVariants`, with `width` and `height` swapped.
+  portrait like the video and smallest first. The app shows the largest while the video downloads,
+  and keeps showing it if the download fails. It must be https on `*.scdn.co` under `/image/`, and
+  is ignored without a `canvasUrl`. Servers before melisma-server e4091c5 sent them as
+  `canvasVariants`, with `width` and `height` swapped; both are read.
 - `palette`, `analysis` and `metadata` are held whole and served whole. The app reads none of
   them yet; they are collected because the tokens are the scarce thing, not the storage, and
   `audio-attributes` — which carries the tempo, key, loudness and the beat, bar and section grids

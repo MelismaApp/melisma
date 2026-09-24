@@ -120,7 +120,7 @@ class CacheServerExtrasContractTest {
 
     @Test
     fun `a Canvas address is read, and is enough on its own`() {
-        // The shape melisma-server e4091c5 serves. `canvasThumbnails` is not read yet.
+        // The shape melisma-server e4091c5 serves.
         val url = "https://canvaz.scdn.co/upload/artist/06HL/video/1650.cnvs.mp4"
         val served = """
             {
@@ -135,8 +135,29 @@ class CacheServerExtrasContractTest {
             }
         """.trimIndent()
         assertEquals(url, parseCachedExtras(served)?.canvasUrl)
+        // The largest still is the poster.
+        assertEquals("https://i.scdn.co/image/ab67ba6900002e9f", parseCachedExtras(served)?.canvasPosterUrl)
         assertEquals(url, parseCachedExtras("""{"canvasUrl":"$url"}""")?.canvasUrl)
         assertEquals(url, parseCachedExtras("""{"data":{"tempo":120.0,"canvasUrl":"$url"}}""")?.canvasUrl)
+    }
+
+    @Test
+    fun `stills from a server before the rename are read too`() {
+        // Sent as canvasVariants, with width and height swapped: only the area is compared.
+        val body = """
+            {"canvasUrl":"https://canvaz.scdn.co/x.mp4","canvasVariants":[
+             {"width":256,"height":144,"url":"https://i.scdn.co/image/small"},
+             {"width":512,"height":288,"url":"https://i.scdn.co/image/large"}]}
+        """.trimIndent()
+        assertEquals("https://i.scdn.co/image/large", parseCachedExtras(body)?.canvasPosterUrl)
+    }
+
+    @Test
+    fun `a still with no video, or off Spotify's CDN, is no poster`() {
+        val stills = """[{"width":288,"height":512,"url":"https://i.scdn.co/image/large"}]"""
+        assertNull(parseCachedExtras("""{"tempo":90,"canvasThumbnails":$stills}""")?.canvasPosterUrl)
+        val foreign = """{"canvasUrl":"https://canvaz.scdn.co/x.mp4","canvasThumbnails":[{"width":1,"height":1,"url":"https://example.com/x.jpg"}]}"""
+        assertNull(parseCachedExtras(foreign)?.canvasPosterUrl)
     }
 
     @Test

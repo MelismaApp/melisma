@@ -1,5 +1,6 @@
 package com.melisma.app.ui.background
 
+import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.media.MediaPlayer
@@ -8,6 +9,7 @@ import android.view.TextureView
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -17,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -31,7 +34,9 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -58,35 +63,36 @@ enum class CanvasFraming {
 }
 
 /**
- * A Spotify Canvas video as the background: muted, looping, placed by [framing].
+ * A Spotify Canvas as the background: muted, looping, placed by [framing].
  *
- * Fades in on its first decoded frame, over whatever background is beneath it, so a slow load or a
- * file that will not play simply leaves that background showing. [onShowing] reports when it is
- * showing, so what it covers can stop animating.
+ * [poster], a still of the Canvas, shows while [file] downloads; the video fades in over it on its
+ * first decoded frame. The whole layer fades in over whatever background is beneath it, so a slow
+ * load, or a video that will not play with no still to stand in, simply leaves that background
+ * showing. [onShowing] reports when anything of it is showing, so what it covers can stop
+ * animating.
  *
  * [blurred] uses a render effect, which Android 12 introduced; before that it plays unblurred.
  */
 @Composable
 fun CanvasVideoBackground(
-    file: File,
+    file: File?,
+    poster: Bitmap?,
     blurred: Boolean,
     playing: Boolean,
     onShowing: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
     framing: CanvasFraming = CanvasFraming.FILL,
 ) {
-    val playback = remember(file) { CanvasPlayback(file) }
+    val playback = remember(file) { file?.let(::CanvasPlayback) }
     val reportShowing by rememberUpdatedState(onShowing)
-    var showing by remember(file) { mutableStateOf(false) }
-    playback.onFirstFrame = { showing = true; reportShowing(true) }
-    playback.onFailure = { showing = false; reportShowing(false) }
+    var videoShown by remember(file) { mutableStateOf(false) }
+    playback?.onFirstFrame = { videoShown = true }
+    playback?.onFailure = { videoShown = false }
+    val showing = videoShown || poster != null
 
-    DisposableEffect(playback) {
-        onDispose {
-            playback.release()
-            reportShowing(false)
-        }
-    }
+    LaunchedEffect(showing) { reportShowing(showing) }
+    DisposableEffect(Unit) { onDispose { reportShowing(false) } }
+    DisposableEffect(playback) { onDispose { playback?.release() } }
 
     // Paused music pauses the video; so does the screen going away.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -94,25 +100,38 @@ fun CanvasVideoBackground(
     DisposableEffect(lifecycle, playback) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_STOP -> playback.setPlaying(false)
-                Lifecycle.Event.ON_START -> playback.setPlaying(wantsToPlay)
+                Lifecycle.Event.ON_STOP -> playback?.setPlaying(false)
+                Lifecycle.Event.ON_START -> playback?.setPlaying(wantsToPlay)
                 else -> Unit
             }
         }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(playback, playing) { playback.setPlaying(playing) }
+    LaunchedEffect(playback, playing) { playback?.setPlaying(playing) }
 
     val alpha by animateFloatAsState(if (showing) 1f else 0f, tween(durationMillis = 600), label = "canvas")
+    val videoAlpha by animateFloatAsState(if (videoShown) 1f else 0f, tween(durationMillis = 600), label = "video")
+    val still = remember(poster) { poster?.asImageBitmap() }
 
     val video = @Composable {
-        AndroidView(
-            factory = { context -> TextureView(context).apply { playback.attach(this) } },
-            modifier = Modifier
+        Box(
+            Modifier
                 .fillMaxSize()
                 .then(if (blurred) Modifier.blur(28.dp, BlurredEdgeTreatment.Rectangle) else Modifier),
-        )
+        ) {
+            if (still != null) {
+                Image(still, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            }
+            if (playback != null) {
+                key(playback) {
+                    AndroidView(
+                        factory = { context -> TextureView(context).apply { playback.attach(this) } },
+                        modifier = Modifier.fillMaxSize().graphicsLayer { this.alpha = videoAlpha },
+                    )
+                }
+            }
+        }
     }
     // Spicy Lyrics dims a Canvas to brightness(0.65); the lyrics need the same headroom here.
     val dim = @Composable {

@@ -275,9 +275,11 @@ fun PlayerScreen(
     val canvasCard: (@Composable (Modifier) -> Unit)? =
         if (video != null && framing == CanvasFraming.CARD) {
             { mod ->
-                key(video.file) {
+                // The track, not the file: the still and then the video are one Canvas.
+                key(video.trackId) {
                     CanvasVideoBackground(
                         file = video.file,
+                        poster = video.poster,
                         blurred = false,
                         playing = snapshot.playback.isPlaying,
                         onShowing = { videoShowing = it },
@@ -308,9 +310,11 @@ fun PlayerScreen(
         )
 
         if (video != null && framing != CanvasFraming.CARD) {
-            key(video.file) {
+            // The track, not the file: the still and then the video are one Canvas.
+            key(video.trackId) {
                 CanvasVideoBackground(
                     file = video.file,
+                    poster = video.poster,
                     blurred = settings.canvasMode == CanvasMode.BLURRED || framing == CanvasFraming.COLUMN,
                     playing = snapshot.playback.isPlaying,
                     onShowing = { videoShowing = it },

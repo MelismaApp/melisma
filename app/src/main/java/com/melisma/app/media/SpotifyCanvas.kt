@@ -1,5 +1,6 @@
 package com.melisma.app.media
 
+import android.graphics.Bitmap
 import com.melisma.app.lyrics.provider.Http
 import com.melisma.app.lyrics.provider.ProviderCredentials
 import com.melisma.app.lyrics.provider.SpotifyWebToken
@@ -37,16 +38,16 @@ class SpotifyCanvas(
     private val base: String = "https://spclient.wg.spotify.com",
 ) {
 
-    /** Track id to video URL, or to null for a track Spotify has no video for. */
-    private val answers = LinkedHashMap<String, String?>()
+    /** Track id to its Canvas, or to null for a track Spotify has no video for. */
+    private val answers = LinkedHashMap<String, CanvasLink?>()
 
     val isAvailable: Boolean get() = available()
 
     /** Whether Spotify has said, video or none, rather than not having been asked or not answering. */
     fun hasAnswered(trackId: String): Boolean = synchronized(answers) { answers.containsKey(trackId) }
 
-    /** The track's Canvas video URL, or null when it has none or it could not be asked. */
-    suspend fun videoFor(trackId: String): String? = withContext(Dispatchers.IO) {
+    /** The track's Canvas, or null when it has none or it could not be asked. */
+    suspend fun canvasFor(trackId: String): CanvasLink? = withContext(Dispatchers.IO) {
         if (!available()) return@withContext null
         synchronized(answers) {
             if (answers.containsKey(trackId)) return@withContext answers[trackId]
@@ -60,23 +61,23 @@ class SpotifyCanvas(
         }
 
         when (val settled = answer) {
-            is Answer.Found -> remember(trackId, settled.url)
+            is Answer.Found -> remember(trackId, settled.link)
             Answer.None -> remember(trackId, null)
             // Not remembered: a refusal or an outage says nothing about the track.
             Answer.Refused, Answer.Failed -> null
         }
     }
 
-    private fun remember(trackId: String, url: String?): String? {
+    private fun remember(trackId: String, link: CanvasLink?): CanvasLink? {
         synchronized(answers) {
-            answers[trackId] = url
+            answers[trackId] = link
             while (answers.size > 300) answers.remove(answers.keys.first())
         }
-        return url
+        return link
     }
 
     private sealed interface Answer {
-        data class Found(val url: String) : Answer
+        data class Found(val link: CanvasLink) : Answer
         data object None : Answer
         data object Refused : Answer
         data object Failed : Answer
@@ -96,9 +97,9 @@ class SpotifyCanvas(
                 response.code == 401 || response.code == 403 -> Answer.Refused
                 !response.isSuccessful -> Answer.Failed
                 else -> {
-                    val urls = canvasUrls(response.body?.bytes() ?: ByteArray(0))
-                    val url = urls["spotify:track:$trackId"] ?: urls.values.firstOrNull()
-                    if (url != null) Answer.Found(url) else Answer.None
+                    val links = canvasLinks(response.body?.bytes() ?: ByteArray(0))
+                    val link = links["spotify:track:$trackId"] ?: links.values.firstOrNull()
+                    if (link != null) Answer.Found(link) else Answer.None
                 }
             }
         }
@@ -116,14 +117,15 @@ class SpotifyCanvas(
         }
 
         /**
-         * Entity URI to video URL, from an `EntityCanvazResponse`.
+         * Entity URI to Canvas, from an `EntityCanvazResponse`.
          *
-         * `repeated Canvaz canvases = 1`, and in each `url = 2`, `entity_uri = 5`. Anything that is not
-         * a video on Spotify's CDN is dropped: an image Canvas has a `.jpg` URL, and a URL pointing
-         * anywhere else is not something to download on the strength of this response.
+         * `repeated Canvaz canvases = 1`, and in each `url = 2`, `entity_uri = 5`, and stills of it
+         * at `13` as `{ height = 1, width = 2, url = 3 }`. Anything that is not a video on Spotify's
+         * CDN is dropped: an image Canvas has a `.jpg` URL, and a URL pointing anywhere else is not
+         * something to download on the strength of this response.
          */
-        internal fun canvasUrls(bytes: ByteArray): Map<String, String> {
-            val out = LinkedHashMap<String, String>()
+        internal fun canvasLinks(bytes: ByteArray): Map<String, CanvasLink> {
+            val out = LinkedHashMap<String, CanvasLink>()
             val top = ProtoReader(bytes)
             while (top.hasMore()) {
                 val (field, wire) = top.tag() ?: break
@@ -131,21 +133,56 @@ class SpotifyCanvas(
                     val canvas = ProtoReader(top.bytes() ?: break)
                     var url: String? = null
                     var uri: String? = null
+                    var poster: String? = null
+                    var posterArea = 0L
                     while (canvas.hasMore()) {
                         val (f, w) = canvas.tag() ?: break
                         when {
                             f == 2 && w == 2 -> url = canvas.bytes()?.decodeToString()
                             f == 5 && w == 2 -> uri = canvas.bytes()?.decodeToString()
+                            f == 13 && w == 2 -> {
+                                val still = readStill(canvas.bytes() ?: break)
+                                if (still != null && still.second > posterArea) {
+                                    poster = still.first
+                                    posterArea = still.second
+                                }
+                            }
                             !canvas.skip(w) -> break
                         }
                     }
-                    if (url != null && isCanvasVideo(url)) out[uri ?: url] = url
+                    if (url != null && isCanvasVideo(url)) out[uri ?: url] = CanvasLink(url, poster)
                 } else if (!top.skip(wire)) {
                     break
                 }
             }
             return out
         }
+
+        /** One still of a Canvas: its URL and its area, so the largest can be picked. */
+        private fun readStill(bytes: ByteArray): Pair<String, Long>? {
+            val still = ProtoReader(bytes)
+            var height = 0L
+            var width = 0L
+            var url: String? = null
+            while (still.hasMore()) {
+                val (f, w) = still.tag() ?: break
+                when {
+                    f == 1 && w == 0 -> height = still.varint() ?: break
+                    f == 2 && w == 0 -> width = still.varint() ?: break
+                    f == 3 && w == 2 -> url = still.bytes()?.decodeToString()
+                    !still.skip(w) -> break
+                }
+            }
+            return url?.takeIf(::isCanvasStill)?.let { it to width * height }
+        }
+
+        /** A still of a Canvas: Spotify's image CDN, over https. */
+        internal fun isCanvasStill(url: String): Boolean = runCatching {
+            val parsed = URI(url)
+            parsed.scheme == "https" &&
+                parsed.host.orEmpty().let { it == "i.scdn.co" || it.endsWith(".scdn.co") } &&
+                parsed.path.orEmpty().startsWith("/image/")
+        }.getOrDefault(false)
 
         internal fun isCanvasVideo(url: String): Boolean = runCatching {
             val parsed = URI(url)
@@ -203,7 +240,7 @@ private class ProtoReader(private val data: ByteArray) {
         return true
     }
 
-    private fun varint(): Long? {
+    fun varint(): Long? {
         var result = 0L
         var shift = 0
         while (at < data.size && shift < 64) {
@@ -229,6 +266,24 @@ class CanvasVideoCache(private val dir: File, private val maxBytes: Long = 80L *
         .readTimeout(20, TimeUnit.SECONDS)
         .callTimeout(90, TimeUnit.SECONDS)
         .build()
+
+    /** The video if it is already on disk, without downloading anything. */
+    suspend fun cached(url: String): File? = withContext(Dispatchers.IO) {
+        if (!SpotifyCanvas.isCanvasVideo(url)) return@withContext null
+        File(dir, sha1(url) + ".mp4").takeIf { it.isFile && it.length() > 0 }
+            ?.also { it.setLastModified(System.currentTimeMillis()) }
+    }
+
+    /** A still of the Canvas, a few dozen kilobytes, kept in memory only. */
+    suspend fun poster(url: String): Bitmap? = withContext(Dispatchers.IO) {
+        if (!SpotifyCanvas.isCanvasStill(url)) return@withContext null
+        runCatching {
+            client.newCall(Http.request(url, mapOf("Accept" to "image/*"))).execute().use { response ->
+                if (!response.isSuccessful) return@runCatching null
+                response.body?.bytes()?.let(ArtworkDecoding::decode)
+            }
+        }.getOrNull()
+    }
 
     suspend fun fileFor(url: String): File? = withContext(Dispatchers.IO) {
         if (!SpotifyCanvas.isCanvasVideo(url)) return@withContext null
@@ -295,8 +350,15 @@ class CanvasVideoCache(private val dir: File, private val maxBytes: Long = 80L *
     }
 }
 
-/** A Canvas video ready to play, and the track it belongs to. */
-data class CanvasVideo(val trackId: String, val file: File)
+/** A track's Canvas: the video, and a still of it to show while the video downloads. */
+data class CanvasLink(val videoUrl: String, val posterUrl: String? = null)
+
+/**
+ * A Canvas to show, and the track it belongs to.
+ *
+ * [poster] alone while the video downloads, or if it never does; [file] once it is on disk.
+ */
+data class CanvasVideo(val trackId: String, val file: File?, val poster: Bitmap? = null)
 
 /**
  * Whether anything on screen would show a Canvas, so one is worth fetching.
