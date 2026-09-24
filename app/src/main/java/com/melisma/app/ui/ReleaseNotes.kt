@@ -131,13 +131,14 @@ private val TABLE_DIVIDER = Regex("""^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$
 /**
  * The blocks of [markdown], without its footer.
  *
- * Every release ends with a rule and then a note for someone reading it on GitHub — download the
- * APK below — which is wrong in the app, so everything from the last rule on is left out.
+ * Every release ends with a rule and then a note for someone reading it on GitHub — "Download the
+ * APK below" — which is wrong in the app, so that rule and what follows are left out. Any other
+ * rule is content.
  */
 internal fun notesBlocks(markdown: String): List<NotesBlock> {
     val lines = markdown.replace("\r\n", "\n").lines()
-    val lastRule = lines.indexOfLast { RULE.matches(it) }
-    val body = if (lastRule >= 0) lines.subList(0, lastRule) else lines
+    val footer = footerStart(lines)
+    val body = if (footer >= 0) lines.subList(0, footer) else lines
 
     val blocks = mutableListOf<NotesBlock>()
     var paragraph: StringBuilder? = null
@@ -221,6 +222,19 @@ internal fun notesBlocks(markdown: String): List<NotesBlock> {
     endParagraph()
     endTable()
     return blocks
+}
+
+/** The line of the last rule outside code, when the footer follows it; otherwise -1. */
+private fun footerStart(lines: List<String>): Int {
+    var inCode = false
+    var lastRule = -1
+    lines.forEachIndexed { index, line ->
+        if (line.trimStart().startsWith("```")) inCode = !inCode
+        else if (!inCode && RULE.matches(line)) lastRule = index
+    }
+    if (lastRule < 0) return -1
+    val next = lines.drop(lastRule + 1).firstOrNull { it.isNotBlank() }?.trim() ?: return lastRule
+    return if (next.startsWith("Download the APK", ignoreCase = true)) lastRule else -1
 }
 
 /** Two spaces or a tab per level, the way the notes indent. */

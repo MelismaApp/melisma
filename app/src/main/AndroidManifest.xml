@@ -141,8 +141,14 @@
             </intent-filter>
         </service>
 
+        <!-- An update's install status, from Android; see InstallStatusReceiver. -->
+        <receiver
+            android:name=".update.InstallStatusReceiver"
+            android:exported="false" />
+
         <!--
-          Hands the downloaded APK to the system installer. A content URI rather than a
+          Hands the downloaded APK to the system installer's screen, when an install session
+          cannot be started. A content URI rather than a
           file path, because passing a file:// URI across processes has been forbidden
           since Android 7 — and this way the read permission is granted for that one file
           and revoked when the installer is done with it.

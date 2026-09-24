@@ -52,6 +52,28 @@ class ReleaseNotesTest {
     }
 
     @Test
+    fun `only the footer's rule ends the notes`() {
+        // A rule between sections is content, and so is one inside code.
+        val blocks = notesBlocks(
+            """
+            One
+
+            ---
+
+            Two
+
+            ```
+            ---
+            ```
+            """.trimIndent(),
+        )
+        assertEquals(
+            listOf(NotesBlock.Paragraph("One"), NotesBlock.Rule, NotesBlock.Paragraph("Two"), NotesBlock.Code("---")),
+            blocks,
+        )
+    }
+
+    @Test
     fun `tables and code keep their shape`() {
         val blocks = notesBlocks(
             """

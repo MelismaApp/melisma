@@ -1,18 +1,14 @@
 package com.melisma.app.update
 
 import android.app.PendingIntent
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.IntentSender
 import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.os.Build
 import android.util.Log
-import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import androidx.core.content.IntentCompat
 import com.melisma.app.BuildConfig
 import com.melisma.app.lyrics.provider.Http
 import com.melisma.app.settings.SettingsStore
@@ -342,24 +338,9 @@ class Updater(
         false
     }
 
-    private val statusAction = "${context.packageName}.UPDATE_STATUS"
-
-    /** Not exported: only the session's own status, sent through [statusSender], reaches it. */
-    private val statusReceiver: BroadcastReceiver by lazy {
-        object : BroadcastReceiver() {
-            override fun onReceive(context: Context, intent: Intent) = onInstallStatus(
-                intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE),
-                intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE),
-                IntentCompat.getParcelableExtra(intent, Intent.EXTRA_INTENT, Intent::class.java),
-            )
-        }.also {
-            ContextCompat.registerReceiver(context, it, IntentFilter(statusAction), ContextCompat.RECEIVER_NOT_EXPORTED)
-        }
-    }
-
+    /** Addressed to [InstallStatusReceiver]. */
     private fun statusSender(sessionId: Int): IntentSender {
-        statusReceiver
-        val intent = Intent(statusAction).setPackage(context.packageName)
+        val intent = Intent(context, InstallStatusReceiver::class.java)
         // Mutable because Android fills the status in.
         val mutable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
         return PendingIntent.getBroadcast(context, sessionId, intent, PendingIntent.FLAG_UPDATE_CURRENT or mutable)
