@@ -1405,13 +1405,13 @@ fun SettingsSheet(
                         scope.launch {
                             when (val state = updateState) {
                                 is Updater.State.Available ->
-                                    updater.downloadAndInstall(state.release)
+                                    updater.install(state.release)
 
                                 // Already downloaded: hand it over again rather than starting a
                                 // fresh check, which is the useful answer after Android's install
                                 // screen was cancelled.
                                 is Updater.State.ReadyToInstall ->
-                                    updater.downloadAndInstall(state.release)
+                                    updater.install(state.release)
 
                                 is Updater.State.Downloading -> Unit
                                 else -> updater.check(automatic = false)

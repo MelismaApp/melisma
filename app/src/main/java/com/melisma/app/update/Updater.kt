@@ -8,7 +8,11 @@ import androidx.core.content.FileProvider
 import com.melisma.app.BuildConfig
 import com.melisma.app.lyrics.provider.Http
 import com.melisma.app.settings.SettingsStore
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -177,6 +181,16 @@ class Updater(
         _state.value = State.Idle
     }
 
+    /** Outlives the screen that asked, so closing it does not cut a download off. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var installing: Job? = null
+
+    /** [downloadAndInstall], once at a time, and on after the screen that asked has gone. */
+    fun install(release: AvailableRelease) {
+        if (installing?.isActive == true) return
+        installing = scope.launch { downloadAndInstall(release) }
+    }
+
     /**
      * Download the APK and hand it to the system installer.
      *
@@ -202,7 +216,7 @@ class Updater(
         }
 
         _state.value = State.ReadyToInstall(release)
-        if (!(handOver ?: ::install)(file)) {
+        if (!(handOver ?: ::openInstaller)(file)) {
             _state.value = State.Failed(
                 "Could not open the installer. The APK is downloaded — " +
                     "install it from your Downloads or Files app.",
@@ -296,7 +310,7 @@ class Updater(
      * against the installed app; a build signed with a different key is refused there, not
      * here.
      */
-    private fun install(file: File): Boolean = runCatching {
+    private fun openInstaller(file: File): Boolean = runCatching {
         val uri: Uri = FileProvider.getUriForFile(context, "${context.packageName}.updates", file)
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")

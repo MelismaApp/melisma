@@ -186,7 +186,7 @@ fun PlayerScreen(
                     is Updater.State.ReadyToInstall -> state.release
                     else -> null
                 }
-                release?.let { scope.launch { container.updater.downloadAndInstall(it) } }
+                release?.let { container.updater.install(it) }
             },
             onSkip = {
                 (updateState as? Updater.State.Available)?.let {

@@ -3,7 +3,10 @@ package com.melisma.app.update
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.melisma.app.settings.SettingsStore
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -146,6 +149,36 @@ class CancelledInstallTest {
         // with nothing on screen pointing at it — and if the check had failed, for nothing.
         updater.check(automatic = false)
         assertEquals(Updater.State.ReadyToInstall(release), updater.state.value)
+    }
+
+    @Test
+    fun `a second press while downloading starts nothing`() = runBlocking {
+        val gate = CompletableDeferred<Unit>()
+        val updater = Updater(
+            context,
+            settings,
+            fetchLatest = { release },
+            updatableInPlace = true,
+            fetchApk = { _, target, _ ->
+                fetches++
+                gate.await()
+                target.writeText("apk!")
+            },
+            handOver = {
+                handOvers++
+                true
+            },
+        )
+
+        // Started from the updater's own scope, so it carries on when the screen that asked goes.
+        updater.install(release)
+        withTimeout(5_000) { updater.state.first { it is Updater.State.Downloading } }
+        updater.install(release)
+        gate.complete(Unit)
+
+        withTimeout(5_000) { updater.state.first { it is Updater.State.ReadyToInstall } }
+        assertEquals(1, fetches)
+        assertEquals(1, handOvers)
     }
 
     @Test
