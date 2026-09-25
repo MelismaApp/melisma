@@ -122,6 +122,13 @@ The readings were selected, merged and reformatted, and the detector weights com
 material and are themselves licensed **CC BY-SA 4.0**, separately from the app's AGPL-3.0 code.
 `fold.txt` is from OpenCC, under Apache-2.0.
 
+## 臺灣台語常用詞辭典 — Ministry of Education, R.O.C.
+
+https://sutian.moe.edu.tw · [CC BY-ND 3.0 TW](https://creativecommons.org/licenses/by-nd/3.0/tw/)
+
+Not included in the app or this repository. Downloaded from the Ministry's site by the phone, and
+only if you ask for it under Settings → Language.
+
 ## ML Kit Translation — Google
 
 https://developers.google.com/ml-kit/language/translation · Google APIs Terms of Service

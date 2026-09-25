@@ -1,6 +1,7 @@
 package com.melisma.app.lyrics.romanize
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -76,5 +77,35 @@ class HokkienWordsTest {
     fun `dropping tone marks keeps the dot of POJ's o`() {
         assertEquals("ko͘-toaⁿ kiann", HokkienWords.stripTones("ko͘-toaⁿ kiânn"))
         assertEquals("tsa-boo", HokkienWords.stripTones("tsa-bóo"))
+    }
+
+    @Test
+    fun `a downloaded dictionary is read first, where it disagrees`() {
+        val before = HokkienWords.revision.value
+        try {
+            val changed = HokkienWords.useDictionary(
+                mapOf(
+                    // Disagrees: the dictionary wins.
+                    "聽著" to listOf("thiann--tio̍h"),
+                    // Lists the bundled reading among its own: the bundled one stays.
+                    "心肝" to listOf("sin-kuann", "sim-kuann"),
+                    // A single character is never taken from it.
+                    "人" to listOf("jîn"),
+                    // A word the bundled tables do not have.
+                    "八字骹" to listOf("pat-jī-kha"),
+                ),
+            )
+            assertEquals(2, changed)
+            assertTrue(HokkienWords.revision.value != before)
+            assertEquals("thiann--tio̍h", HokkienWords.romanize("聽著"))
+            assertEquals("sim-kuann", HokkienWords.romanize("心肝"))
+            assertEquals("lâng", HokkienWords.romanize("人"))
+            assertEquals("pat-jī-kha", HokkienWords.romanize("八字骹"))
+            // Simplified lyrics are read through it too.
+            assertEquals("thiann--tio̍h", HokkienWords.romanize("听着"))
+        } finally {
+            HokkienWords.useDictionary(null)
+        }
+        assertEquals("thiann-tio̍h", HokkienWords.romanize("聽著"))
     }
 }

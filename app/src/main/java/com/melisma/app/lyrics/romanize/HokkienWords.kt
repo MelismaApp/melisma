@@ -1,5 +1,8 @@
 package com.melisma.app.lyrics.romanize
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import java.text.Normalizer
 
 /**
@@ -18,6 +21,9 @@ import java.text.Normalizer
  * Lyrics sent in Simplified characters are looked up under a folded copy of the tables, built the
  * first time one appears. Traditional lyrics, which is how most Hokkien songs are written, never pay
  * for it.
+ *
+ * The Ministry of Education's dictionary, once downloaded, is read before the bundled words; see
+ * [useDictionary].
  *
  * The data and its licences are in `tools/hokkien/build_tables.py` and `docs/ROMANIZATION.md`.
  */
@@ -43,6 +49,60 @@ object HokkienWords {
 
     /** No word in the table is longer than this, and none of the few that were is in a song. */
     private const val LONGEST_WORD = 8
+
+    /** The words a downloaded dictionary reads differently from the bundled tables, or adds. */
+    private class Dictionary(val words: Map<String, String>, val longest: Int) {
+        @Volatile var folded: Map<String, String>? = null
+    }
+
+    @Volatile private var dictionary: Dictionary? = null
+
+    private val changes = MutableStateFlow(0)
+
+    /** Changes whenever a dictionary is added or removed, so readings already worked out are redone. */
+    val revision: StateFlow<Int> = changes
+
+    /**
+     * Read words through [entries] first: each word's readings, in the dictionary's order. A word the
+     * bundled tables already read as one of them keeps that reading — the dictionary lists 大人 as both
+     * *tāi-jîn* and *tuā-lâng*, and only disagreeing with it is a reason to change — and otherwise the
+     * dictionary's first wins. Single characters are left alone: a dictionary's first reading of one
+     * is its literary one as often as not, and a song needs the colloquial. Null removes it.
+     *
+     * Returns how many words now read differently or were added.
+     */
+    fun useDictionary(entries: Map<String, List<String>>?): Int {
+        if (entries == null) {
+            dictionary = null
+            changes.update { it + 1 }
+            return 0
+        }
+        val t = tables
+        val words = HashMap<String, String>(entries.size * 2)
+        var longest = 1
+        for ((word, readings) in entries) {
+            val length = word.codePointCount(0, word.length)
+            if (length < 2 || length > LONGEST_WORD) continue
+            val usable = readings.filter { parse(it, length) != null }
+            val first = usable.firstOrNull() ?: continue
+            val own = t.words[word]?.let { it.ifEmpty { compositional(word, t.chars) } }
+            if (own != null && usable.any { sameReading(it, own) }) continue
+            words[word] = first
+            if (length > longest) longest = length
+        }
+        dictionary = Dictionary(words, longest)
+        changes.update { it + 1 }
+        return words.size
+    }
+
+    /** A space between words and a hyphen within one are the same syllables. */
+    private fun sameReading(a: String, b: String): Boolean = a.replace(' ', '-') == b.replace(' ', '-')
+
+    private fun foldedWords(extra: Dictionary): Map<String, String> =
+        extra.folded ?: HashMap<String, String>(extra.words.size * 2).also { out ->
+            for ((word, reading) in extra.words) out.putIfAbsent(fold(word), reading)
+            extra.folded = out
+        }
 
     private fun lines(resource: String, each: (String) -> Unit) {
         val stream = HokkienWords::class.java.getResourceAsStream(resource) ?: return
@@ -129,6 +189,9 @@ object HokkienWords {
         val words = if (simplified) folded.words else t.words
         val chars = if (simplified) folded.chars else t.chars
         val key = if (simplified) fold(text) else text
+        val extra = dictionary
+        val extraWords = extra?.let { if (simplified) foldedWords(it) else it.words }
+        val longest = maxOf(t.longest, extra?.longest ?: 0)
 
         val starts = ArrayList<Int>(key.length + 1)
         var at = 0
@@ -144,10 +207,10 @@ object HokkienWords {
         val count = starts.size - 1
         while (i < count) {
             var matched = 1
-            var size = minOf(t.longest, count - i)
+            var size = minOf(longest, count - i)
             while (size >= 2) {
                 val word = key.substring(starts[i], starts[i + size])
-                val reading = words[word]
+                val reading = extraWords?.get(word) ?: words[word]
                 if (reading != null) {
                     val parsed = parse(reading.ifEmpty { compositional(word, chars) ?: "" }, size)
                     if (parsed != null) {

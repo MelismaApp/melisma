@@ -11,6 +11,7 @@ import com.melisma.app.lyrics.provider.CacheServerProvider
 import com.melisma.app.lyrics.provider.LocalLyricsStore
 import com.melisma.app.lyrics.provider.LyricsProvider
 import com.melisma.app.lyrics.provider.LyricsRequest
+import com.melisma.app.lyrics.romanize.HokkienWords
 import com.melisma.app.lyrics.romanize.Romanizer
 import com.melisma.app.lyrics.translate.LyricsTranslator
 import com.melisma.app.media.TrackInfo
@@ -122,7 +123,8 @@ class LyricsRepository(
     private var prefetchedKey: String? = null
 
     val state: StateFlow<LyricsState> =
-        combine(base, settingsStore.settings, translating) { base, settings, isTranslating ->
+        // The Hokkien dictionary's revision only to redo the readings when one is added or removed.
+        combine(base, settingsStore.settings, translating, HokkienWords.revision) { base, settings, isTranslating, _ ->
             Triple(base, settings, isTranslating)
         }.mapLatest { (base, settings, isTranslating) ->
             when (base) {
@@ -809,7 +811,8 @@ class LyricsRepository(
         val furigana = settings.furigana != com.melisma.app.settings.FuriganaMode.OFF
         val chinese = chineseReading(key, settings)
         val cacheKey = "$key|ann|${settings.showRomanization}|$furigana|" +
-            settings.romanizationStripsDiacritics + "|$chinese|${settings.hokkienSpelling}"
+            settings.romanizationStripsDiacritics + "|$chinese|${settings.hokkienSpelling}|" +
+            HokkienWords.revision.value
         derived[cacheKey]?.let { return it }
         val result = romanizer.annotate(
             document = document,

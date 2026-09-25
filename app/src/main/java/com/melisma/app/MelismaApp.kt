@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.melisma.app.lyrics.LyricsCache
 import com.melisma.app.lyrics.LyricsRepository
+import com.melisma.app.lyrics.HokkienDictionary
 import com.melisma.app.lyrics.SpokenLanguageStore
 import com.melisma.app.lyrics.provider.AmllTtmlProvider
 import com.melisma.app.lyrics.provider.AppleMusicProvider
@@ -106,6 +107,9 @@ class AppContainer(context: Context) {
 
     /** The language the cache server says each track is in, across launches. */
     private val spokenLanguages = SpokenLanguageStore(context)
+
+    /** The Ministry of Education's Taiwanese dictionary, when it has been downloaded. */
+    val hokkienDictionary = HokkienDictionary(context, scope)
 
     /** Every provider that exists; Settings decides which are asked and in what order. */
     val providers: List<LyricsProvider> = listOf(

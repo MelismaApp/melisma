@@ -79,6 +79,7 @@ import com.melisma.app.settings.TranslationSource
 import com.melisma.app.settings.CacheServerMode
 import com.melisma.app.settings.ExtrasServerMode
 import com.melisma.app.lyrics.LyricsRepository
+import com.melisma.app.lyrics.HokkienDictionary
 import com.melisma.app.lyrics.LyricsState
 import com.melisma.app.lyrics.provider.CacheServerProvider
 import com.melisma.app.lyrics.romanize.HokkienDetector
@@ -846,6 +847,7 @@ fun SettingsSheet(
                             "romanization. A song written only in characters both languages share can " +
                             "be missed; This track can say which it is.",
                     )
+                    HokkienDictionaryRows(container.hokkienDictionary, accent)
                 }
 
                 ChipGroup(
@@ -1936,6 +1938,20 @@ private fun CreditsPanel(accent: Color, onBack: () -> Unit) {
         accent = accent,
     )
     Credit(
+        title = "台華線頂對照典 — 鄭良偉, 楊允言 (CC BY-SA 4.0), iTaigi (CC0), Wiktionary (CC BY-SA 4.0)",
+        body = "Taiwanese Hokkien words and their Tâi-lô, from the ChhoeTaigi database and " +
+            "Wiktionary's editors via kaikki.org. The tables built from them are CC BY-SA 4.0 too. " +
+            "OpenCC (Apache-2.0) folds Simplified characters to read them.",
+        link = "github.com/ChhoeTaigi/ChhoeTaigiDatabase",
+        accent = accent,
+    )
+    Credit(
+        title = "臺灣台語常用詞辭典 — Ministry of Education, R.O.C. (CC BY-ND 3.0 TW)",
+        body = "Downloaded only if you ask for it, under Language, from the Ministry's own site.",
+        link = "sutian.moe.edu.tw",
+        accent = accent,
+    )
+    Credit(
         title = "ML Kit — Google",
         body = "On-device translation, so the lyrics never leave the phone to be translated.",
         link = "developers.google.com/ml-kit",
@@ -2171,6 +2187,41 @@ private fun SliderRow(
  * Only shown for a song with Chinese in it. The choice is kept on the phone, and told to the cache
  * server when there is one and the admin key is set — the one thing the app writes there.
  */
+/**
+ * Download or remove the Ministry of Education's dictionary. Its licence lets it be copied only as it
+ * is, so the phone fetches it from the Ministry rather than the app carrying it.
+ */
+@Composable
+private fun HokkienDictionaryRows(dictionary: HokkienDictionary, accent: Color) {
+    val status by dictionary.status.collectAsState()
+    when (val current = status) {
+        HokkienDictionary.Status.Absent, is HokkienDictionary.Status.Failed -> ActionRow(
+            title = "Download the Ministry of Education's dictionary",
+            subtitle = "4.5 MB from sutian.moe.edu.tw, read before the bundled tables",
+            accent = accent,
+            onClick = { dictionary.download() },
+        )
+        HokkienDictionary.Status.Loading -> Hint("Loading the Ministry of Education's dictionary…")
+        is HokkienDictionary.Status.Downloading -> Hint(
+            "Downloading the dictionary" + (current.fraction?.let { " — ${(it * 100).toInt()}%" } ?: "…"),
+        )
+        is HokkienDictionary.Status.Reading -> Hint("Reading the dictionary — ${(current.fraction * 100).toInt()}%")
+        is HokkienDictionary.Status.Ready -> ActionRow(
+            title = "Remove the Ministry of Education's dictionary",
+            subtitle = "In use: ${"%,d".format(current.words)} words, ${"%,d".format(current.changed)} read differently or new",
+            accent = accent,
+            onClick = { dictionary.remove() },
+        )
+    }
+    (status as? HokkienDictionary.Status.Failed)?.let { Hint("Could not add it: ${it.reason}.") }
+    Help(
+        "臺灣台語常用詞辭典, © Ministry of Education, R.O.C., CC BY-ND 3.0 TW. The reference " +
+            "dictionary for Taiwanese. Its licence allows only unchanged copies, so it is not part of " +
+            "the app: the phone downloads it from the Ministry and keeps only the words and their " +
+            "readings. Where it and the bundled tables disagree about a word, it wins.",
+    )
+}
+
 @Composable
 private fun ReadAsRow(container: AppContainer, settings: Settings, accent: Color) {
     val scope = rememberCoroutineScope()

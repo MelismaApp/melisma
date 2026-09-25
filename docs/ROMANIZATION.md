@@ -169,12 +169,27 @@ The tables are an adaptation of BY-SA material and are licensed **CC BY-SA 4.0**
 from the AGPL-3.0 code; attribution is in `app/src/main/resources/hokkien/NOTICE.txt` and
 [NOTICE.md](../NOTICE.md).
 
-Left out on purpose:
+Not bundled:
 
 - **The Ministry of Education's 臺灣台語常用詞辭典**, the reference dictionary, is CC BY-ND 3.0 TW.
-  No-derivatives allows only verbatim copies, and a merged table is a derivative.
+  No-derivatives allows only verbatim copies, and a merged table is a derivative. It is offered as a
+  download instead — see below.
 - **Dictionaries licensed non-commercial** (CC BY-NC-SA). NC is incompatible with the AGPL, which
   lets anyone sell the app, and measured against the sources above they made the output worse.
+
+### The Ministry's dictionary, on request
+
+**Language → Download the Ministry of Education's dictionary** fetches its spreadsheet, 4.5 MB,
+from `sutian.moe.edu.tw` — the phone downloads it from the Ministry, so the app never distributes a
+copy. `HokkienDictionary` streams the 70 MB of XML inside it, keeps each word's readings (the
+entries, their 又唸作 alternatives, and the 異用字 variant spellings lyrics often use) in the app's
+own storage, and deletes the download. **Remove** deletes that too.
+
+It lists 27,819 words. Where one of its readings for a word is the one the bundled tables already
+give, that one stays — it lists 大人 as both *tāi-jîn* and *tuā-lâng*, and only a disagreement is a
+reason to change. Otherwise its first reading wins: 7,496 words read differently or are new, such as
+聽著 *thiann--tio̍h* and 明白 *bîng-pi̍k*. Single characters keep the bundled defaults, because a
+dictionary's first reading of a character is as often its literary one.
 
 ## Where the data comes from
 
