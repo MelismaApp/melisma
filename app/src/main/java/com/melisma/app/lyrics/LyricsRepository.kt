@@ -26,6 +26,7 @@ import com.melisma.app.settings.SettingsStore
 import com.melisma.app.settings.TranslationSource
 import com.melisma.app.media.IsrcStore
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -41,6 +42,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.TimeUnit
 
@@ -724,17 +726,17 @@ class LyricsRepository(
     ): LyricsState {
         var document = ready.document
 
-        if (settings.showRomanization ||
-            settings.furigana != com.melisma.app.settings.FuriganaMode.OFF
-        ) {
-            document = deriveAnnotated(ready.key, document, settings)
-        }
+        val chinese = chineseReading(ready.key, settings)
+        val annotation = annotationKey(ready.key, settings, chinese)
+        if (annotation != null) document = deriveAnnotated(annotation, document, settings, chinese)
 
         // Only the on-device source derives anything. "From the source" is a display
         // decision about text the document already carries, so it costs nothing here —
         // no model, no download, no work on a track that has no translation anyway.
+        // Keyed on the annotation too: the translation is added to a copy of the annotated
+        // document, so a cached one carries whatever readings it was made with.
         if (settings.translationSource == TranslationSource.DEVICE) {
-            document = deriveTranslated(ready.key, document, settings, sourceLanguage(ready))
+            document = deriveTranslated(annotation ?: ready.key, document, settings, sourceLanguage(ready))
         }
 
         return LyricsState.Loaded(
@@ -803,21 +805,26 @@ class LyricsRepository(
             Script.CHINESE
         }
 
+    /** Everything the readings of the track with [key] depend on, or null when none are shown. */
+    private fun annotationKey(key: String, settings: Settings, chinese: ChineseReading): String? {
+        val furigana = settings.furigana != com.melisma.app.settings.FuriganaMode.OFF
+        if (!settings.showRomanization && !furigana) return null
+        return "$key|ann|${settings.showRomanization}|${settings.furigana}|" +
+            settings.romanizationStripsDiacritics + "|$chinese|" +
+            "${settings.hokkienSpelling}|${HokkienWords.revision.value}"
+    }
+
     private suspend fun deriveAnnotated(
-        key: String,
+        cacheKey: String,
         document: LyricsDocument,
         settings: Settings,
+        chinese: ChineseReading,
     ): LyricsDocument {
-        val furigana = settings.furigana != com.melisma.app.settings.FuriganaMode.OFF
-        val chinese = chineseReading(key, settings)
-        val cacheKey = "$key|ann|${settings.showRomanization}|$furigana|" +
-            settings.romanizationStripsDiacritics + "|$chinese|${settings.hokkienSpelling}|" +
-            HokkienWords.revision.value
         derived[cacheKey]?.let { return it }
         val result = romanizer.annotate(
             document = document,
             romanize = settings.showRomanization,
-            furigana = furigana,
+            furigana = settings.furigana != com.melisma.app.settings.FuriganaMode.OFF,
             stripDiacritics = settings.romanizationStripsDiacritics,
             chinese = chinese,
             hokkienSpelling = settings.hokkienSpelling,
@@ -840,13 +847,28 @@ class LyricsRepository(
             ?: if (settings.detectHokkien) ChineseReading.AUTO else ChineseReading.MANDARIN
 
     /**
+     * Read the track with [key] as [reading] from now on, and tell the cache server so.
+     *
+     * [ChineseReading.AUTO] also forgets the language the server gave, so the detector decides
+     * again. That has to happen before the setting changes: the change is what redoes the
+     * readings, and nothing redoes them when the server's answer is forgotten afterwards.
+     *
+     * Returns what became of telling the server, or null when there was no server to tell.
+     */
+    suspend fun setChineseReading(key: String, reading: ChineseReading): CacheServerProvider.LanguageTag? {
+        if (reading == ChineseReading.AUTO) withContext(Dispatchers.IO) { spokenLanguages.remove(key) }
+        settingsStore.setChineseReading(key, reading)
+        return tagLanguage(key, reading)
+    }
+
+    /**
      * Tell the cache server which language the playing track is in, when there is one to tell.
      *
-     * Null when there is no playing track matching [key] or no cache server. [ChineseReading.AUTO]
-     * clears the server's tag and forgets what it said here, so the detector decides again.
+     * Null when there is no playing track matching [key], or no cache server in use: one left
+     * configured with Developer options off is not told anything, as it is not asked anything.
      */
-    suspend fun tagLanguage(key: String, reading: ChineseReading): CacheServerProvider.LanguageTag? {
-        if (reading == ChineseReading.AUTO) spokenLanguages.remove(key)
+    private suspend fun tagLanguage(key: String, reading: ChineseReading): CacheServerProvider.LanguageTag? {
+        if (!settingsStore.current.cacheServerActive) return null
         val request = currentRequest?.takeIf { it.cacheIdentity() == key } ?: return null
         val server = providers.filterIsInstance<CacheServerProvider>().firstOrNull() ?: return null
         val language = when (reading) {
@@ -865,8 +887,7 @@ class LyricsRepository(
         settings: Settings,
         sourceTag: String?,
     ): LyricsDocument {
-        val cacheKey = "$key|tr|${settings.translationTarget}|" +
-            settings.romanizationStripsDiacritics + settings.showRomanization
+        val cacheKey = "$key|tr|${settings.translationTarget}"
         derived[cacheKey]?.let { return it }
 
         translating.value = true

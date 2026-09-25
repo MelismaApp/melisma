@@ -41,6 +41,8 @@ class HokkienWordsTest {
         // OpenCC does not fold 著 to 着, which Simplified lyrics use for tio̍h.
         assertEquals(HokkienWords.romanize("著"), HokkienWords.romanize("着"))
         assertEquals("tio̍h", HokkienWords.romanize("着"))
+        // A Simplified line is read through folded words; 鉅大 folds to 巨大 but reads differently.
+        assertEquals("kī-tāi", HokkienWords.romanize("巨大说")?.substringBefore(' '))
     }
 
     @Test

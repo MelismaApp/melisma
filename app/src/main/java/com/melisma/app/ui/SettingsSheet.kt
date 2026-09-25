@@ -2256,8 +2256,7 @@ private fun ReadAsRow(container: AppContainer, settings: Settings, accent: Color
         accent = accent,
         onSelect = { reading ->
             if (reading == selected) return@ChipGroup
-            container.settings.setChineseReading(key, reading)
-            scope.launch { note = tagNote(container.lyrics.tagLanguage(key, reading), reading) }
+            scope.launch { note = tagNote(container.lyrics.setChineseReading(key, reading), reading) }
         },
     )
     Hint(note ?: "Auto reads it as ${autoReading.label}.")

@@ -78,7 +78,7 @@ object HokkienWords {
             return 0
         }
         val t = tables
-        val words = HashMap<String, String>(entries.size * 2)
+        val words = LinkedHashMap<String, String>(entries.size * 2)
         var longest = 1
         for ((word, readings) in entries) {
             val length = word.codePointCount(0, word.length)
@@ -99,10 +99,22 @@ object HokkienWords {
     private fun sameReading(a: String, b: String): Boolean = a.replace(' ', '-') == b.replace(' ', '-')
 
     private fun foldedWords(extra: Dictionary): Map<String, String> =
-        extra.folded ?: HashMap<String, String>(extra.words.size * 2).also { out ->
-            for ((word, reading) in extra.words) out.putIfAbsent(fold(word), reading)
-            extra.folded = out
+        extra.folded ?: foldKeys(extra.words) { it.value }.also { extra.folded = it }
+
+    /**
+     * [readings] keyed by their Simplified form. A key that is already Simplified wins its slot, as
+     * for the characters: 巨大 stays *kī-tāi* rather than taking 鉅大's *kú-tuā*. Otherwise the first
+     * in [readings]' order.
+     */
+    private inline fun foldKeys(readings: Map<String, String>, resolve: (Map.Entry<String, String>) -> String?): Map<String, String> {
+        val out = HashMap<String, String>(readings.size * 2)
+        for (entry in readings) if (fold(entry.key) == entry.key) resolve(entry)?.let { out[entry.key] = it }
+        for (entry in readings) {
+            val key = fold(entry.key)
+            if (key != entry.key && key !in out) resolve(entry)?.let { out[key] = it }
         }
+        return out
+    }
 
     private fun lines(resource: String, each: (String) -> Unit) {
         val stream = HokkienWords::class.java.getResourceAsStream(resource) ?: return
@@ -110,7 +122,8 @@ object HokkienWords {
     }
 
     private fun load(): Tables {
-        val words = HashMap<String, String>(1 shl 17)
+        // In file order, so which of two Traditional spellings fills a Simplified slot is always the same.
+        val words = LinkedHashMap<String, String>(1 shl 17)
         var longest = 1
         lines("/hokkien/words.txt") { line ->
             val tab = line.indexOf('\t')
@@ -149,11 +162,7 @@ object HokkienWords {
 
     private fun buildFolded(): Folded {
         val t = tables
-        val words = HashMap<String, String>(t.words.size * 2)
-        for ((word, reading) in t.words) {
-            val resolved = reading.ifEmpty { compositional(word, t.chars) ?: continue }
-            words.putIfAbsent(fold(word), resolved)
-        }
+        val words = foldKeys(t.words) { (word, reading) -> reading.ifEmpty { compositional(word, t.chars) } }
         // A character that is already its own Simplified form wins its slot: 干 keeps its reading
         // rather than taking whichever of 乾 and 幹 came first.
         val chars = HashMap<String, String>(t.chars.size * 2)
