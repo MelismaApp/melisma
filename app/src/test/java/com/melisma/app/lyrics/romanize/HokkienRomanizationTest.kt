@@ -82,4 +82,19 @@ class HokkienRomanizationTest {
         val line = annotate(document(plain("查某")), ChineseReading.HOKKIEN, HokkienSpelling.POJ, strip = true).lines.single()
         assertEquals("cha-bo͘", line.romanized)
     }
+
+    @Test
+    fun `Auto leaves a Korean song to Korean romanization`() {
+        val song = document(timed("어지러워 ", "너의 ", "그 ", "미소"), timed("눈이 ", "멀어 ", "Stuck ", "in ", "your ", "halo"))
+        val lines = annotate(song, ChineseReading.AUTO).lines
+        assertEquals("eojileowo neoui geu miso", lines[0].romanized)
+        assertTrue(lines[1].romanized!!.startsWith("nun-i meol-eo"))
+    }
+
+    @Test
+    fun `a Korean phrase in a Hokkien song is still romanized`() {
+        val line = annotate(document(timed("原", "來 ", "사랑", "해")), ChineseReading.HOKKIEN).lines.single()
+        assertEquals("guân", line.syllables[0].romanized)
+        assertEquals("salang", line.syllables[2].romanized)
+    }
 }

@@ -47,4 +47,20 @@ class HokkienDetectorTest {
     fun `written Cantonese is not Hokkien`() {
         assertFalse(HokkienDetector.isHokkien(listOf("我唔知你喺邊度", "佢哋啲嘢好靚", "你食咗飯未呀", "我哋今日冇嘢做")))
     }
+
+    @Test
+    fun `a song not written in Chinese characters is not Hokkien`() {
+        // Hangul was counted as Han, and Korean scored as Hokkien: ATEEZ's BAD lost its romanization.
+        val korean = listOf("어지러워 너의 그 미소", "눈이 멀어 Stuck in your halo", "빠져버려 난 이제 포로", "너의 눈빛에 갇혀버린 나")
+        assertFalse(HokkienDetector.isHokkien(korean))
+        // Mostly Korean, with a Hokkien line.
+        assertFalse(HokkienDetector.isHokkien(korean + korean + "我毋知影你佇佗位，阮兜的囡仔攏足乖"))
+    }
+
+    @Test
+    fun `English lines do not count against a Hokkien song`() {
+        val song = List(8) { "Spent a lifetime seeking love, thought you would be the one" } +
+            listOf("我毋知影你佇佗位", "阮兜的囡仔攏足乖", "伊講明仔載欲來揣我")
+        assertTrue(HokkienDetector.isHokkien(song))
+    }
 }

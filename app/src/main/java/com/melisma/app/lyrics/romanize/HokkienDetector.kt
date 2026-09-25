@@ -13,6 +13,8 @@ package com.melisma.app.lyrics.romanize
  * Mandarin one — a miss leaves the pinyin that was always there, and the song can be told otherwise
  * in This track.
  *
+ * Only a song mostly in Chinese characters is considered; see [isHokkien].
+ *
  * What it cannot see is a song written almost entirely in characters both languages share. A handful
  * of words only Hokkien uses tip those, when the score is close enough to be unsure.
  */
@@ -80,8 +82,15 @@ object HokkienDetector {
         val m = model
         if (m.chars.isEmpty()) return false
         val text = HokkienWords.fold(lines.filterNot { credit.containsMatchIn(it) }.joinToString("\n"))
-        val han = text.filter(::isHan)
+        val han = text.filter(HanFold::isHan)
         if (han.length < MIN_CHARACTERS) return false
+        // Only a song whose own script is Chinese: a Korean one with a line or two of Chinese is not
+        // Hokkien, whatever those lines score. Latin does not count against it — 愛到明仔載 is half
+        // English, and English is left as it is either way.
+        val otherScripts = text.count {
+            it.isLetter() && !HanFold.isHan(it) && Character.UnicodeScript.of(it.code) != Character.UnicodeScript.LATIN
+        }
+        if (otherScripts > han.length) return false
         if (han.count { it in CANTONESE } * 50 >= han.length) return false
 
         var sum = 0.0
@@ -107,6 +116,4 @@ object HokkienDetector {
         return count
     }
 
-    private fun isHan(char: Char): Boolean =
-        char in '一'..'鿿' || char in '㐀'..'䶿' || char in '豈'..'﫿'
 }

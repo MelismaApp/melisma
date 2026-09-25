@@ -21,6 +21,8 @@ import java.io.BufferedReader
  * CC-CEDICT, which is CC-BY-SA, and an upstream relicence does not travel; those entries are left
  * out rather than relied on. See `docs/ROMANIZATION.md`.
  *
+ * The table is in Simplified characters, so a line is looked up folded: 音樂 is 音乐 to it.
+ *
  * Held as a classpath resource rather than an asset so it needs no `Context`, which is how Kuromoji's
  * dictionary already arrives. Loaded on the first Chinese line of the session and never on the main
  * thread; 295 KB in the APK, a few megabytes of heap, against the tens of megabytes Kuromoji costs
@@ -35,6 +37,39 @@ object PinyinWords {
 
     private val table: Map<String, String> by lazy { load() }
 
+    /** The particle reading of each character a lyric almost always means as one. */
+    private val particles = mapOf('的' to "de", '了' to "le", '着' to "zhe")
+
+    /**
+     * Two-character words that read one of [particles] otherwise at an edge, and are common enough
+     * to be meant when they appear. The rest are dropped: longest match takes the first word it
+     * finds, so 的真 *dí zhēn*, "genuine", read 愛你的真心 as *dí zhēn xīn*, 着手 made 牽著手
+     * *zhuó shǒu*, and 明了 made 說明了 *míng liǎo*.
+     */
+    private val kept = setOf(
+        "的确", "的士", "的哥", "目的",
+        "了解", "了断", "不了", "未了",
+        "执着", "着急", "着迷", "着凉", "着火", "着魔", "着慌", "睡着", "不着",
+    )
+
+    /**
+     * Words ICU already reads right, listed so the ones kept above cannot take a character from them:
+     * 为了解决 is not *wèi liǎo jiě*, and 盲目的爱 is not *máng mù dì*.
+     */
+    private val added = mapOf(
+        "为了" to "wèi le", "除了" to "chú le",
+        "盲目" to "máng mù", "醒目" to "xǐng mù", "注目" to "zhù mù", "夺目" to "duó mù",
+        "瞩目" to "zhǔ mù", "耀目" to "yào mù", "炫目" to "xuàn mù", "悦目" to "yuè mù",
+        "节目" to "jié mù", "项目" to "xiàng mù", "题目" to "tí mù", "面目" to "miàn mù",
+    )
+
+    private fun stealsParticle(word: String, reading: String): Boolean {
+        if (word.length != 2 || word in kept) return false
+        val syllables = reading.split(' ')
+        if (syllables.size != 2) return false
+        return (0..1).any { i -> particles[word[i]]?.let { it != syllables[i] } == true }
+    }
+
     private fun load(): Map<String, String> {
         val stream = PinyinWords::class.java.getResourceAsStream(RESOURCE) ?: return emptyMap()
         val out = HashMap<String, String>(1 shl 16)
@@ -44,12 +79,15 @@ object PinyinWords {
                     val tab = raw.indexOf('\t')
                     if (tab > 0 && tab < raw.length - 1) {
                         val word = raw.substring(0, tab)
-                        out[word] = raw.substring(tab + 1)
+                        val reading = raw.substring(tab + 1)
+                        if (stealsParticle(word, reading)) return@forEachLine
+                        out[word] = reading
                         if (word.length > longest) longest = word.length
                     }
                 }
             }
         }
+        if (out.isNotEmpty()) out.putAll(added)
         return out
     }
 
@@ -68,15 +106,16 @@ object PinyinWords {
     fun readings(text: String): Array<String?>? {
         val words = table
         if (words.isEmpty() || text.isEmpty()) return null
+        val key = HanFold.fold(text)
 
-        val out = arrayOfNulls<String>(text.length)
+        val out = arrayOfNulls<String>(key.length)
         var found = false
         var index = 0
-        while (index < text.length) {
+        while (index < key.length) {
             var matched = 0
-            var size = minOf(longest, text.length - index)
+            var size = minOf(longest, key.length - index)
             while (size >= 2) {
-                val reading = words[text.substring(index, index + size)]
+                val reading = words[key.substring(index, index + size)]
                 if (reading != null) {
                     val syllables = reading.split(' ')
                     // The generator keeps only entries with one syllable per character, so this

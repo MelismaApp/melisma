@@ -42,7 +42,14 @@ stored, which is why the table is 295 KB in the APK rather than several megabyte
 
 Reading a line consults the table first, longest match forward, and falls back to ICU for any stretch
 no word covered — so a line is a mix of the two, and "not in the table" means "ICU was already
-right".
+right". The table is in Simplified characters, so Traditional lyrics are looked up folded to
+Simplified (OpenCC's character table); until they were, 音樂 came out *yīn lè*.
+
+Longest match takes the first word it finds, which a particle cannot survive: 的真, a rare word for
+"genuine", read 愛你的真心 as *dí zhēn xīn*. So two-character words that read 的, 了 or 着 as anything
+but *de*, *le* and *zhe* at an edge are dropped, except the common ones — 的确, 目的, 了解, 执着, 着急
+and a few more — and words such as 为了 and 盲目 are listed so those cannot take a character from
+them either.
 
 The same lookup picks up the tone sandhi of 一 and 不, which are rules rather than lexical exceptions
 but cannot be expressed per character either: 不要 is *bú yào*, 一起 is *yì qǐ*.
@@ -100,7 +107,9 @@ Two questions, then: is this song Hokkien, and how is each word read.
 
 ### Is it Hokkien
 
-Decided for the whole song, as Japanese is, because most single lines could be either.
+Decided for the whole song, as Japanese is, because most single lines could be either — and only
+for a song whose own script is Chinese: one with more Hangul, kana or any other non-Latin letters
+than Chinese characters is never read as Hokkien. English lines do not count against it.
 `HokkienDetector` weighs every character and every pair of characters by how much more often it
 appears in Hokkien text than in Mandarin — trained on the Hokkien headwords of the dictionaries below
 against their Mandarin glosses — and the song's average decides. Credit lines ("作词：…") are skipped;

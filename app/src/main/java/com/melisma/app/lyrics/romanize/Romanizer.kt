@@ -157,7 +157,8 @@ class Romanizer {
 
         val joined = syllables.joinToString("") { syllable ->
             val part = syllable.romanized ?: syllable.text
-            val continues = if (hokkien != null) syllable.romanizedStartsWord == false else syllable.partOfWord
+            val startsWord = syllable.romanizedStartsWord
+            val continues = if (hokkien != null && startsWord != null) !startsWord else syllable.partOfWord
             (if (continues) "" else " ") + part
         }
             // A syllable that is itself a space contributes one, and the join adds another either
@@ -175,8 +176,8 @@ class Romanizer {
      * Tâi-lô for a line's timed syllables, read as one line so a word can span them.
      *
      * A syllable that continues a word carries the hyphen at its front and says it does not start a
-     * word, so the renderer draws `guân` and `-lâi` side by side as *guân-lâi*. Syllables with no
-     * Chinese in them are left as they are.
+     * word, so the renderer draws `guân` and `-lâi` side by side as *guân-lâi*. A syllable with no
+     * Chinese in it — a Korean or English phrase in the song — is romanized as its own script is.
      */
     private fun hokkienSyllables(
         syllables: List<Syllable>,
@@ -185,7 +186,7 @@ class Romanizer {
     ): List<Syllable>? {
         val lineText = syllables.joinToString("") { it.text }
         val lookup = HanCanonical.of(lineText)
-        val byChar = HokkienWords.readings(lookup) ?: return null
+        val byChar = HokkienWords.readings(lookup)
         val poj = spelling == HokkienSpelling.POJ
 
         var changed = false
@@ -194,7 +195,12 @@ class Romanizer {
             val start = offset
             val end = start + syllable.text.length
             offset = end
-            if (syllable.text.none { it.isHanCharacter() }) return@map syllable
+            if (syllable.text.none { it.isHanCharacter() } || byChar == null) {
+                if (!syllable.romanized.isNullOrBlank() || syllable.text.any { it.isHanCharacter() }) return@map syllable
+                val other = romanizeMixed(syllable.text, Script.CHINESE, stripDiacritics) ?: return@map syllable
+                changed = true
+                return@map syllable.copy(romanized = other)
+            }
 
             val text = StringBuilder()
             var first: HokkienWords.Reading? = null

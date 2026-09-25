@@ -131,4 +131,24 @@ class PinyinWordsTest {
         val reading = romanizer.romanizeText("錒音乐", Script.CHINESE)
         assertTrue(reading, !reading.isNullOrBlank() && reading.contains("yuè"))
     }
+
+    @Test
+    fun `Traditional lyrics are read by word too`() {
+        // The table is Simplified; until it was looked up folded, these came out yīn lè and yín xíng.
+        assertEquals("yīn yuè", romanizer.romanizeText("音樂", Script.CHINESE))
+        assertEquals("yín háng", romanizer.romanizeText("銀行", Script.CHINESE))
+    }
+
+    @Test
+    fun `a particle is not taken by a rare word beside it`() {
+        // Reported: 的真, "genuine", read this as dí zhēn.
+        assertTrue(romanizer.romanizeText("愛你的真心", Script.CHINESE)!!.endsWith("nǐ de zhēn xīn"))
+        assertEquals("wǒ de dāng xià", romanizer.romanizeText("我的當下", Script.CHINESE))
+        assertTrue(romanizer.romanizeText("說明了一切", Script.CHINESE)!!.startsWith("shuō míng le"))
+        assertEquals("qiān zhe shǒu", romanizer.romanizeText("牽著手", Script.CHINESE))
+        assertEquals("máng mù de ài", romanizer.romanizeText("盲目的愛", Script.CHINESE))
+        // The common words are still read as words, and do not take from theirs.
+        assertEquals("zhí zhuó", romanizer.romanizeText("執著", Script.CHINESE))
+        assertEquals("wèi le jiě jué", romanizer.romanizeText("為了解決", Script.CHINESE))
+    }
 }

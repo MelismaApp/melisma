@@ -36,7 +36,6 @@ object HokkienWords {
         /** An empty reading means the character defaults, hyphenated. */
         val words: Map<String, String>,
         val chars: Map<String, String>,
-        val fold: Map<Char, Char>,
         val poj: Map<String, String>,
         val longest: Int,
     )
@@ -138,27 +137,19 @@ object HokkienWords {
             val tab = line.indexOf('\t')
             if (tab > 0) chars[line.substring(0, tab)] = line.substring(tab + 1)
         }
-        val fold = HashMap<Char, Char>(1 shl 12)
-        lines("/hokkien/fold.txt") { line ->
-            if (line.length == 3 && line[1] == '\t') fold[line[0]] = line[2]
-        }
         val poj = HashMap<String, String>(1 shl 12)
         lines("/hokkien/poj.txt") { line ->
             val tab = line.indexOf('\t')
             if (tab > 0) poj[line.substring(0, tab)] = line.substring(tab + 1)
         }
-        return Tables(words, chars, fold, poj, longest)
+        return Tables(words, chars, poj, longest)
     }
 
     /** Whether the tables loaded at all. */
     val isAvailable: Boolean get() = tables.chars.isNotEmpty()
 
     /** [text] with each Traditional character replaced by its Simplified form. Same length. */
-    fun fold(text: String): String {
-        val map = tables.fold
-        val out = CharArray(text.length) { map[text[it]] ?: text[it] }
-        return String(out)
-    }
+    fun fold(text: String): String = HanFold.fold(text)
 
     private fun buildFolded(): Folded {
         val t = tables
@@ -253,8 +244,7 @@ object HokkienWords {
         return false
     }
 
-    private fun isHan(char: Char): Boolean =
-        char in '一'..'鿿' || char in '㐀'..'䶿' || char in '豈'..'﫿'
+    private fun isHan(char: Char): Boolean = HanFold.isHan(char)
 
     private val separator = Regex("--|-| ")
 
