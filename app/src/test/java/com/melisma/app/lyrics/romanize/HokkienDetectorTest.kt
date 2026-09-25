@@ -53,8 +53,9 @@ class HokkienDetectorTest {
         // Hangul was counted as Han, and Korean scored as Hokkien: ATEEZ's BAD lost its romanization.
         val korean = listOf("어지러워 너의 그 미소", "눈이 멀어 Stuck in your halo", "빠져버려 난 이제 포로", "너의 눈빛에 갇혀버린 나")
         assertFalse(HokkienDetector.isHokkien(korean))
-        // Mostly Korean, with a Hokkien line.
-        assertFalse(HokkienDetector.isHokkien(korean + korean + "我毋知影你佇佗位，阮兜的囡仔攏足乖"))
+        // Mostly Korean, with Hokkien lines that would pass on their own.
+        assertTrue(HokkienDetector.isHokkien(hokkien))
+        assertFalse(HokkienDetector.isHokkien(korean + korean + hokkien))
     }
 
     @Test
