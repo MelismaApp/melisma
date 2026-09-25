@@ -151,4 +151,30 @@ class PinyinWordsTest {
         assertEquals("zhí zhuó", romanizer.romanizeText("執著", Script.CHINESE))
         assertEquals("wèi le jiě jué", romanizer.romanizeText("為了解決", Script.CHINESE))
     }
+
+    /** A song's worth of ordinary syllables, 300 ms each, so it has a typical length to compare with. */
+    private fun song(vararg lines: LyricLine) = LyricsDocument(
+        kind = LyricsKind.SYLLABLE, providerName = "Test", providerId = "test",
+        lines = lines.toList() + List(6) { n -> line(n * 10_000 + 60_000, "我" to 300, "們" to 300, "走" to 300, "吧" to 300) },
+    )
+
+    private fun line(start: Int, vararg parts: Pair<String, Int>): LyricLine {
+        var at = start
+        val syllables = parts.map { (text, length) -> Syllable(text = text, startMs = at, endMs = at + length).also { at += length } }
+        return LyricLine(role = LineRole.LEAD, startMs = start, endMs = at, text = parts.joinToString("") { it.first }, syllables = syllables)
+    }
+
+    @Test
+    fun `a held 了 is sung liao`() = runBlocking {
+        val held = line(0, "過" to 300, "了" to 1_200, "海" to 400)
+        val passing = line(5_000, "過" to 300, "了" to 250, "海" to 400)
+        val word = line(10_000, "了" to 1_200, "解" to 300)
+        val lines = romanizer.annotate(song(held, passing, word), romanize = true, furigana = false).lines
+        assertEquals("guò liǎo hǎi", lines[0].romanized)
+        assertEquals("guò le hǎi", lines[1].romanized)
+        // Already liǎo, in 了解.
+        assertEquals("liǎo jiě", lines[2].romanized)
+        val stripped = romanizer.annotate(song(held), romanize = true, furigana = false, stripDiacritics = true).lines
+        assertEquals("guo liao hai", stripped[0].romanized)
+    }
 }

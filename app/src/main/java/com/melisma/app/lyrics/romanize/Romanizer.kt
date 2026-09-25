@@ -104,10 +104,12 @@ class Romanizer {
             }
         }
 
+        val held = heldFor(document)
+
         var produced = false
         val lines = document.lines.map { line ->
             if (line.isInterlude || line.text.isBlank()) return@map line
-            val annotated = annotateLine(line, hanScript, stripDiacritics, wantRomaji, hokkien)
+            val annotated = annotateLine(line, hanScript, stripDiacritics, wantRomaji, hokkien, held)
             if (annotated !== line) produced = true
             annotated
         }
@@ -137,6 +139,7 @@ class Romanizer {
         stripDiacritics: Boolean,
         wantRomaji: Boolean,
         hokkien: HokkienSpelling? = null,
+        held: Int = Int.MAX_VALUE,
     ): LyricLine {
         // What a provider ships for a Hokkien song is its own spelling, pinyin-like and without tones,
         // where there is one at all; Tâi-lô replaces it, so the whole song is spelled one way.
@@ -151,7 +154,7 @@ class Romanizer {
         val syllables = if (hokkien != null && wantRomaji) {
             hokkienSyllables(line.syllables, stripDiacritics, hokkien)
         } else {
-            annotateSyllables(line.syllables, hanScript, stripDiacritics, wantRomaji)
+            annotateSyllables(line.syllables, hanScript, stripDiacritics, wantRomaji, held)
         } ?: return line
         if (!wantRomaji) return line.copy(syllables = syllables)
 
@@ -239,6 +242,7 @@ class Romanizer {
         hanScript: Script,
         stripDiacritics: Boolean,
         wantRomaji: Boolean,
+        held: Int = Int.MAX_VALUE,
     ): List<Syllable>? {
         val lineText = syllables.joinToString("") { it.text }
         val japanese = hanScript == Script.JAPANESE &&
@@ -273,7 +277,7 @@ class Romanizer {
                     ?: romanizeMixed(syllable.text, hanScript, stripDiacritics)
                     ?: return@map syllable
                 changed = true
-                syllable.copy(romanized = romanized)
+                syllable.copy(romanized = if (hanScript == Script.CHINESE) sungLiao(syllable, romanized, held, stripDiacritics) else romanized)
             }
             return if (changed) out else null
         }
@@ -586,6 +590,31 @@ class Romanizer {
      */
     private fun stripDiacritics(text: String): String =
         diacriticStripper?.let { runCatching { it.transliterate(text) }.getOrNull() } ?: text
+
+    /**
+     * How long a syllable has to last to count as held: twice the song's typical syllable, and 700 ms
+     * at the least. Measured on word-timed songs, a 了 sung in passing lasts 0.2 to 1 times the
+     * typical syllable, and one held out 2.4 to 3.7 times.
+     */
+    private fun heldFor(document: LyricsDocument): Int {
+        val lengths = document.lines.flatMap { line ->
+            line.syllables.filter { it.text.isNotBlank() }.map { it.endMs - it.startMs }
+        }.filter { it > 0 }.sorted()
+        if (lengths.size < 20) return Int.MAX_VALUE
+        return maxOf(2 * lengths[lengths.size / 2], 700)
+    }
+
+    /**
+     * 了 held out is sung *liǎo*, not the particle's *le*: a held note needs a vowel to hold, and
+     * singers give it one. Nothing in the text says so, only the timing, so only a syllable that
+     * ends in 了 and lasts at least [held] changes, and only where it would otherwise read *le*.
+     */
+    private fun sungLiao(syllable: Syllable, romanized: String, held: Int, stripDiacritics: Boolean): String {
+        if (syllable.endMs - syllable.startMs < held || !syllable.text.trimEnd().endsWith('了')) return romanized
+        val reading = romanized.trimEnd()
+        if (reading.substringAfterLast(' ') != "le") return romanized
+        return reading.dropLast(2) + if (stripDiacritics) "liao" else "liǎo"
+    }
 
     private fun spanReading(
         byWord: Array<String?>,

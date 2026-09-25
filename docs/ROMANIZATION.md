@@ -51,6 +51,12 @@ but *de*, *le* and *zhe* at an edge are dropped, except the common ones — 的�
 and a few more — and words such as 为了 and 盲目 are listed so those cannot take a character from
 them either.
 
+One reading comes from the timing rather than the text: 了 held out is sung *liǎo*, not the
+particle's *le*, because a held note needs a vowel to hold. In word-synced lyrics a syllable ending in
+了 that lasts at least twice the song's typical syllable, and 700 ms, reads *liǎo* where it would have
+read *le*. Measured on eleven word-timed songs, 了 sung in passing lasts 0.2 to 1 times the typical
+syllable, and one held out 2.4 to 3.7 times. Line-synced lyrics have no timing to go on and keep *le*.
+
 The same lookup picks up the tone sandhi of 一 and 不, which are rules rather than lexical exceptions
 but cannot be expressed per character either: 不要 is *bú yào*, 一起 is *yì qǐ*.
 
