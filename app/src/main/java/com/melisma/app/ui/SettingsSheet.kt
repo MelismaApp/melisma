@@ -2265,6 +2265,22 @@ private fun ReadAsRow(container: AppContainer, settings: Settings, accent: Color
             "uses too cannot be told apart by their words, so say so here. Kept on this phone, and " +
             "told to your cache server when its admin key is set, so the server knows next time.",
     )
+
+    val readAs = if (selected == ChineseReading.AUTO) autoReading else selected
+    if (readAs == ChineseReading.MANDARIN && document.lines.any { '了' in it.text }) {
+        ToggleRow(
+            title = "Sing 了 as liǎo",
+            subtitle = "Every particle 了 in this song, not only held ones",
+            checked = key in settings.liaoTracks,
+            accent = accent,
+            onCheckedChange = { container.settings.setSingsLiao(key, it) },
+        )
+        Help(
+            "Singers often sing 了 as liǎo rather than le. Held notes already read that way; some " +
+                "singers do it throughout, and nothing in the lyrics says so. Words like 了解 are " +
+                "read as they always are. Kept on this phone.",
+        )
+    }
 }
 
 private fun tagNote(result: CacheServerProvider.LanguageTag?, reading: ChineseReading): String? {

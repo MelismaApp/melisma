@@ -204,4 +204,13 @@ class PinyinWordsTest {
         assertEquals("míng zhù", romanizer.romanizeText("名著", Script.CHINESE))
         assertEquals("zhù zuò", romanizer.romanizeText("著作", Script.CHINESE))
     }
+
+    @Test
+    fun `a song sung with liao reads every particle 了 so`() = runBlocking {
+        val timed = line(0, "過" to 300, "了" to 250, "海" to 400)
+        val plain = LyricLine(role = LineRole.LEAD, startMs = 5_000, endMs = 6_000, text = "為了你 我了解了")
+        val lines = romanizer.annotate(song(timed, plain), romanize = true, furigana = false, singsLiao = true).lines
+        assertEquals("guò liǎo hǎi", lines[0].romanized)
+        assertEquals("wèi liǎo nǐ wǒ liǎo jiě liǎo", lines[1].romanized)
+    }
 }

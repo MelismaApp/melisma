@@ -284,6 +284,8 @@ data class Settings(
      * absent from here is decided by the server's tag, then by the detector.
      */
     val chineseReadings: Map<String, ChineseReading> = emptyMap(),
+    /** Songs whose singer sings the particle 了 *liǎo*, by track key. */
+    val liaoTracks: Set<String> = emptySet(),
     val translationSource: TranslationSource = TranslationSource.PROVIDER,
     val translationTarget: String = "en",
     val translationWifiOnly: Boolean = true,
@@ -679,6 +681,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         furigana = prefs.enum(KEY_FURIGANA, FuriganaMode.OFF),
         hokkienSpelling = prefs.enum(KEY_HOKKIEN_SPELLING, HokkienSpelling.TAILO),
         detectHokkien = prefs.getBoolean(KEY_DETECT_HOKKIEN, true),
+        liaoTracks = prefs.getStringSet(KEY_LIAO_TRACKS, null).orEmpty().toSet(),
         chineseReadings = prefs.getStringSet(KEY_CHINESE_READINGS, null).orEmpty().mapNotNull { entry ->
             val split = entry.lastIndexOf(READING_SEPARATOR)
             if (split <= 0) return@mapNotNull null
@@ -867,6 +870,10 @@ class SettingsStore(context: Context) : ProviderCredentials {
     fun setDetectHokkien(value: Boolean) = edit { putBoolean(KEY_DETECT_HOKKIEN, value) }
 
     /** [reading] for the track with [key]; [ChineseReading.AUTO] forgets it. */
+    fun setSingsLiao(key: String, value: Boolean) = edit {
+        putStringSet(KEY_LIAO_TRACKS, if (value) current.liaoTracks + key else current.liaoTracks - key)
+    }
+
     fun setChineseReading(key: String, reading: ChineseReading) = edit {
         val next = current.chineseReadings.toMutableMap()
         if (reading == ChineseReading.AUTO) next.remove(key) else next[key] = reading
@@ -1172,6 +1179,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_HOKKIEN_SPELLING = "hokkien_spelling"
         const val KEY_DETECT_HOKKIEN = "detect_hokkien"
         const val KEY_CHINESE_READINGS = "chinese_readings"
+        const val KEY_LIAO_TRACKS = "liao_tracks"
 
         /**
          * Between a track key and its reading. Split at the last one, so a key may contain it too. Not

@@ -728,7 +728,9 @@ class LyricsRepository(
 
         val chinese = chineseReading(ready.key, settings)
         val annotation = annotationKey(ready.key, settings, chinese)
-        if (annotation != null) document = deriveAnnotated(annotation, document, settings, chinese)
+        if (annotation != null) {
+            document = deriveAnnotated(annotation, document, settings, chinese, ready.key in settings.liaoTracks)
+        }
 
         // Only the on-device source derives anything. "From the source" is a display
         // decision about text the document already carries, so it costs nothing here —
@@ -811,7 +813,7 @@ class LyricsRepository(
         if (!settings.showRomanization && !furigana) return null
         return "$key|ann|${settings.showRomanization}|${settings.furigana}|" +
             settings.romanizationStripsDiacritics + "|$chinese|" +
-            "${settings.hokkienSpelling}|${HokkienWords.revision.value}"
+            "${settings.hokkienSpelling}|${HokkienWords.revision.value}|${key in settings.liaoTracks}"
     }
 
     private suspend fun deriveAnnotated(
@@ -819,6 +821,7 @@ class LyricsRepository(
         document: LyricsDocument,
         settings: Settings,
         chinese: ChineseReading,
+        singsLiao: Boolean,
     ): LyricsDocument {
         derived[cacheKey]?.let { return it }
         val result = romanizer.annotate(
@@ -828,6 +831,7 @@ class LyricsRepository(
             stripDiacritics = settings.romanizationStripsDiacritics,
             chinese = chinese,
             hokkienSpelling = settings.hokkienSpelling,
+            singsLiao = singsLiao,
         )
         derived[cacheKey] = result
         return result

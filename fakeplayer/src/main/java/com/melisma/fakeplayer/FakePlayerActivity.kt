@@ -50,6 +50,8 @@ class FakePlayerActivity : Activity() {
         // Taiwanese Hokkien, for the detector and Tâi-lô.
         Track("你攏無咧看", "蕭煌奇", "你攏無咧看", 198_827),
         Track("浪子回頭", "茄子蛋", "卡通人物", 259_373),
+        // Mandarin with 了, for the liǎo switch.
+        Track("後來", "劉若英", "我等你", 341_400),
     )
 
     private lateinit var session: MediaSession

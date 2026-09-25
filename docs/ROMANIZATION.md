@@ -57,6 +57,10 @@ particle's *le*, because a held note needs a vowel to hold. In word-synced lyric
 read *le*. Measured on eleven word-timed songs, 了 sung in passing lasts 0.2 to 1 times the typical
 syllable, and one held out 2.4 to 3.7 times. Line-synced lyrics have no timing to go on and keep *le*.
 
+Some singers sing *liǎo* throughout, held or not, and nothing in the lyrics or the timing says so.
+**This track → Sing 了 as liǎo** reads every particle 了 in that song as *liǎo*; words such as 了解
+keep their own reading. Shown for songs read as Mandarin that have a 了, and kept on the phone.
+
 The same lookup picks up the tone sandhi of 一 and 不, which are rules rather than lexical exceptions
 but cannot be expressed per character either: 不要 is *bú yào*, 一起 is *yì qǐ*.
 

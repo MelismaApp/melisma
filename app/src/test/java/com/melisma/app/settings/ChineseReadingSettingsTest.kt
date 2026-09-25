@@ -33,4 +33,13 @@ class ChineseReadingSettingsTest {
         assertTrue(key !in store.current.chineseReadings)
         assertEquals(ChineseReading.MANDARIN, store.current.chineseReadings["sp:abc"])
     }
+
+    @Test
+    fun `a song sung with liao is remembered, and forgotten when switched off`() {
+        val store = SettingsStore(ApplicationProvider.getApplicationContext<Context>())
+        store.setSingsLiao("過海|王赫野|227", true)
+        assertTrue("過海|王赫野|227" in SettingsStore(ApplicationProvider.getApplicationContext<Context>()).current.liaoTracks)
+        store.setSingsLiao("過海|王赫野|227", false)
+        assertTrue(store.current.liaoTracks.isEmpty())
+    }
 }

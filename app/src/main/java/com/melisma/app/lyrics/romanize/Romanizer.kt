@@ -69,6 +69,8 @@ class Romanizer {
         /** How to read Chinese; [ChineseReading.AUTO] asks [HokkienDetector]. */
         chinese: ChineseReading = ChineseReading.MANDARIN,
         hokkienSpelling: HokkienSpelling = HokkienSpelling.TAILO,
+        /** This song's singer sings every particle 了 *liǎo*; see [sungLiao] for the held ones. */
+        singsLiao: Boolean = false,
     ): LyricsDocument = withContext(Dispatchers.Default) {
         if (!romanize && !furigana) return@withContext document
 
@@ -109,7 +111,7 @@ class Romanizer {
         var produced = false
         val lines = document.lines.map { line ->
             if (line.isInterlude || line.text.isBlank()) return@map line
-            val annotated = annotateLine(line, hanScript, stripDiacritics, wantRomaji, hokkien, held)
+            val annotated = annotateLine(line, hanScript, stripDiacritics, wantRomaji, hokkien, held, singsLiao)
             if (annotated !== line) produced = true
             annotated
         }
@@ -140,6 +142,7 @@ class Romanizer {
         wantRomaji: Boolean,
         hokkien: HokkienSpelling? = null,
         held: Int = Int.MAX_VALUE,
+        liao: Boolean = false,
     ): LyricLine {
         // What a provider ships for a Hokkien song is its own spelling, pinyin-like and without tones,
         // where there is one at all; Tâi-lô replaces it, so the whole song is spelled one way.
@@ -147,14 +150,14 @@ class Romanizer {
 
         if (line.syllables.isEmpty()) {
             if (!wantRomaji || (!replacing && !line.romanized.isNullOrBlank())) return line
-            val text = romanizeMixed(line.text, hanScript, stripDiacritics, hokkien) ?: return line
+            val text = romanizeMixed(line.text, hanScript, stripDiacritics, hokkien, liao) ?: return line
             return line.copy(romanized = text)
         }
 
         val syllables = if (hokkien != null && wantRomaji) {
             hokkienSyllables(line.syllables, stripDiacritics, hokkien)
         } else {
-            annotateSyllables(line.syllables, hanScript, stripDiacritics, wantRomaji, held)
+            annotateSyllables(line.syllables, hanScript, stripDiacritics, wantRomaji, held, liao)
         } ?: return line
         if (!wantRomaji) return line.copy(syllables = syllables)
 
@@ -243,6 +246,7 @@ class Romanizer {
         stripDiacritics: Boolean,
         wantRomaji: Boolean,
         held: Int = Int.MAX_VALUE,
+        liao: Boolean = false,
     ): List<Syllable>? {
         val lineText = syllables.joinToString("") { it.text }
         val japanese = hanScript == Script.JAPANESE &&
@@ -269,12 +273,12 @@ class Romanizer {
                 offset += syllable.text.length
                 if (!syllable.romanized.isNullOrBlank()) return@map syllable
                 val romanized = byWord
-                    ?.let { spanReading(it, lookupText, start, syllable.text.length) }
+                    ?.let { spanReading(it, lookupText, start, syllable.text.length, liao) }
                     // The table stores tone marks, and this path does not go through `romanizeText`,
                     // so "drop tone marks" has to be honoured here too or the setting would apply to
                     // some syllables of a line and not others.
                     ?.let { if (stripDiacritics) stripDiacritics(it) else it }
-                    ?: romanizeMixed(syllable.text, hanScript, stripDiacritics)
+                    ?: romanizeMixed(syllable.text, hanScript, stripDiacritics, liao = liao)
                     ?: return@map syllable
                 changed = true
                 syllable.copy(romanized = if (hanScript == Script.CHINESE) sungLiao(syllable, romanized, held, stripDiacritics) else romanized)
@@ -468,15 +472,16 @@ class Romanizer {
         hanScript: Script,
         stripDiacritics: Boolean = false,
         hokkien: HokkienSpelling? = null,
+        liao: Boolean = false,
     ): String? {
         val runs = scriptRuns(text, hanScript)
         if (runs.isEmpty()) return null
-        if (runs.size == 1) return romanizeText(text, runs.first().script, stripDiacritics, hokkien)
+        if (runs.size == 1) return romanizeText(text, runs.first().script, stripDiacritics, hokkien, liao)
 
         var converted = false
         val out = StringBuilder()
         for (run in runs) {
-            val piece = romanizeText(run.text, run.script, stripDiacritics, hokkien)
+            val piece = romanizeText(run.text, run.script, stripDiacritics, hokkien, liao)
             if (piece != null) converted = true
             val text = piece ?: run.text
             if (text.isEmpty()) continue
@@ -497,6 +502,8 @@ class Romanizer {
         stripDiacritics: Boolean = false,
         /** Read Chinese as Taiwanese Hokkien, spelled this way, rather than as Mandarin. */
         hokkien: HokkienSpelling? = null,
+        /** Read the particle 了 *liǎo*, as this song's singer does. */
+        liao: Boolean = false,
     ): String? {
         if (text.isBlank()) return null
         // A radical that depicts an ideograph is not that ideograph, and nothing has a reading for
@@ -517,7 +524,7 @@ class Romanizer {
             Script.CHINESE -> if (hokkien != null) {
                 HokkienWords.romanize(source, poj = hokkien == HokkienSpelling.POJ)
             } else {
-                chinesePinyin(source)
+                chinesePinyin(source, liao)
             }
             Script.KOREAN -> transliterate("Hangul-Latin", source)
             Script.CYRILLIC -> transliterate("Cyrillic-Latin", source)
@@ -545,8 +552,9 @@ class Romanizer {
      * is right about the rest. So a line is a mix, and has to be assembled a character at a time —
      * there is no single call that knows both halves.
      */
-    private fun chinesePinyin(text: String): String? {
-        val byWord = PinyinWords.readings(text) ?: return transliterate("Han-Latin", text)
+    private fun chinesePinyin(text: String, liao: Boolean = false): String? {
+        val byWord = PinyinWords.readings(text)
+            ?: if (liao && '了' in text) arrayOfNulls(text.length) else return transliterate("Han-Latin", text)
 
         // By code point, not by char. An emoji or an Extension-B ideograph is a surrogate pair,
         // and stepping through UTF-16 units would read each half separately and push a separator
@@ -557,8 +565,8 @@ class Romanizer {
             val codePoint = text.codePointAt(index)
             val width = Character.charCount(codePoint)
             val raw = text.substring(index, index + width)
-            val reading = byWord[index]
-                ?: (if (width == 1) singleCharPinyin(text[index]) else null)
+            val reading = (byWord[index] ?: (if (width == 1) singleCharPinyin(text[index]) else null))
+                ?.let { if (liao) liao(text[index], it) else it }
                 ?: raw
             if (out.isNotEmpty() && !out.last().isWhitespace() && !reading.first().isWhitespace()) {
                 out.append(' ')
@@ -619,11 +627,15 @@ class Romanizer {
         return spoken.dropLast(2) + (if (stripDiacritics) "liao" else "liǎo") + romanized.substring(spoken.length)
     }
 
+    /** The particle's *le* as *liǎo*, for a song whose singer sings it so; any other reading as it is. */
+    private fun liao(char: Char, reading: String): String = if (char == '了' && reading == "le") "liǎo" else reading
+
     private fun spanReading(
         byWord: Array<String?>,
         lineText: String,
         start: Int,
         length: Int,
+        liao: Boolean = false,
     ): String? {
         if (length <= 0 || start + length > lineText.length) return null
         var covered = false
@@ -634,8 +646,8 @@ class Romanizer {
             if (byWord[index] != null) covered = true
             // A supplementary character has no per-character reading to fall back on, so the whole
             // syllable goes to the ordinary path rather than being read half a codepoint at a time.
-            val reading = byWord[index]
-                ?: (if (width == 1) singleCharPinyin(lineText[index]) else null)
+            val reading = (byWord[index] ?: (if (width == 1) singleCharPinyin(lineText[index]) else null))
+                ?.let { if (liao) liao(lineText[index], it) else it }
                 ?: return null
             if (out.isNotEmpty()) out.append(' ')
             out.append(reading)
