@@ -177,4 +177,31 @@ class PinyinWordsTest {
         val stripped = romanizer.annotate(song(held), romanize = true, furigana = false, stripDiacritics = true).lines
         assertEquals("guo liao hai", stripped[0].romanized)
     }
+
+    @Test
+    fun `punctuation after a held 了 does not hide it`() = runBlocking {
+        val lines = romanizer.annotate(song(line(0, "走" to 300, "了！" to 1_200)), romanize = true, furigana = false).lines
+        assertTrue(lines[0].syllables[1].romanized!!.startsWith("liǎo"))
+    }
+
+    @Test
+    fun `a 了 whose end was only inferred is not taken as held`() = runBlocking {
+        // Enhanced LRC where every word is closed but the last, 過了, which runs to the next line four
+        // seconds on.
+        val closed = (0 until 8).joinToString("\n") { n ->
+            val s = n * 10 + 5
+            "[00:$s.00]<00:$s.00>我<00:$s.30><00:$s.30>們<00:$s.60><00:$s.60>走<00:$s.90><00:$s.90>吧<00:${s + 1}.20>"
+        }
+        val lrc = closed + "\n[01:30.00]<01:30.00>過了\n[01:34.00]<01:34.00>海<01:34.30>"
+        val document = com.melisma.app.lyrics.parse.LrcParser.toDocument(lrc, "Test", "test")!!
+        val line = romanizer.annotate(document, romanize = true, furigana = false).lines.first { "了" in it.text }
+        assertEquals("guò le", line.syllables.last().romanized)
+    }
+
+    @Test
+    fun `a word whose key folds differently is still found`() {
+        // 著 folds to 着 for the lookup; 名著 and 著作 had become unreachable, and ICU reads them zhe.
+        assertEquals("míng zhù", romanizer.romanizeText("名著", Script.CHINESE))
+        assertEquals("zhù zuò", romanizer.romanizeText("著作", Script.CHINESE))
+    }
 }

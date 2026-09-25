@@ -598,7 +598,7 @@ class Romanizer {
      */
     private fun heldFor(document: LyricsDocument): Int {
         val lengths = document.lines.flatMap { line ->
-            line.syllables.filter { it.text.isNotBlank() }.map { it.endMs - it.startMs }
+            line.syllables.filter { it.text.isNotBlank() && !it.endInferred }.map { it.endMs - it.startMs }
         }.filter { it > 0 }.sorted()
         if (lengths.size < 20) return Int.MAX_VALUE
         return maxOf(2 * lengths[lengths.size / 2], 700)
@@ -607,13 +607,16 @@ class Romanizer {
     /**
      * 了 held out is sung *liǎo*, not the particle's *le*: a held note needs a vowel to hold, and
      * singers give it one. Nothing in the text says so, only the timing, so only a syllable that
-     * ends in 了 and lasts at least [held] changes, and only where it would otherwise read *le*.
+     * ends in 了 — punctuation aside — and lasts at least [held] changes, and only where it would
+     * otherwise read *le*. A syllable whose end the source never gave is left alone: its length
+     * includes whatever pause follows it.
      */
     private fun sungLiao(syllable: Syllable, romanized: String, held: Int, stripDiacritics: Boolean): String {
-        if (syllable.endMs - syllable.startMs < held || !syllable.text.trimEnd().endsWith('了')) return romanized
-        val reading = romanized.trimEnd()
-        if (reading.substringAfterLast(' ') != "le") return romanized
-        return reading.dropLast(2) + if (stripDiacritics) "liao" else "liǎo"
+        if (syllable.endInferred || syllable.endMs - syllable.startMs < held) return romanized
+        if (!syllable.text.trimEnd { !it.isLetterOrDigit() }.endsWith('了')) return romanized
+        val spoken = romanized.trimEnd { !it.isLetter() }
+        if (spoken.substringAfterLast(' ') != "le") return romanized
+        return spoken.dropLast(2) + (if (stripDiacritics) "liao" else "liǎo") + romanized.substring(spoken.length)
     }
 
     private fun spanReading(

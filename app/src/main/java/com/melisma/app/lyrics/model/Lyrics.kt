@@ -55,6 +55,11 @@ data class Syllable(
      * kana, or it is not Japanese).
      */
     val kana: String? = null,
+    /**
+     * True when the source gave no end and [endMs] is where the next syllable or the line begins,
+     * so any pause after the word is counted in its length.
+     */
+    val endInferred: Boolean = false,
 ) {
     val durationMs: Int get() = (endMs - startMs).coerceAtLeast(0)
 }

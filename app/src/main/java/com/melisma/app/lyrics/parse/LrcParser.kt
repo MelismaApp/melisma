@@ -219,7 +219,7 @@ object LrcParser {
                 next != null -> next.startMs
                 else -> line.endMs
             }
-            syllable.copy(endMs = end.coerceAtLeast(syllable.startMs))
+            syllable.copy(endMs = end.coerceAtLeast(syllable.startMs), endInferred = syllable.endMs <= syllable.startMs)
         }
         line.copy(
             syllables = closed,

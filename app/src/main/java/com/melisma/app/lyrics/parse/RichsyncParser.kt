@@ -85,6 +85,7 @@ object RichsyncParser {
                     startMs = start,
                     endMs = end.coerceAtLeast(start),
                     partOfWord = partOfWord,
+                    endInferred = true,
                 )
                 if (!partOfWord && text.isNotEmpty()) text.append(' ')
                 text.append(trimmed)

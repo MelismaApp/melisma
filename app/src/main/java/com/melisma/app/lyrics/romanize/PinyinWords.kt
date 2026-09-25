@@ -87,7 +87,14 @@ object PinyinWords {
                 }
             }
         }
-        if (out.isNotEmpty()) out.putAll(added)
+        if (out.isEmpty()) return out
+        out.putAll(added)
+        // Lines are looked up folded, so a key that folds differently — 名著 is 名着 by then — is also
+        // listed folded. Where two fold together, the one already in Simplified keeps the slot.
+        for ((word, reading) in out.entries.toList()) {
+            val folded = HanFold.fold(word)
+            if (folded != word) out.putIfAbsent(folded, reading)
+        }
         return out
     }
 
