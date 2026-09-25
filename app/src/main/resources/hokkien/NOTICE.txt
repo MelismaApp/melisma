@@ -1,0 +1,13 @@
+Taiwanese Hokkien tables, built by tools/hokkien/build_tables.py.
+
+words.txt, chars.txt, poj.txt and detect.txt are adapted from:
+  - 台華線頂對照典, by 鄭良偉 and 楊允言 (ChhoeTaigi database,
+    https://github.com/ChhoeTaigi/ChhoeTaigiDatabase), CC BY-SA 4.0
+  - iTaigi 華台對照典, by the iTaigi contributors (same database), CC0
+  - English Wiktionary's Hokkien pronunciations, by its editors (via https://kaikki.org),
+    CC BY-SA 4.0
+and are licensed CC BY-SA 4.0: https://creativecommons.org/licenses/by-sa/4.0/
+They were selected, merged and reformatted; detect.txt holds weights computed from them.
+
+fold.txt is OpenCC's TSCharacters.txt (https://github.com/BYVoid/OpenCC), reduced to single
+characters, Apache-2.0: https://www.apache.org/licenses/LICENSE-2.0

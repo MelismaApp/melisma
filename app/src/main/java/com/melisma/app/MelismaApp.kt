@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import com.melisma.app.lyrics.LyricsCache
 import com.melisma.app.lyrics.LyricsRepository
+import com.melisma.app.lyrics.SpokenLanguageStore
 import com.melisma.app.lyrics.provider.AmllTtmlProvider
 import com.melisma.app.lyrics.provider.AppleMusicProvider
 import com.melisma.app.lyrics.provider.CacheServerProvider
@@ -103,10 +104,13 @@ class AppContainer(context: Context) {
      */
     private val isrcStore = IsrcStore(context)
 
+    /** The language the cache server says each track is in, across launches. */
+    private val spokenLanguages = SpokenLanguageStore(context)
+
     /** Every provider that exists; Settings decides which are asked and in what order. */
     val providers: List<LyricsProvider> = listOf(
         localLyrics,
-        CacheServerProvider(settings),
+        CacheServerProvider(settings, spokenLanguages),
         AppleMusicProvider(settings),
         AmllTtmlProvider(settings),
         SpotifyLyricsProvider(settings),
@@ -123,6 +127,7 @@ class AppContainer(context: Context) {
         translator = translator,
         localStore = localLyrics,
         isrcStore = isrcStore,
+        spokenLanguages = spokenLanguages,
         providers = providers,
         scope = scope,
     )

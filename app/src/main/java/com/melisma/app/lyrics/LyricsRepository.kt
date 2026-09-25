@@ -7,6 +7,7 @@ import android.net.Uri
 import android.util.Log
 import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.lyrics.model.LyricsKind
+import com.melisma.app.lyrics.provider.CacheServerProvider
 import com.melisma.app.lyrics.provider.LocalLyricsStore
 import com.melisma.app.lyrics.provider.LyricsProvider
 import com.melisma.app.lyrics.provider.LyricsRequest
@@ -18,6 +19,7 @@ import com.melisma.app.util.containsRomanizableScript
 import com.melisma.app.util.detectScript
 import com.melisma.app.util.needsRomanization
 import com.melisma.app.settings.CacheServerMode
+import com.melisma.app.settings.ChineseReading
 import com.melisma.app.settings.Settings
 import com.melisma.app.settings.SettingsStore
 import com.melisma.app.settings.TranslationSource
@@ -82,6 +84,7 @@ class LyricsRepository(
     private val translator: LyricsTranslator,
     private val localStore: LocalLyricsStore,
     private val isrcStore: IsrcStore,
+    private val spokenLanguages: SpokenLanguageStore,
     private val providers: List<LyricsProvider>,
     private val scope: CoroutineScope,
 ) {
@@ -804,16 +807,52 @@ class LyricsRepository(
         settings: Settings,
     ): LyricsDocument {
         val furigana = settings.furigana != com.melisma.app.settings.FuriganaMode.OFF
+        val chinese = chineseReading(key, settings)
         val cacheKey = "$key|ann|${settings.showRomanization}|$furigana|" +
-            settings.romanizationStripsDiacritics
+            settings.romanizationStripsDiacritics + "|$chinese|${settings.hokkienSpelling}"
         derived[cacheKey]?.let { return it }
         val result = romanizer.annotate(
             document = document,
             romanize = settings.showRomanization,
             furigana = furigana,
             stripDiacritics = settings.romanizationStripsDiacritics,
+            chinese = chinese,
+            hokkienSpelling = settings.hokkienSpelling,
         )
         derived[cacheKey] = result
+        return result
+    }
+
+    /**
+     * How the track with [key] reads its Chinese: as told on this phone, else as the cache server
+     * says, else [ChineseReading.AUTO] for the detector to decide — or Mandarin, with detection off.
+     */
+    fun chineseReading(key: String, settings: Settings = settingsStore.current): ChineseReading =
+        settings.chineseReadings[key]
+            ?: when (spokenLanguages.get(key)) {
+                "nan" -> ChineseReading.HOKKIEN
+                "zh", "yue" -> ChineseReading.MANDARIN
+                else -> null
+            }
+            ?: if (settings.detectHokkien) ChineseReading.AUTO else ChineseReading.MANDARIN
+
+    /**
+     * Tell the cache server which language the playing track is in, when there is one to tell.
+     *
+     * Null when there is no playing track matching [key] or no cache server. [ChineseReading.AUTO]
+     * clears the server's tag and forgets what it said here, so the detector decides again.
+     */
+    suspend fun tagLanguage(key: String, reading: ChineseReading): CacheServerProvider.LanguageTag? {
+        if (reading == ChineseReading.AUTO) spokenLanguages.remove(key)
+        val request = currentRequest?.takeIf { it.cacheIdentity() == key } ?: return null
+        val server = providers.filterIsInstance<CacheServerProvider>().firstOrNull() ?: return null
+        val language = when (reading) {
+            ChineseReading.HOKKIEN -> "nan"
+            ChineseReading.MANDARIN -> "zh"
+            ChineseReading.AUTO -> null
+        }
+        val result = server.putLanguage(request, language)
+        if (result == CacheServerProvider.LanguageTag.SAVED && language != null) spokenLanguages.put(key, language)
         return result
     }
 
@@ -850,10 +889,6 @@ class LyricsRepository(
         val capabilities = manager.getNetworkCapabilities(manager.activeNetwork) ?: return false
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
-
-    private fun LyricsRequest.cacheIdentity(): String =
-        spotifyTrackId?.let { "sp:$it" }
-            ?: "${title.lowercase().trim()}|${artist.lowercase().trim()}|${durationMs / 2000}"
 
     internal companion object {
         const val TAG = "LyricsRepository"

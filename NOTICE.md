@@ -104,6 +104,24 @@ The source of `pinyin/words.txt`, the table that reads Chinese by the word rathe
 character. Only its own files are used — `pinyin.txt`, `overwrite.txt`, `di.txt` and the two 汉典
 files — and not `large_pinyin.txt`, which folds in CC-CEDICT. See `docs/ROMANIZATION.md`.
 
+## Taiwanese Hokkien readings — ChhoeTaigi, iTaigi, Wiktionary, OpenCC
+
+The tables in `app/src/main/resources/hokkien/` are built by `tools/hokkien/build_tables.py` from:
+
+- **台華線頂對照典**, by 鄭良偉 and 楊允言, from the
+  [ChhoeTaigi database](https://github.com/ChhoeTaigi/ChhoeTaigiDatabase) ·
+  [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+- **iTaigi 華台對照典**, by the iTaigi contributors, from the same database · CC0
+- **English Wiktionary**'s Hokkien pronunciations, by its editors, via
+  [kaikki.org](https://kaikki.org) · [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+- **OpenCC**'s `TSCharacters.txt`, by BYVoid and the OpenCC contributors ·
+  [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0)
+
+The readings were selected, merged and reformatted, and the detector weights computed from them.
+`words.txt`, `chars.txt`, `poj.txt` and `detect.txt` are therefore adaptations of CC BY-SA 4.0
+material and are themselves licensed **CC BY-SA 4.0**, separately from the app's AGPL-3.0 code.
+`fold.txt` is from OpenCC, under Apache-2.0.
+
 ## ML Kit Translation — Google
 
 https://developers.google.com/ml-kit/language/translation · Google APIs Terms of Service

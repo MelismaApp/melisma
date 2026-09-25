@@ -196,6 +196,44 @@ and **no credential comes back** — only whether one works.
 A source the app has never heard of is still shown. The point of the screen is to report what is
 there.
 
+## Language tags
+
+Which language a Chinese-script track is sung in: Mandarin, Taiwanese Hokkien or Cantonese. The
+script cannot say, and it decides how the app romanizes the song — pinyin or Tâi-lô
+([ROMANIZATION.md](ROMANIZATION.md#taiwanese-hokkien)).
+
+**Read.** Every `/v1/lyrics` answer may carry, a 404 included:
+
+```
+X-Lyrics-Language: nan
+X-Lyrics-Language-Source: tagged
+```
+
+- `nan` is Hokkien, `zh` Mandarin, `yue` Cantonese (ISO 639-3). Anything else is ignored.
+- A miss carries it too: a track tagged Hokkien is still Hokkien when another source supplies the words.
+- The app keeps it on the phone, per track, and uses it before its own detector. A choice made on the
+  phone under **This track → Read this song as** is used before both.
+
+**Write.** Choosing Mandarin, Hokkien or Auto under **Read this song as** also sends:
+
+```
+PUT {baseUrl}/v1/language
+Authorization: Bearer <admin key>
+Content-Type: application/json
+
+{ "spotifyId": "…", "isrc": "…", "title": "…", "artist": "…", "album": "…", "durationMs": 208000,
+  "language": "nan" }
+```
+
+- `language` is `nan`, `zh`, or `yue`, or an explicit `null` for Auto, which clears the tag so the
+  server decides for itself again. A missing `language` is a 400.
+- `204` saved. `401` no key or a wrong one, including from the local network. `403` a key that is not
+  the admin key — a user key cannot tag.
+- A tag belongs to the recording: set or cleared from any release, it applies to every release with
+  the same ISRC.
+- Sent once per choice and never retried. Without a key nothing is sent, and the choice stays on the
+  phone.
+
 ## What the app does with it
 
 In **Alongside the others** mode the server is asked in parallel with every enabled source, and
@@ -224,9 +262,14 @@ In both modes:
 
 ## The contract is read-only, deliberately
 
-The app only ever asks this server questions. There is no endpoint it posts to, and that is a
-decision rather than an omission — so if you are extending either side, this is the constraint to
-design around.
+The app only ever asks this server questions, with one exception: a [language tag](#language-tags),
+sent with the admin key when you choose one. That is a decision rather than an omission — so if you
+are extending either side, this is the constraint to design around.
+
+The objections below do not apply to the tag. The server cannot hear which language a song is in, so
+it does not already have the answer. Only the admin key is accepted, so a user key or an open network
+cannot poison anything. And it is one call site, `CacheServerProvider.putLanguage`, run by one
+control.
 
 It came up as a real proposal: have the app report "these timings did not fit what was playing" so
 the server's cross-source checks could use playback evidence. It was declined, and the reasons are

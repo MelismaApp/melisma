@@ -31,6 +31,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +79,13 @@ import com.melisma.app.settings.TranslationSource
 import com.melisma.app.settings.CacheServerMode
 import com.melisma.app.settings.ExtrasServerMode
 import com.melisma.app.lyrics.LyricsRepository
+import com.melisma.app.lyrics.LyricsState
+import com.melisma.app.lyrics.provider.CacheServerProvider
+import com.melisma.app.lyrics.romanize.HokkienDetector
+import com.melisma.app.settings.ChineseReading
+import com.melisma.app.settings.HokkienSpelling
+import com.melisma.app.util.Script
+import com.melisma.app.util.detectScript
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -816,6 +824,28 @@ fun SettingsSheet(
                             "where it is `dì`. The characters are what tells you which word it " +
                             "was. Costs a row of height per line.",
                     )
+
+                    ToggleRow(
+                        title = "Recognise Taiwanese Hokkien",
+                        subtitle = "Off reads every Chinese song as Mandarin",
+                        checked = settings.detectHokkien,
+                        accent = accent,
+                        onCheckedChange = { store.setDetectHokkien(it) },
+                    )
+                    ChipGroup(
+                        label = "Spell Hokkien in",
+                        options = HokkienSpelling.entries.map { it to it.label },
+                        selected = settings.hokkienSpelling,
+                        accent = accent,
+                        onSelect = { store.setHokkienSpelling(it) },
+                    )
+                    Help(
+                        "Hokkien is written in the same characters as Mandarin, so a Hokkien song used " +
+                            "to get pinyin. It is recognised by its words — 毋, 袂, 佇, 明仔載 — and " +
+                            "read in Tâi-lô, the Ministry of Education's system, or POJ, the older church " +
+                            "romanization. A song written only in characters both languages share can " +
+                            "be missed; This track can say which it is.",
+                    )
                 }
 
                 ChipGroup(
@@ -1113,6 +1143,8 @@ fun SettingsSheet(
                     accent = accent,
                     onClick = { container.lyrics.retry() },
                 )
+
+                ReadAsRow(container = container, settings = settings, accent = accent)
             }
 
             Section(
@@ -2130,6 +2162,70 @@ private fun SliderRow(
                 inactiveTrackColor = Color.White.copy(alpha = 0.16f),
             ),
         )
+    }
+}
+
+/**
+ * Which language the playing song's Chinese is read in, for when the detector got it wrong.
+ *
+ * Only shown for a song with Chinese in it. The choice is kept on the phone, and told to the cache
+ * server when there is one and the admin key is set — the one thing the app writes there.
+ */
+@Composable
+private fun ReadAsRow(container: AppContainer, settings: Settings, accent: Color) {
+    val scope = rememberCoroutineScope()
+    val playing by container.media.snapshot.collectAsState()
+    val lyricsState by container.lyrics.state.collectAsState()
+    val key = playing.track?.cacheKey ?: return
+    val document = (lyricsState as? LyricsState.Loaded)?.document ?: return
+
+    // What Auto means for this song: the server's tag if it has one, otherwise the detector.
+    val auto by produceState<ChineseReading?>(null, document, key, settings.detectHokkien) {
+        value = withContext(Dispatchers.Default) {
+            val lines = document.lines.map { it.text }
+            val corpus = lines.joinToString("\n")
+            val chinese = corpus.any { it in '\u4e00'..'\u9fff' } && detectScript(corpus) != Script.JAPANESE
+            if (!chinese) return@withContext null
+            when (container.lyrics.chineseReading(key, settings.copy(chineseReadings = emptyMap()))) {
+                ChineseReading.HOKKIEN -> ChineseReading.HOKKIEN
+                ChineseReading.MANDARIN -> ChineseReading.MANDARIN
+                ChineseReading.AUTO ->
+                    if (HokkienDetector.isHokkien(lines)) ChineseReading.HOKKIEN else ChineseReading.MANDARIN
+            }
+        }
+    }
+    val autoReading = auto ?: return
+    var note by remember(key) { mutableStateOf<String?>(null) }
+    val selected = settings.chineseReadings[key] ?: ChineseReading.AUTO
+
+    ChipGroup(
+        label = "Read this song as",
+        options = ChineseReading.entries.map { it to it.label },
+        selected = selected,
+        accent = accent,
+        onSelect = { reading ->
+            if (reading == selected) return@ChipGroup
+            container.settings.setChineseReading(key, reading)
+            scope.launch { note = tagNote(container.lyrics.tagLanguage(key, reading), reading) }
+        },
+    )
+    Hint(note ?: "Auto reads it as ${autoReading.label}.")
+    Help(
+        "For a song read in the wrong language. Hokkien lyrics written only in characters Mandarin " +
+            "uses too cannot be told apart by their words, so say so here. Kept on this phone, and " +
+            "told to your cache server when its admin key is set, so the server knows next time.",
+    )
+}
+
+private fun tagNote(result: CacheServerProvider.LanguageTag?, reading: ChineseReading): String? {
+    val told = if (reading == ChineseReading.AUTO) "The server decides for itself again." else "Told the server too."
+    return when (result) {
+        null, CacheServerProvider.LanguageTag.NO_SERVER -> null
+        CacheServerProvider.LanguageTag.SAVED -> told
+        CacheServerProvider.LanguageTag.NO_KEY -> "Kept on this phone. Set the server's admin key to tell the server too."
+        CacheServerProvider.LanguageTag.WRONG_KEY -> "Kept on this phone. The server did not accept the key."
+        CacheServerProvider.LanguageTag.NOT_ADMIN -> "Kept on this phone. Only the admin key can tag songs on the server."
+        CacheServerProvider.LanguageTag.FAILED -> "Kept on this phone. The server could not be reached."
     }
 }
 

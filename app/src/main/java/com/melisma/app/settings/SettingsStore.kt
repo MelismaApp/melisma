@@ -76,6 +76,22 @@ enum class FuriganaMode(val label: String) {
     KATAKANA("Katakana"),
 }
 
+/** How Taiwanese Hokkien is spelled in Latin letters. */
+enum class HokkienSpelling(val label: String) {
+    /** The Ministry of Education's system, taught in Taiwanese schools since 2006. */
+    TAILO("Tâi-lô"),
+
+    /** Pe̍h-ōe-jī, the older church romanization, still what most written Taigi uses. */
+    POJ("POJ"),
+}
+
+/** Which language a song's Chinese characters are read in. */
+enum class ChineseReading(val label: String) {
+    AUTO("Auto"),
+    MANDARIN("Mandarin"),
+    HOKKIEN("Hokkien"),
+}
+
 /**
  * Where a translation comes from, which is the whole question.
  *
@@ -260,6 +276,14 @@ data class Settings(
     val showOriginalUnderRomanization: Boolean = false,
     /** Only applies while romanization is off — the gloss belongs over the original text. */
     val furigana: FuriganaMode = FuriganaMode.OFF,
+    val hokkienSpelling: HokkienSpelling = HokkienSpelling.TAILO,
+    /** Tell Hokkien songs from Mandarin ones by their words. Off, every song is read as Mandarin unless told. */
+    val detectHokkien: Boolean = true,
+    /**
+     * Songs told which language they are, by track key. Only Mandarin and Hokkien are stored; a song
+     * absent from here is decided by the server's tag, then by the detector.
+     */
+    val chineseReadings: Map<String, ChineseReading> = emptyMap(),
     val translationSource: TranslationSource = TranslationSource.PROVIDER,
     val translationTarget: String = "en",
     val translationWifiOnly: Boolean = true,
@@ -653,6 +677,14 @@ class SettingsStore(context: Context) : ProviderCredentials {
         romanizationStripsDiacritics = prefs.getBoolean(KEY_STRIP_DIACRITICS, false),
         showOriginalUnderRomanization = prefs.getBoolean(KEY_SHOW_ORIGINAL, false),
         furigana = prefs.enum(KEY_FURIGANA, FuriganaMode.OFF),
+        hokkienSpelling = prefs.enum(KEY_HOKKIEN_SPELLING, HokkienSpelling.TAILO),
+        detectHokkien = prefs.getBoolean(KEY_DETECT_HOKKIEN, true),
+        chineseReadings = prefs.getStringSet(KEY_CHINESE_READINGS, null).orEmpty().mapNotNull { entry ->
+            val split = entry.lastIndexOf(READING_SEPARATOR)
+            if (split <= 0) return@mapNotNull null
+            val reading = ChineseReading.entries.firstOrNull { it.name == entry.substring(split + 1) }
+            reading?.takeIf { it != ChineseReading.AUTO }?.let { entry.substring(0, split) to it }
+        }.toMap(),
         translationSource = prefs.translationSource(),
         translationTarget = prefs.getString(KEY_TRANSLATE_TARGET, "en") ?: "en",
         translationWifiOnly = prefs.getBoolean(KEY_TRANSLATE_WIFI, true),
@@ -829,6 +861,17 @@ class SettingsStore(context: Context) : ProviderCredentials {
     fun setStripDiacritics(value: Boolean) = edit { putBoolean(KEY_STRIP_DIACRITICS, value) }
 
     fun setFurigana(mode: FuriganaMode) = edit { putString(KEY_FURIGANA, mode.name) }
+
+    fun setHokkienSpelling(spelling: HokkienSpelling) = edit { putString(KEY_HOKKIEN_SPELLING, spelling.name) }
+
+    fun setDetectHokkien(value: Boolean) = edit { putBoolean(KEY_DETECT_HOKKIEN, value) }
+
+    /** [reading] for the track with [key]; [ChineseReading.AUTO] forgets it. */
+    fun setChineseReading(key: String, reading: ChineseReading) = edit {
+        val next = current.chineseReadings.toMutableMap()
+        if (reading == ChineseReading.AUTO) next.remove(key) else next[key] = reading
+        putStringSet(KEY_CHINESE_READINGS, next.map { (k, v) -> "$k$READING_SEPARATOR${v.name}" }.toSet())
+    }
 
     fun setPrefetchNextTrack(value: Boolean) = edit { putBoolean(KEY_PREFETCH_NEXT, value) }
 
@@ -1126,6 +1169,15 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_SHOW_ORIGINAL = "show_original_under_romanization"
         const val KEY_STRIP_DIACRITICS = "strip_diacritics"
         const val KEY_FURIGANA = "furigana"
+        const val KEY_HOKKIEN_SPELLING = "hokkien_spelling"
+        const val KEY_DETECT_HOKKIEN = "detect_hokkien"
+        const val KEY_CHINESE_READINGS = "chinese_readings"
+
+        /**
+         * Between a track key and its reading. Split at the last one, so a key may contain it too. Not
+         * NUL: the preferences file is XML, which cannot hold one.
+         */
+        const val READING_SEPARATOR = '\t'
         /** The boolean this setting used to be. Read once, to migrate; never written. */
         const val KEY_TRANSLATE_LEGACY = "show_translation"
         const val KEY_TRANSLATE_SOURCE = "translation_source"

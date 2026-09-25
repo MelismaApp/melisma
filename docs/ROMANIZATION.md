@@ -9,6 +9,7 @@ Five writing systems are handled, and they are not equally hard.
 |---|---|---|
 | **Japanese** | Kuromoji, a morphological analyser | Solved. It reads words, so 行った is *itta* and 行く is *iku*. |
 | **Chinese** | ICU `Han-Latin`, plus a word table | Not solvable by character. See below. |
+| **Taiwanese Hokkien** | Word and character tables of its own | Written in the same characters as Mandarin. See [below](#taiwanese-hokkien). |
 | **Korean** | ICU `Hangul-Latin` | None worth worrying about — Hangul spells its own sounds. |
 | **Cyrillic** | ICU `Cyrillic-Latin` | None. |
 | **Greek** | ICU `Greek-Latin` | None. |
@@ -89,9 +90,95 @@ single-character results are accepted.
 **What gets drawn is still what the provider sent.** The two forms are visually identical, so rewriting
 the lyrics would be an invisible change to text the app does not own.
 
+## Taiwanese Hokkien
+
+A Taiwanese song is written in the same characters as a Mandarin one and sung in a different
+language: 你攏無咧看 is *lí lóng bô leh khuànn*, and 原來 is *guân-lâi* where Mandarin has *yuán lái*.
+Nothing in the script says which, so the app used to give every Chinese song pinyin.
+
+Two questions, then: is this song Hokkien, and how is each word read.
+
+### Is it Hokkien
+
+Decided for the whole song, as Japanese is, because most single lines could be either.
+`HokkienDetector` weighs every character and every pair of characters by how much more often it
+appears in Hokkien text than in Mandarin — trained on the Hokkien headwords of the dictionaries below
+against their Mandarin glosses — and the song's average decides. Credit lines ("作词：…") are skipped;
+they are in Mandarin whatever the song is. Text is folded to Simplified first, so a song sent in
+either script is weighed the same.
+
+Built to rather miss a Hokkien song than misread a Mandarin one. Against real lyrics it found 9 of 9
+Hokkien songs and flagged none of 14 Mandarin and Cantonese ones. The closest Mandarin song scored
+−0.07 against a threshold of 0. Between that and −0.4, two words Mandarin does not use — 毋, 袂, 知影,
+佇 … — decide it. Cantonese has characters of its own (嘅, 唔, 咗) and is ruled out by those.
+
+What it cannot see is a song written almost entirely in characters both languages share. For those,
+and anything else it gets wrong, **This track → Read this song as** sets Auto, Mandarin or Hokkien for
+that one track. The choice is kept on the phone, and with the cache server's admin key it is sent to
+the server as well (see [CACHE-SERVER.md](CACHE-SERVER.md#language-tags)). A language the server
+reports for a track is used before the detector; a choice made on the phone is used before both.
+**Language → Recognise Taiwanese Hokkien** turns the detector off, leaving only tagged songs.
+
+### How it is read
+
+In Tâi-lô, the Ministry of Education's romanization, or POJ under **Spell Hokkien in**.
+
+`HokkienWords` reads words first, longest match forward, as `PinyinWords` does, and falls back to a
+per-character default. Unlike Mandarin there is no ICU transliterator to fall back on, so the
+characters have a table too: 68,923 words and 5,719 characters. Tâi-lô also puts its spaces between
+words and hyphens inside them (*sim-kuann*, *tsa-bóo-gín-á*), so the word table has to hold every word,
+not only the ones the character defaults get wrong. Those it gets right are listed without a reading,
+to say where the word ends.
+
+Readings are citation tones, the way dictionaries and Tâi-lô texts write them; tone sandhi is not
+applied. A neutral tone is written with `--`, as in *tsia̍h-pá--buē*.
+
+Lyrics write some words the Mandarin way and sing them as the Hokkien word: 會 for *ē*, 沒 for *bô*, 在
+for *tī*, 給 for *hōo*, 他 for *i*. The dictionaries give those characters their literary readings,
+which is right inside the words they list and wrong on their own in a song, so the build replaces
+fourteen character defaults with the colloquial one. Listed words keep their own reading: 不過 is still
+*put-kò*. Four words are overridden the same way: 不是 *m̄-sī*, 就是 *tō-sī*, 不通 *m̄-thang*, 不免
+*m̄-bián*.
+
+Some Mandarin spellings cannot be read this way at all. 他們 is sung *in*, one syllable for two
+characters, and a reading is handed to each character; those come out as the dictionary lists them,
+not as they are sung.
+
+When a song is read as Hokkien, a romanization the provider sent is replaced rather than kept. NetEase
+has some for Hokkien hits, in a toneless spelling of its own, and one song spelled two ways is worse
+than either.
+
+**Drop tone marks** keeps POJ's o͘ dot: it is part of the vowel, not a tone.
+
+### Where its data comes from
+
+Built by `tools/hokkien/build_tables.py`:
+
+- **台華線頂對照典** (CC BY-SA 4.0) and **iTaigi 華台對照典** (CC0), from the
+  [ChhoeTaigi database](https://github.com/ChhoeTaigi/ChhoeTaigiDatabase). The edited dictionary's
+  readings count four times iTaigi's, because iTaigi is crowd-sourced and disagrees with itself: it
+  has 查某囡仔 as *tsa-póo gín-á* more often than as *tsa-bóo-gín-á*.
+- **English Wiktionary**'s Hokkien readings, via [kaikki.org](https://kaikki.org) (CC BY-SA 4.0),
+  General Taiwanese only. Its readings are votes on words and fill characters the dictionaries lack;
+  they never change a character default, because Wiktionary does not mark which reading is literary.
+  Its Quanzhou, Zhangzhou and Xiamen readings are left out: *huê-khìr* is how some people say 回去, not
+  how Taiwanese songs sing it.
+- **OpenCC**'s `TSCharacters.txt` (Apache-2.0), to fold Traditional to Simplified.
+
+The tables are an adaptation of BY-SA material and are licensed **CC BY-SA 4.0** themselves, apart
+from the AGPL-3.0 code; attribution is in `app/src/main/resources/hokkien/NOTICE.txt` and
+[NOTICE.md](../NOTICE.md).
+
+Left out on purpose:
+
+- **The Ministry of Education's 臺灣台語常用詞辭典**, the reference dictionary, is CC BY-ND 3.0 TW.
+  No-derivatives allows only verbatim copies, and a merged table is a derivative.
+- **Dictionaries licensed non-commercial** (CC BY-NC-SA). NC is incompatible with the AGPL, which
+  lets anyone sell the app, and measured against the sources above they made the output worse.
+
 ## Where the data comes from
 
-The word readings are the non-CC-CEDICT half of
+The pinyin word readings are the non-CC-CEDICT half of
 [phrase-pinyin-data](https://github.com/mozillazg/phrase-pinyin-data) (MIT) — its `pinyin.txt`,
 `overwrite.txt`, `di.txt`, and the two 汉典 files.
 
@@ -109,6 +196,8 @@ AGPL-3.0 — but there was no need once an MIT source covered it.
 The table is loaded from a classpath resource on the first Chinese line of a session, never on the
 main thread, and never at all if no Chinese is played. A few megabytes of heap, against the tens of
 megabytes Kuromoji costs to do the same job for Japanese.
+
+The Hokkien tables are about 1.3 MB uncompressed, loaded the same way, on the first Chinese song.
 
 ## Furigana
 

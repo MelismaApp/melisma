@@ -53,6 +53,11 @@ data class LyricsRequest(
 
     val durationSeconds: Int get() = (durationMs / 1000).toInt()
 
+    /** The key this track is cached and remembered under: its Spotify id, or its names and length. */
+    fun cacheIdentity(): String =
+        spotifyTrackId?.let { "sp:$it" }
+            ?: "${title.lowercase().trim()}|${artist.lowercase().trim()}|${durationMs / 2000}"
+
     /**
      * The title with the noise most catalogues disagree about removed —
      * `Song (feat. X) - 2011 Remaster` becomes `Song`. Tried as a second pass when
@@ -317,13 +322,16 @@ object Http {
          * no lyrics here, which is not.
          */
         onStatus: (Int) -> Unit = {},
+        /** Called with the response headers, whatever the status. */
+        onHeaders: (okhttp3.Headers) -> Unit = {},
         block: (String) -> T?,
-    ): T? = body(url, headers, onStatus)?.let(block)
+    ): T? = body(url, headers, onStatus, onHeaders)?.let(block)
 
     private suspend fun body(
         url: String,
         headers: Map<String, String>,
         onStatus: (Int) -> Unit = {},
+        onHeaders: (okhttp3.Headers) -> Unit = {},
     ): String? =
         suspendCancellableCoroutine { continuation ->
             val call = client.newCall(request(url, headers))
@@ -341,6 +349,7 @@ object Http {
                         return
                     }
                     runCatching { onStatus(response.code) }
+                    runCatching { onHeaders(response.headers) }
                     response.use {
                         when {
                             it.isSuccessful -> continuation.resume(it.body?.string())

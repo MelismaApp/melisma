@@ -6,6 +6,8 @@ import com.atilika.kuromoji.ipadic.Tokenizer
 import com.melisma.app.lyrics.model.LyricLine
 import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.lyrics.model.Syllable
+import com.melisma.app.settings.ChineseReading
+import com.melisma.app.settings.HokkienSpelling
 import com.melisma.app.util.HanCanonical
 import com.melisma.app.util.Script
 import com.melisma.app.util.containsNonLatinScript
@@ -30,6 +32,8 @@ import kotlinx.coroutines.withContext
  *   produce Mandarin readings, which is wrong in a way that is hard to notice.
  * - **Everything else** (Hangul, Han, Cyrillic, Greek) uses the ICU transliterators
  *   built into Android, which are per-character and need no context.
+ * - **Taiwanese Hokkien** is a third reading of Han, after Japanese and Mandarin, and like them is
+ *   decided for the whole song: see [HokkienDetector] and [HokkienWords].
  *
  * A romanization the provider already shipped is never overwritten — a human-checked
  * `romalrc` beats anything generated here.
@@ -62,6 +66,9 @@ class Romanizer {
         romanize: Boolean,
         furigana: Boolean,
         stripDiacritics: Boolean = false,
+        /** How to read Chinese; [ChineseReading.AUTO] asks [HokkienDetector]. */
+        chinese: ChineseReading = ChineseReading.MANDARIN,
+        hokkienSpelling: HokkienSpelling = HokkienSpelling.TAILO,
     ): LyricsDocument = withContext(Dispatchers.Default) {
         if (!romanize && !furigana) return@withContext document
 
@@ -87,10 +94,20 @@ class Romanizer {
 
         if (anyJapanese) prepareTokenizer()
 
+        // Hokkien is decided once, for the song, like Japanese above: most of its lines could be
+        // either, and only the rest of the song can say which.
+        val hokkien = hokkienSpelling.takeIf {
+            wantRomaji && hanScript == Script.CHINESE && HokkienWords.isAvailable && when (chinese) {
+                ChineseReading.HOKKIEN -> true
+                ChineseReading.MANDARIN -> false
+                ChineseReading.AUTO -> HokkienDetector.isHokkien(document.lines.map { it.text })
+            }
+        }
+
         var produced = false
         val lines = document.lines.map { line ->
             if (line.isInterlude || line.text.isBlank()) return@map line
-            val annotated = annotateLine(line, hanScript, stripDiacritics, wantRomaji)
+            val annotated = annotateLine(line, hanScript, stripDiacritics, wantRomaji, hokkien)
             if (annotated !== line) produced = true
             annotated
         }
@@ -119,20 +136,29 @@ class Romanizer {
         hanScript: Script,
         stripDiacritics: Boolean,
         wantRomaji: Boolean,
+        hokkien: HokkienSpelling? = null,
     ): LyricLine {
+        // What a provider ships for a Hokkien song is its own spelling, pinyin-like and without tones,
+        // where there is one at all; Tâi-lô replaces it, so the whole song is spelled one way.
+        val replacing = hokkien != null && line.text.any { it.isHanCharacter() }
+
         if (line.syllables.isEmpty()) {
-            if (!wantRomaji || !line.romanized.isNullOrBlank()) return line
-            val text = romanizeMixed(line.text, hanScript, stripDiacritics) ?: return line
+            if (!wantRomaji || (!replacing && !line.romanized.isNullOrBlank())) return line
+            val text = romanizeMixed(line.text, hanScript, stripDiacritics, hokkien) ?: return line
             return line.copy(romanized = text)
         }
 
-        val syllables = annotateSyllables(line.syllables, hanScript, stripDiacritics, wantRomaji)
-            ?: return line
+        val syllables = if (hokkien != null && wantRomaji) {
+            hokkienSyllables(line.syllables, stripDiacritics, hokkien)
+        } else {
+            annotateSyllables(line.syllables, hanScript, stripDiacritics, wantRomaji)
+        } ?: return line
         if (!wantRomaji) return line.copy(syllables = syllables)
 
         val joined = syllables.joinToString("") { syllable ->
             val part = syllable.romanized ?: syllable.text
-            (if (syllable.partOfWord) "" else " ") + part
+            val continues = if (hokkien != null) syllable.romanizedStartsWord == false else syllable.partOfWord
+            (if (continues) "" else " ") + part
         }
             // A syllable that is itself a space contributes one, and the join adds another either
             // side of it — so a line with a space between two words came out with three.
@@ -141,8 +167,60 @@ class Romanizer {
 
         return line.copy(
             syllables = syllables,
-            romanized = line.romanized ?: joined,
+            romanized = if (replacing) joined else line.romanized ?: joined,
         )
+    }
+
+    /**
+     * Tâi-lô for a line's timed syllables, read as one line so a word can span them.
+     *
+     * A syllable that continues a word carries the hyphen at its front and says it does not start a
+     * word, so the renderer draws `guân` and `-lâi` side by side as *guân-lâi*. Syllables with no
+     * Chinese in them are left as they are.
+     */
+    private fun hokkienSyllables(
+        syllables: List<Syllable>,
+        stripDiacritics: Boolean,
+        spelling: HokkienSpelling,
+    ): List<Syllable>? {
+        val lineText = syllables.joinToString("") { it.text }
+        val lookup = HanCanonical.of(lineText)
+        val byChar = HokkienWords.readings(lookup) ?: return null
+        val poj = spelling == HokkienSpelling.POJ
+
+        var changed = false
+        var offset = 0
+        val out = syllables.map { syllable ->
+            val start = offset
+            val end = start + syllable.text.length
+            offset = end
+            if (syllable.text.none { it.isHanCharacter() }) return@map syllable
+
+            val text = StringBuilder()
+            var first: HokkienWords.Reading? = null
+            var index = start
+            while (index < end) {
+                val width = Character.charCount(lookup.codePointAt(index))
+                val reading = byChar[index]
+                if (reading == null) {
+                    text.append(lineText, index, index + width)
+                } else {
+                    if (first == null) first = reading
+                    if (text.isNotEmpty()) text.append(reading.join.ifEmpty { " " })
+                    text.append(HokkienWords.spell(reading.syllable, poj))
+                }
+                index += width
+            }
+            val lead = first ?: return@map syllable
+            val spelled = text.toString().trim().let { if (stripDiacritics) HokkienWords.stripTones(it) else it }
+            val continues = lead.join.isNotEmpty() && start > 0
+            changed = true
+            syllable.copy(
+                romanized = if (continues) lead.join + spelled else spelled,
+                romanizedStartsWord = !continues,
+            )
+        }
+        return if (changed) out else null
     }
 
     /**
@@ -375,15 +453,20 @@ class Romanizer {
      * A Latin run passes through untouched — there is nothing to convert, and dropping it would lose
      * the English word in the middle of the line.
      */
-    fun romanizeMixed(text: String, hanScript: Script, stripDiacritics: Boolean = false): String? {
+    fun romanizeMixed(
+        text: String,
+        hanScript: Script,
+        stripDiacritics: Boolean = false,
+        hokkien: HokkienSpelling? = null,
+    ): String? {
         val runs = scriptRuns(text, hanScript)
         if (runs.isEmpty()) return null
-        if (runs.size == 1) return romanizeText(text, runs.first().script, stripDiacritics)
+        if (runs.size == 1) return romanizeText(text, runs.first().script, stripDiacritics, hokkien)
 
         var converted = false
         val out = StringBuilder()
         for (run in runs) {
-            val piece = romanizeText(run.text, run.script, stripDiacritics)
+            val piece = romanizeText(run.text, run.script, stripDiacritics, hokkien)
             if (piece != null) converted = true
             val text = piece ?: run.text
             if (text.isEmpty()) continue
@@ -398,7 +481,13 @@ class Romanizer {
         return out.toString().replace(Regex("\\s{2,}"), " ").trim().takeIf { it.isNotEmpty() }
     }
 
-    fun romanizeText(text: String, script: Script, stripDiacritics: Boolean = false): String? {
+    fun romanizeText(
+        text: String,
+        script: Script,
+        stripDiacritics: Boolean = false,
+        /** Read Chinese as Taiwanese Hokkien, spelled this way, rather than as Mandarin. */
+        hokkien: HokkienSpelling? = null,
+    ): String? {
         if (text.isBlank()) return null
         // A radical that depicts an ideograph is not that ideograph, and nothing has a reading for
         // one. Canonical for the engines only; the "did anything change" test below still compares
@@ -415,7 +504,11 @@ class Romanizer {
                 }.getOrNull()
             }
 
-            Script.CHINESE -> chinesePinyin(source)
+            Script.CHINESE -> if (hokkien != null) {
+                HokkienWords.romanize(source, poj = hokkien == HokkienSpelling.POJ)
+            } else {
+                chinesePinyin(source)
+            }
             Script.KOREAN -> transliterate("Hangul-Latin", source)
             Script.CYRILLIC -> transliterate("Cyrillic-Latin", source)
             Script.GREEK -> transliterate("Greek-Latin", source)
@@ -425,7 +518,11 @@ class Romanizer {
         val cleaned = converted.replace(Regex("\\s{2,}"), " ").trim()
         if (cleaned.isEmpty() || cleaned == text) return null
         return if (stripDiacritics) {
-            diacriticStripper?.transliterate(cleaned) ?: cleaned
+            if (hokkien != null && script == Script.CHINESE) {
+                HokkienWords.stripTones(cleaned)
+            } else {
+                diacriticStripper?.transliterate(cleaned) ?: cleaned
+            }
         } else {
             cleaned
         }

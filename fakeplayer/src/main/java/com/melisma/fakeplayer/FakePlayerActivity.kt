@@ -47,6 +47,9 @@ class FakePlayerActivity : Activity() {
         Track("Nonexistent Song Title Xyzzy", "No Such Artist", "Nowhere", 123_000),
         // Has a Spotify Canvas.
         Track("Anti-Hero", "Taylor Swift", "Midnights", 200_690, spotifyId = "0V3wPSX9ygBnCm8psDIegu"),
+        // Taiwanese Hokkien, for the detector and Tâi-lô.
+        Track("你攏無咧看", "蕭煌奇", "你攏無咧看", 198_827),
+        Track("浪子回頭", "茄子蛋", "卡通人物", 259_373),
     )
 
     private lateinit var session: MediaSession
