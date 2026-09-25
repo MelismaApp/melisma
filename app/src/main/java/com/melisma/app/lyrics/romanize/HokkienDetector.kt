@@ -67,8 +67,11 @@ object HokkienDetector {
     )
     private val notMarkers = listOf("佇立", "佇候", "佇足")
 
-    /** Characters written Cantonese uses and Hokkien does not; enough of them and it is not Hokkien. */
-    private const val CANTONESE = "嘅唔咗喺冇佢哋乜嘢啲睇嚟諗嗰咁咩梗攞嘥"
+    /**
+     * Characters written Cantonese uses and Hokkien does not; enough of them and it is not Hokkien.
+     * Folded to Simplified, like the text they are counted in: 諗 is 谂 by then.
+     */
+    private const val CANTONESE = "嘅唔咗喺冇佢哋乜嘢啲睇嚟谂嗰咁咩梗攞嘥"
 
     /** "作词 : …", "编曲：…" — credits, in Mandarin whatever the song is in. */
     private val credit = Regex("^\\s*[^:：\\s]{1,16}\\s*[:：]")

@@ -212,7 +212,9 @@ def load_fold(path):
                 continue
             source, targets = line.rstrip("\n").split("\t", 1)
             target = targets.split(" ")[0]
-            if len(source) == 1 and len(target) == 1 and source != target:
+            # The app folds one UTF-16 unit for one, so a character outside the BMP stays as it is —
+            # here too, or the weights would be trained on text the app never sees.
+            if len(source) == 1 and len(target) == 1 and source != target and max(ord(source), ord(target)) <= 0xFFFF:
                 fold[source] = target
     fold.update(EXTRA_FOLD)
     return fold
