@@ -345,6 +345,7 @@ fun PlayerScreen(
                         translationAvailable = demoMode ||
                             (lyricsState as? LyricsState.Loaded)?.translationPossible == true,
                         hasDocument = document != null,
+                        freeReadAvailable = document?.isSynced == true,
                         popupAvailable = settings.popupLyricsEnabled,
                         onToggleRomanization = {
                             container.settings.setShowRomanization(!settings.showRomanization)
@@ -369,6 +370,7 @@ fun PlayerScreen(
                         onSwapSide = { container.settings.toggleMediaPanelSide() },
                         onEnterPopup = onEnterPopup,
                         onScrollToActive = { jumpSignal++ },
+                        onToggleFreeRead = { container.settings.setFreeRead(!settings.freeRead) },
                         onStartSelection = { selectionMode = true },
                         onImport = { importLauncher.launch(arrayOf("*/*")) },
                         onRetry = { container.lyrics.retry() },
@@ -625,6 +627,7 @@ private fun MainContent(
                         onSelectLine = onSelectLine,
                         onLongPressLine = onLongPressLine,
                         jumpToActiveSignal = jumpSignal,
+                        freeRead = settings.freeRead,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
                     UnsyncedNotice(visible = document.kind == LyricsKind.STATIC)
@@ -817,6 +820,8 @@ private fun ViewControls(
     /** False hides the translate chip: nothing here could translate this track. */
     translationAvailable: Boolean,
     hasDocument: Boolean,
+    /** Only synced lyrics follow the song; unsynced ones are already read freely. */
+    freeReadAvailable: Boolean,
     popupAvailable: Boolean,
     onToggleRomanization: () -> Unit,
     onToggleTranslation: () -> Unit,
@@ -824,6 +829,7 @@ private fun ViewControls(
     onSwapSide: () -> Unit,
     onEnterPopup: () -> Unit,
     onScrollToActive: () -> Unit,
+    onToggleFreeRead: () -> Unit,
     onStartSelection: () -> Unit,
     onImport: () -> Unit,
     onRetry: () -> Unit,
@@ -916,6 +922,15 @@ private fun ViewControls(
                 }
                 if (popupAvailable) {
                     ActionChip(AppIcons.PopupWindow, "Popup lyrics", false, accent, onEnterPopup)
+                }
+                if (freeReadAvailable) {
+                    ActionChip(
+                        AppIcons.FreeRead,
+                        if (settings.freeRead) "Free reading — tap to follow the song again" else "Read freely",
+                        settings.freeRead,
+                        accent,
+                        onToggleFreeRead,
+                    )
                 }
                 ActionChip(
                     AppIcons.CenterFocus,

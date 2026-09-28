@@ -71,6 +71,8 @@ fun LyricsView(
     onLongPressLine: (LyricLine) -> Unit = {},
     /** Bump to pull the scroll back to the line that is playing. */
     jumpToActiveSignal: Int = 0,
+    /** Every line lit and the scroll left to the reader. See [LyricsRenderer.freeRead]. */
+    freeRead: Boolean = false,
 ) {
     BoxWithConstraints(modifier) {
         val density = LocalDensity.current
@@ -148,6 +150,7 @@ fun LyricsView(
             renderer.viewportHeight = heightPx
             renderer.contentLeftPx = sidePaddingPx
             renderer.selectedIndices = selectedIndices
+            renderer.freeRead = freeRead
         }
 
         LaunchedEffect(jumpToActiveSignal) {
@@ -224,7 +227,7 @@ fun LyricsView(
                 // One gesture handler for the lot: hold to highlight (and copy), drag to
                 // scroll, tap to seek or to pick a line. Splitting these across separate
                 // detectors makes them fight over the same touch slop.
-                .pointerInput(document, tapToSeek, selectionMode, highlightEnabled) {
+                .pointerInput(document, tapToSeek, selectionMode, highlightEnabled, freeRead) {
                     val tracker = VelocityTracker()
                     val slop = viewConfiguration.touchSlop
                     val longPressMs = viewConfiguration.longPressTimeoutMillis
@@ -284,7 +287,10 @@ fun LyricsView(
                             else -> {
                                 val seeking = tapToSeek && line != null &&
                                     !line.isInterlude && document.isSynced
-                                if (seeking) {
+                                if (seeking && freeRead) {
+                                    // The page stays where the reader has it.
+                                    onSeek(line.startMs.toLong())
+                                } else if (seeking) {
                                     onSeek(line.startMs.toLong())
                                     // Following stopped when the finger went down. Give it
                                     // straight back and let the page glide to the tapped

@@ -261,6 +261,8 @@ data class Settings(
     val tapLineToSeek: Boolean = true,
     /** How long after you stop dragging before the lyrics take the scroll back. */
     val autoScrollResumeMs: Int = 1_200,
+    /** Every line lit and the page left to the reader; the line being sung still animates. */
+    val freeRead: Boolean = false,
 
     // ---- language --------------------------------------------------------
     val showRomanization: Boolean = true,
@@ -674,6 +676,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         syncOffsetMs = prefs.getInt(KEY_SYNC_OFFSET, 0),
         tapLineToSeek = prefs.getBoolean(KEY_TAP_TO_SEEK, true),
         autoScrollResumeMs = prefs.getInt(KEY_SCROLL_RESUME, 1_200),
+        freeRead = prefs.getBoolean(KEY_FREE_READ, false),
 
         showRomanization = prefs.getBoolean(KEY_ROMANIZE, true),
         romanizationStripsDiacritics = prefs.getBoolean(KEY_STRIP_DIACRITICS, false),
@@ -853,6 +856,8 @@ class SettingsStore(context: Context) : ProviderCredentials {
     fun setTapLineToSeek(value: Boolean) = edit { putBoolean(KEY_TAP_TO_SEEK, value) }
 
     fun setAutoScrollResumeMs(ms: Int) = edit { putInt(KEY_SCROLL_RESUME, ms.coerceIn(300, 10_000)) }
+
+    fun setFreeRead(value: Boolean) = edit { putBoolean(KEY_FREE_READ, value) }
 
     // ---- language -----------------------------------------------------------
 
@@ -1171,6 +1176,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_SYNC_OFFSET = "sync_offset_ms"
         const val KEY_TAP_TO_SEEK = "tap_to_seek"
         const val KEY_SCROLL_RESUME = "scroll_resume_ms"
+        const val KEY_FREE_READ = "free_read"
 
         const val KEY_ROMANIZE = "show_romanization"
         const val KEY_SHOW_ORIGINAL = "show_original_under_romanization"

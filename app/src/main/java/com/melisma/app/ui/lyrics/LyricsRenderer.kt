@@ -9,6 +9,7 @@ import android.graphics.Shader
 import android.os.SystemClock
 import com.melisma.app.core.Spring
 import com.melisma.app.lyrics.model.LineRole
+import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.lyrics.model.LyricsKind
 import com.melisma.app.settings.TextAnimationStyle
 import kotlin.math.abs
@@ -32,6 +33,9 @@ import kotlin.math.abs
  *   shadow layer rather than a colour.
  * - Instrumental gaps become three dots that breathe in turn.
  * - In Minimal mode a sung line does not just dim, it shrinks and leaves the page.
+ *
+ * [freeRead] sets all of that aside except the line being sung: every line lit and sharp, and the
+ * page left where the reader puts it.
  */
 class LyricsRenderer(
     layout: LyricsLayout,
@@ -44,6 +48,14 @@ class LyricsRenderer(
     var layout: LyricsLayout = layout
         set(value) {
             if (field !== value) {
+                // Reading freely, the same song laid out again — romanization or a translation
+                // toggled — keeps the line the reader was on rather than jumping to the song.
+                placeIndex = if (freeRead && sameLines(field.document, value.document)) {
+                    val focus = scrollY + viewportHeight * focusFraction
+                    field.lines.firstOrNull { it.bottom > focus }?.index
+                } else {
+                    null
+                }
                 field = value
                 activeIndex = -1
                 // A scroll position the user left is in the old layout's coordinates, and would
@@ -52,6 +64,24 @@ class LyricsRenderer(
                 flingVelocity = 0f
                 resumeAutoScrollAt = 0L
                 snapNextFrame = true
+                placeNextFrame = true
+            }
+        }
+
+    /**
+     * Free reading: every line lit, nothing blurred or hidden, and the page does not follow the song.
+     * The line being sung still animates, which is how the reader sees where the song is.
+     */
+    var freeRead: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            // Back to following, gliding from wherever the reader left the page.
+            if (!value) {
+                userScrolling = false
+                flingVelocity = 0f
+                resumeAutoScrollAt = 0L
+                snapNextFrame = false
             }
         }
 
@@ -88,7 +118,8 @@ class LyricsRenderer(
             // carried out inside a frame. Without this, asking to jump back to the playing
             // line on a paused screen sets the flag and then never draws the frame that
             // would act on it — the button does nothing at all.
-            snapNextFrame
+            snapNextFrame ||
+            placeNextFrame
 
     private val scrollSpring = Spring(0f, SCROLL_FREQUENCY, SCROLL_DAMPING)
     private val pressSpring = Spring(0f, 2.4f, 0.75f)
@@ -98,6 +129,25 @@ class LyricsRenderer(
     private var lastPositionMs = 0
     private var activeIndex = -1
     private var snapNextFrame = true
+
+    /**
+     * Put the playing line in view on the next frame, in free reading too: a new layout, or asked
+     * to. Seeks do not set it, since in free reading the page stays where the reader left it.
+     */
+    private var placeNextFrame = true
+
+    /**
+     * The same lines, however annotated: romanization or a translation makes a new document out of
+     * the one before.
+     */
+    private fun sameLines(a: LyricsDocument, b: LyricsDocument): Boolean =
+        a.lines.size == b.lines.size && a.lines.indices.all { a.lines[it].startMs == b.lines[it].startMs }
+
+    /** The line [placeNextFrame] puts in view; null for the one playing. */
+    private var placeIndex: Int? = null
+
+    /** Between [onDragStart] and [onDragEnd]. */
+    private var fingerDown = false
 
     /** Set by [followAfterSeek]: the next big position jump animates rather than snapping. */
     private var ignoreNextSeekJump = false
@@ -116,6 +166,7 @@ class LyricsRenderer(
 
     fun onDragStart() {
         userScrolling = true
+        fingerDown = true
         flingVelocity = 0f
     }
 
@@ -127,6 +178,7 @@ class LyricsRenderer(
 
     /** [velocityPx] is in pixels/second, positive downward, as Compose reports it. */
     fun onDragEnd(velocityPx: Float, resumeAfterMs: Int) {
+        fingerDown = false
         flingVelocity = -velocityPx
         resumeAutoScrollAt = System.currentTimeMillis() + resumeAfterMs
     }
@@ -139,6 +191,8 @@ class LyricsRenderer(
         flingVelocity = 0f
         resumeAutoScrollAt = 0L
         snapNextFrame = true
+        placeNextFrame = true
+        placeIndex = null
     }
 
     /**
@@ -191,7 +245,7 @@ class LyricsRenderer(
         val metrics = layout.metrics
         // Unsynced lyrics have no "current" line, so there is nothing to focus and
         // nothing to push out of focus.
-        val defocusEnabled = blurEnabled && !userScrolling && !isStatic
+        val defocusEnabled = blurEnabled && !userScrolling && !isStatic && !freeRead
 
         pressSpring.setGoal(if (pressedIndex >= 0) 1f else 0f)
         val press = pressSpring.step(delta)
@@ -261,13 +315,30 @@ class LyricsRenderer(
     private fun stepScroll(delta: Float) {
         val now = System.currentTimeMillis()
 
-        // Nothing to follow in an unsynced document: the scroll belongs to the reader.
-        if (isStatic) {
+        // Nothing to follow in an unsynced document, or while reading freely: the scroll belongs to
+        // the reader.
+        if (isStatic || freeRead) {
+            // A seek does not move this page, and a snap left pending keeps a paused screen drawing.
+            snapNextFrame = false
+            if (placeNextFrame) {
+                placeNextFrame = false
+                // Unsynced lyrics have no playing line to find, and start at the top.
+                if (!isStatic) {
+                    flingVelocity = 0f
+                    scrollY = targetScrollFor(placeIndex ?: activeIndex)
+                    placeIndex = null
+                    scrollSpring.snapTo(scrollY)
+                    return
+                }
+            }
             if (abs(flingVelocity) > FLING_STOP_PX_PER_SEC) {
                 scrollY = (scrollY + flingVelocity * delta).coerceIn(minScroll(), maxScroll())
                 flingVelocity *= FLING_DECAY_PER_FRAME
             } else {
                 flingVelocity = 0f
+                // Nothing to hand the scroll back to, so nothing to wait for once the page is
+                // still — and a flag left up keeps a paused screen drawing.
+                if (!fingerDown) userScrolling = false
             }
             scrollSpring.snapTo(scrollY)
             return
@@ -287,6 +358,7 @@ class LyricsRenderer(
             return
         }
 
+        placeNextFrame = false
         val target = targetScrollFor(activeIndex)
         if (snapNextFrame) {
             snapNextFrame = false
@@ -342,10 +414,13 @@ class LyricsRenderer(
             else -> ((positionMs - line.endMs) / LyricsAnim.SUNG_FADE_MS).coerceIn(0f, 1f)
         }
 
+        // Reading freely, every line is lit; only the one being sung animates.
+        val lit = freeRead && !isStatic
+
         val sungOpacity =
             if (simpleMode) LyricsAnim.SIMPLE_OPACITY_SUNG else LyricsAnim.OPACITY_SUNG
         var opacity = when {
-            isStatic -> 1f
+            isStatic || lit -> 1f
             isActive -> LyricsAnim.OPACITY_ACTIVE
             // Eased down from lit rather than dropped there, which is the abrupt change.
             sung -> lerp(LyricsAnim.OPACITY_ACTIVE, sungOpacity, ease(faded))
@@ -362,7 +437,7 @@ class LyricsRenderer(
             1f
         }
 
-        if (minimalMode && !isStatic) {
+        if (minimalMode && !isStatic && !lit) {
             // Sung lines leave the page entirely; unsung ones sit back and dim.
             line.minimalScale.setGoal(
                 when {
@@ -399,7 +474,9 @@ class LyricsRenderer(
                 )
             }
         } else {
-            val fillAlpha = if (sung) {
+            val fillAlpha = if (lit) {
+                1f
+            } else if (sung) {
                 val settled =
                     if (simpleMode) LyricsAnim.SIMPLE_FILL_ALPHA_SUNG else LyricsAnim.FILL_ALPHA_SUNG
                 // The line was fully filled when it finished; ease off that rather than
@@ -422,9 +499,9 @@ class LyricsRenderer(
             resetLineSprings(line, sung)
         }
 
-        drawRuby(canvas, line, isActive, opacity * roleAlpha)
-        drawUnderCharacters(canvas, line, positionMs, isActive, opacity * roleAlpha)
-        drawSecondary(canvas, line, isActive, opacity)
+        drawRuby(canvas, line, isActive || lit, opacity * roleAlpha)
+        drawUnderCharacters(canvas, line, positionMs, isActive, lit, opacity * roleAlpha)
+        drawSecondary(canvas, line, isActive || lit, opacity)
         canvas.restore()
     }
 
@@ -463,6 +540,7 @@ class LyricsRenderer(
         line: LineLayout,
         positionMs: Int,
         isActive: Boolean,
+        lit: Boolean,
         opacity: Float,
     ) {
         if (line.units.none { it.under != null }) return
@@ -470,7 +548,7 @@ class LyricsRenderer(
         for (unit in line.units) {
             val under = unit.under ?: continue
             val state = LyricsAnim.stateOf(positionMs, unit.startMs, unit.endMs)
-            val gradient = when (state) {
+            val gradient = if (lit && !isActive) 100f else when (state) {
                 // The same clock the word above uses. Under `TextAnimationStyle.ANIMATE` the word
                 // runs off the wall clock to smooth over the player's reporting gaps, so reading the
                 // playhead here instead would leave the word moving while its character stalled —
@@ -489,12 +567,12 @@ class LyricsRenderer(
                 unit.underGradientTop,
                 unit.underGradientHeight,
                 gradient,
-                opacity * if (isActive) 1f else 0.55f,
+                opacity * if (isActive || lit) 1f else 0.55f,
             )
             if (shader != null) {
                 paint.shader = shader
             } else {
-                paint.color = whiteWithAlpha(opacity * if (isActive) 0.82f else 0.4f)
+                paint.color = whiteWithAlpha(opacity * if (isActive || lit) 0.82f else 0.4f)
             }
             canvas.drawText(under, unit.underX, unit.underBaseline, paint)
             paint.shader = null
