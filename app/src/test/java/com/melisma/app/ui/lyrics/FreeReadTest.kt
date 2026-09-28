@@ -157,4 +157,21 @@ class FreeReadTest {
             assertFalse(page.isSettling)
         }
     }
+
+    @Test
+    fun `a new song lands on its playing line even mid-glide`() {
+        val reading = renderer(freeRead = true).apply { play(0, 30_000) }
+        reading.jumpToActive()
+        reading.play(30_000, 30_032)
+        // The next track arrives while the page is still travelling.
+        reading.layout = layout(song().copy(lines = song().lines.map { it.copy(text = "Other ${it.text}") }))
+        reading.play(0, 100)
+        // Where a page opened on this song would sit, rather than part-way to the old line.
+        val fresh = renderer(freeRead = true).apply { play(0, 100) }
+        assertEquals(fresh.scrollY, reading.scrollY, 1f)
+        // And it stays there rather than carrying on travelling.
+        val landed = reading.scrollY
+        reading.play(100, 3_000)
+        assertEquals(landed, reading.scrollY, 0.01f)
+    }
 }

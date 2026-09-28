@@ -65,6 +65,9 @@ class LyricsRenderer(
                 resumeAutoScrollAt = 0L
                 snapNextFrame = true
                 placeNextFrame = true
+                // A glide in flight was heading for a line of the old layout.
+                gliding = false
+                glideIndex = -1
             }
         }
 
