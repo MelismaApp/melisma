@@ -31,6 +31,9 @@ No login, no account, and it works out of the box.
 > [Spicetify](https://github.com/spicetify/cli) extension) to Android — its look, its motion and its
 > lyric model. Spicy Lyrics is AGPL-3.0, so this is too. [NOTICE.md](NOTICE.md) is the honest
 > accounting of what came from where.
+>
+> **Upstream base: Spicy Lyrics 6.3.98** (`c22a9d7`), first ported from 6.3.12. What was taken from
+> each version, and what does not apply here, is in [docs/UPSTREAM.md](docs/UPSTREAM.md).
 
 ## Contents
 

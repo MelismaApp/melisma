@@ -1,5 +1,6 @@
 package com.melisma.app.lyrics.parse
 
+import com.melisma.app.lyrics.model.LineRole
 import com.melisma.app.lyrics.model.LyricsKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -130,5 +131,33 @@ class TtmlParserTest {
         assertEquals("lead", lines[0].text)
         assertEquals("ooh", lines[1].text)
         assertNull(lines[0].romanized)
+    }
+
+    @Test
+    fun `a backing vocal's romanization stays with the backing vocal`() {
+        // Apple writes a line's transliteration in one <text>, backing vocal included.
+        val ttml = """<tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyric-ttml-internal"
+            xmlns:ttm="http://www.w3.org/ns/ttml#metadata" itunes:timing="Line">
+          <head><metadata><iTunesMetadata xmlns="http://music.apple.com/lyric-ttml-internal"><transliterations>
+            <transliteration xml:lang="ja-Latn"><text for="L1"><span>konnichiwa</span> <span>sekai</span><span
+              ttm:role="x-bg"><span>(sayonara)</span></span></text></transliteration>
+          </transliterations></iTunesMetadata></metadata></head>
+          <body><div><p begin="0.000" end="2.000" itunes:key="L1">こんにちは世界<span
+            ttm:role="x-bg">(さよなら)</span></p></div></body></tt>"""
+        val lines = TtmlParser.parse(ttml, "Apple", "apple")!!.lines.filterNot { it.isInterlude }
+        assertEquals("konnichiwa sekai", lines.single { it.role == LineRole.LEAD }.romanized)
+        assertEquals("(sayonara)", lines.single { it.role == LineRole.BACKGROUND }.romanized)
+    }
+
+    @Test
+    fun `a line written only as its romanization is kept`() {
+        val ttml = """<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata"
+            xmlns:itunes="http://music.apple.com/lyric-ttml-internal" itunes:timing="Line">
+          <body><div><p begin="0.000" end="2.000">first</p><p begin="2.000" end="4.000"><span
+            ttm:role="x-roman">only roman</span></p><p begin="4.000" end="6.000">last</p></div></body></tt>"""
+        val lines = TtmlParser.parse(ttml, "Community", "amll")!!.lines.filterNot { it.isInterlude }
+        assertEquals(listOf("first", "only roman", "last"), lines.map { it.text })
+        assertEquals("only roman", lines[1].romanized)
+        assertEquals(2_000, lines[1].startMs)
     }
 }

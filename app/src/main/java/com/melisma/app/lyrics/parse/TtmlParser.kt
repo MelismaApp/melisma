@@ -273,7 +273,9 @@ object TtmlParser {
         val resolvedLeadText = if (lead.isNotEmpty()) {
             leadText.toString()
         } else {
-            flatText.toString().replace(Regex("\\s+"), " ").trim()
+            // A line written only as its romanization still has something to show, whichever
+            // view is on.
+            flatText.toString().replace(Regex("\\s+"), " ").trim().ifEmpty { romanization.orEmpty() }
         }
         if (resolvedLeadText.isNotEmpty() || lead.isNotEmpty()) {
             out += RawLine(
@@ -399,6 +401,9 @@ object TtmlParser {
     /**
      * Read an `<transliteration>` / `<translation>` block: `<text for="L1">` entries,
      * optionally with `<span for="L1.1">` children for per-syllable alternates.
+     *
+     * Text inside an `x-bg` span belongs to the backing vocal, keyed `L1.bg` like its line; left in,
+     * it was appended to the lead's romanization and the backing vocal had none.
      */
     private fun readAlternateBlock(
         parser: XmlPullParser,
@@ -409,8 +414,11 @@ object TtmlParser {
         var depth = 1
         var currentKey: String? = null
         val buffer = StringBuilder()
+        val backgroundBuffer = StringBuilder()
         var spanKey: String? = null
         val spanBuffer = StringBuilder()
+        // One entry per open span: whether it, or a span around it, is a backing vocal.
+        val inBackground = ArrayList<Boolean>()
 
         while (depth > 0) {
             when (parser.next()) {
@@ -420,9 +428,13 @@ object TtmlParser {
                         "text" -> {
                             currentKey = parser.attr("for") ?: parser.attr("itunes:key")
                             buffer.setLength(0)
+                            backgroundBuffer.setLength(0)
+                            inBackground.clear()
                         }
 
                         "span" -> {
+                            val role = parser.attr("ttm:role") ?: parser.attr("role")
+                            inBackground += (inBackground.lastOrNull() ?: false) || role == ROLE_BACKGROUND
                             spanKey = parser.attr("for") ?: parser.attr("itunes:key")
                             spanBuffer.setLength(0)
                         }
@@ -431,7 +443,7 @@ object TtmlParser {
 
                 XmlPullParser.TEXT -> {
                     val text = parser.text ?: ""
-                    buffer.append(text)
+                    if (inBackground.lastOrNull() == true) backgroundBuffer.append(text) else buffer.append(text)
                     if (spanKey != null) spanBuffer.append(text)
                 }
 
@@ -442,12 +454,15 @@ object TtmlParser {
                             val value = spanBuffer.toString().trim()
                             if (key != null && value.isNotEmpty()) bySpanKey[key] = value
                             spanKey = null
+                            inBackground.removeLastOrNull()
                         }
 
                         "text" -> {
                             val key = currentKey
                             val value = buffer.toString().replace(Regex("\\s+"), " ").trim()
                             if (key != null && value.isNotEmpty()) byLineKey[key] = value
+                            val background = backgroundBuffer.toString().replace(Regex("\\s+"), " ").trim()
+                            if (key != null && background.isNotEmpty()) byLineKey["$key.bg"] = background
                             currentKey = null
                         }
 
