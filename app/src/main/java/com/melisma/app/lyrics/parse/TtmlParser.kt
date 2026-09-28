@@ -270,12 +270,14 @@ object TtmlParser {
         }
 
         val out = ArrayList<RawLine>(2)
-        val resolvedLeadText = if (lead.isNotEmpty()) {
-            leadText.toString()
-        } else {
-            // A line written only as its romanization still has something to show, whichever
-            // view is on.
-            flatText.toString().replace(Regex("\\s+"), " ").trim().ifEmpty { romanization.orEmpty() }
+        val flat = if (lead.isNotEmpty()) "" else flatText.toString().replace(Regex("\\s+"), " ").trim()
+        // A line written only as its romanization shows it as its text, whichever view is on;
+        // keeping it as the romanization too would draw it twice under "show original".
+        val romanOnly = lead.isEmpty() && flat.isEmpty() && !romanization.isNullOrEmpty()
+        val resolvedLeadText = when {
+            lead.isNotEmpty() -> leadText.toString()
+            romanOnly -> romanization.orEmpty()
+            else -> flat
         }
         if (resolvedLeadText.isNotEmpty() || lead.isNotEmpty()) {
             out += RawLine(
@@ -286,7 +288,7 @@ object TtmlParser {
                 syllables = lead,
                 agent = agent,
                 ttmlKey = key,
-                romanized = romanization,
+                romanized = romanization.takeUnless { romanOnly },
                 translated = translation,
             )
         }

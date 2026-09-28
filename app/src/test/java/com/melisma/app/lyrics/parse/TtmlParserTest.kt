@@ -161,7 +161,8 @@ class TtmlParserTest {
             ttm:role="x-roman">only roman</span></p><p begin="4.000" end="6.000">last</p></div></body></tt>"""
         val lines = TtmlParser.parse(ttml, "Community", "amll")!!.lines.filterNot { it.isInterlude }
         assertEquals(listOf("first", "only roman", "last"), lines.map { it.text })
-        assertEquals("only roman", lines[1].romanized)
+        // Carried once, so "show original under romanization" does not draw it twice.
+        assertNull(lines[1].romanized)
         assertEquals(2_000, lines[1].startMs)
     }
 }
