@@ -76,6 +76,7 @@ class LyricsRenderer(
         set(value) {
             if (field == value) return
             field = value
+            gliding = false
             // Back to following, gliding from wherever the reader left the page.
             if (!value) {
                 userScrolling = false
@@ -119,7 +120,8 @@ class LyricsRenderer(
             // line on a paused screen sets the flag and then never draws the frame that
             // would act on it — the button does nothing at all.
             snapNextFrame ||
-            placeNextFrame
+            placeNextFrame ||
+            gliding
 
     private val scrollSpring = Spring(0f, SCROLL_FREQUENCY, SCROLL_DAMPING)
     private val pressSpring = Spring(0f, 2.4f, 0.75f)
@@ -153,6 +155,19 @@ class LyricsRenderer(
     /** Between [onDragStart] and [onDragEnd]. */
     private var fingerDown = false
 
+    /** Reading freely and asked for the playing line: glide there, then leave the page be. */
+    private var gliding = false
+
+    /** The line that was playing when [gliding] began; -1 until its first frame. */
+    private var glideIndex = -1
+
+    /**
+     * Where the playing line is while reading freely: -1 above the page, 1 below it, 0 on it or
+     * not reading freely. Worked out each frame, for the button that brings it back.
+     */
+    var playingOffPage: Int = 0
+        private set
+
     /** Set by [followAfterSeek]: the next big position jump animates rather than snapping. */
     private var ignoreNextSeekJump = false
 
@@ -172,6 +187,7 @@ class LyricsRenderer(
         userScrolling = true
         fingerDown = true
         flingVelocity = 0f
+        gliding = false
     }
 
     fun onDrag(deltaPx: Float) {
@@ -190,13 +206,17 @@ class LyricsRenderer(
     /** Returns the line under [yInView], for tap-to-seek, copy and the hover highlight. */
     fun lineAtViewY(yInView: Float): LineLayout? = layout.lineAt(yInView + scrollY)
 
+    /** Back to the playing line: a jump while following, a glide while reading freely. */
     fun jumpToActive() {
         userScrolling = false
         flingVelocity = 0f
         resumeAutoScrollAt = 0L
-        snapNextFrame = true
-        placeNextFrame = true
-        placeIndex = null
+        if (freeRead && !isStatic) {
+            gliding = true
+            glideIndex = -1
+        } else {
+            snapNextFrame = true
+        }
     }
 
     /**
@@ -245,6 +265,7 @@ class LyricsRenderer(
         }
 
         stepScroll(delta)
+        playingOffPage = playingOffPage()
 
         val metrics = layout.metrics
         // Unsynced lyrics have no "current" line, so there is nothing to focus and
@@ -335,6 +356,15 @@ class LyricsRenderer(
                     return
                 }
             }
+            if (gliding && !isStatic) {
+                // To the line playing when asked. Chasing the song instead would never settle
+                // while it kept moving, and would be following it after all.
+                if (glideIndex < 0) glideIndex = activeIndex
+                scrollSpring.setGoal(targetScrollFor(glideIndex))
+                scrollY = scrollSpring.step(delta).coerceIn(minScroll(), maxScroll())
+                if (scrollSpring.canSleep()) gliding = false
+                return
+            }
             if (abs(flingVelocity) > FLING_STOP_PX_PER_SEC) {
                 scrollY = (scrollY + flingVelocity * delta).coerceIn(minScroll(), maxScroll())
                 flingVelocity *= FLING_DECAY_PER_FRAME
@@ -372,6 +402,16 @@ class LyricsRenderer(
         }
         scrollSpring.setGoal(target)
         scrollY = scrollSpring.step(delta).coerceIn(minScroll(), maxScroll())
+    }
+
+    private fun playingOffPage(): Int {
+        if (!freeRead || isStatic || gliding) return 0
+        val line = layout.lines.getOrNull(activeIndex) ?: return 0
+        return when {
+            line.top + line.contentHeight - scrollY < 0f -> -1
+            line.top - scrollY > viewportHeight -> 1
+            else -> 0
+        }
     }
 
     private fun targetScrollFor(index: Int): Float {

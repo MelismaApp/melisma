@@ -119,7 +119,7 @@ That is the whole setup. Android 10 or newer.
 | **Hold a line** | Copies it |
 | **Drag** | Scrolls freely; the lyrics take back over a moment after you let go |
 | **Copy button** | Pick out several lines, then copy those or all of them |
-| **Book button** | Free reading: every line lit, and the page stays wherever you scroll it while the line being sung still animates |
+| **Book button** | Free reading: every line lit, and the page stays wherever you scroll it while the line being sung still animates. When that line is off the page, a *Now playing* pill points to it; tap it to glide there |
 | **Views** | *Lyrics* fills the screen; *Cinema* puts the album art, scrubber and transport beside the words; *Popup* floats over other apps and shrinks into place when you leave, like YouTube |
 
 **The one setting most people end up wanting is *Sync offset*.** Players and audio routes add their

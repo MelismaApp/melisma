@@ -1,19 +1,38 @@
 package com.melisma.app.ui.lyrics
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -23,6 +42,9 @@ import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.melisma.app.lyrics.model.LyricLine
@@ -30,6 +52,7 @@ import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.settings.FuriganaMode
 import com.melisma.app.settings.Settings
 import com.melisma.app.settings.TranslationSource
+import com.melisma.app.ui.components.AppIcons
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
@@ -158,6 +181,7 @@ fun LyricsView(
         }
 
         val frameNanos = remember { mutableLongStateOf(0L) }
+        val playingOffPage = remember { mutableIntStateOf(0) }
 
         // The frame loop must read the *current* playhead, and `positionMsProvider` is a new lambda
         // every time playback changes — a new track, a play, a pause. Keyed only on the renderer,
@@ -199,6 +223,10 @@ fun LyricsView(
                         nanos - restingSince < SPRING_SETTLE_NANOS ||
                         renderer.isSettling
                     if (awake) frameNanos.longValue = nanos
+                }
+                // Read after the frame rather than written from the draw, which must not change state.
+                if (renderer.playingOffPage != playingOffPage.intValue) {
+                    playingOffPage.intValue = renderer.playingOffPage
                 }
 
                 // Deciding not to draw is not the same as not asking to. Looping straight
@@ -314,6 +342,49 @@ fun LyricsView(
             drawIntoCanvas { canvas ->
                 renderer.draw(canvas.nativeCanvas, position, nanos)
             }
+        }
+
+        if (freeRead) NowPlayingPill(playingOffPage.intValue) { renderer.jumpToActive() }
+    }
+}
+
+/**
+ * Reading freely with the playing line off the page: a pill on the edge the song is past, pointing
+ * at it. Tapping it glides there, and it goes once the line is in view.
+ */
+@Composable
+private fun BoxScope.NowPlayingPill(direction: Int, onClick: () -> Unit) {
+    // The side it was on, kept while it fades out so it does not jump to the other edge on the way.
+    val side = remember { IntArray(1) { 1 } }
+    if (direction != 0) side[0] = direction
+    val above = side[0] < 0
+
+    AnimatedVisibility(
+        visible = direction != 0,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = Modifier
+            .align(if (above) Alignment.TopCenter else Alignment.BottomCenter)
+            .padding(vertical = 12.dp),
+    ) {
+        Row(
+            Modifier
+                .clip(CircleShape)
+                // Dark rather than light: it sits over lyrics that are all lit.
+                .background(Color.Black.copy(alpha = 0.7f))
+                .clickable(onClick = onClick)
+                .semantics { contentDescription = "Scroll to the line that's playing" }
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = AppIcons.ChevronRight,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(20.dp).rotate(if (above) -90f else 90f),
+            )
+            Spacer(Modifier.width(4.dp))
+            Text("Now playing", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
         }
     }
 }

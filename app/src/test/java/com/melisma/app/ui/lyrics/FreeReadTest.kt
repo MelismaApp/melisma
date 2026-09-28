@@ -67,12 +67,38 @@ class FreeReadTest {
     }
 
     @Test
-    fun `asking for the playing line still brings it into view`() {
+    fun `asking for the playing line glides it into view, then leaves the page be`() {
         val reading = renderer(freeRead = true).apply { play(0, 30_000) }
+        // The song has gone on past the page.
+        assertEquals(1, reading.playingOffPage)
         val before = reading.scrollY
         reading.jumpToActive()
-        reading.play(30_000, 30_100)
-        assertTrue(reading.scrollY > before + 100f)
+        reading.play(30_000, 30_016)
+        val firstFrame = reading.scrollY
+        reading.play(30_016, 33_000)
+        assertTrue("a glide, not a jump", firstFrame > before && firstFrame < reading.scrollY)
+        assertEquals(0, reading.playingOffPage)
+        // Arrived; the page stays put again while the song goes on.
+        reading.play(33_000, 36_000)
+        assertFalse("the glide is over", reading.isSettling)
+        val arrived = reading.scrollY
+        reading.play(36_000, 60_000)
+        assertEquals(arrived, reading.scrollY, 0.01f)
+        assertEquals(1, reading.playingOffPage)
+    }
+
+    @Test
+    fun `the playing line above the page is said to be above`() {
+        val reading = renderer(freeRead = true).apply { play(0, 1_000) }
+        reading.onDragStart()
+        reading.onDrag(-2_000f)
+        reading.onDragEnd(0f, 1_200)
+        reading.play(1_000, 1_200)
+        assertEquals(-1, reading.playingOffPage)
+        // Following, it is never off the page for long enough to ask.
+        reading.freeRead = false
+        reading.play(1_200, 1_300)
+        assertEquals(0, reading.playingOffPage)
     }
 
     @Test
