@@ -756,6 +756,8 @@ private fun PopupContent(
 
         val lyrics: @Composable (Modifier) -> Unit = { mod ->
             if (document != null) {
+                // Not read freely: picture-in-picture passes no touches to the app, so a page
+                // that did not follow the song could never be scrolled to where it is.
                 LyricsView(
                     document = document,
                     settings = settings,

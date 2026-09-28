@@ -138,10 +138,14 @@ class LyricsRenderer(
 
     /**
      * The same lines, however annotated: romanization or a translation makes a new document out of
-     * the one before.
+     * the one before, and leaves each line's own text and timing as they were.
      */
     private fun sameLines(a: LyricsDocument, b: LyricsDocument): Boolean =
-        a.lines.size == b.lines.size && a.lines.indices.all { a.lines[it].startMs == b.lines[it].startMs }
+        a.lines.size == b.lines.size && a.lines.indices.all {
+            val x = a.lines[it]
+            val y = b.lines[it]
+            x.startMs == y.startMs && x.endMs == y.endMs && x.role == y.role && x.text == y.text
+        }
 
     /** The line [placeNextFrame] puts in view; null for the one playing. */
     private var placeIndex: Int? = null

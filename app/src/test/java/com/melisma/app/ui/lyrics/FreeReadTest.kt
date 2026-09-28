@@ -96,11 +96,11 @@ class FreeReadTest {
         reading.play(1_000, 1_100)
         val at = reading.scrollY
         // Romanization or a translation toggled: a new document with the same lines.
-        reading.layout = layout(song(prefix = "Row"))
+        reading.layout = layout(song().copy(lines = song().lines.map { it.copy(romanized = "row") }))
         reading.play(1_100, 1_200)
         assertTrue(abs(reading.scrollY - at) < metrics.lineHeightPx * 2)
-        // A different song starts where it is playing.
-        reading.layout = layout(song().copy(lines = song().lines.drop(1)))
+        // A different song starts where it is playing, even one timed exactly like the last.
+        reading.layout = layout(song().copy(lines = song().lines.map { it.copy(text = "Other ${it.text}") }))
         reading.play(1_200, 1_300)
         assertTrue(abs(reading.scrollY - at) > metrics.lineHeightPx * 2)
     }
