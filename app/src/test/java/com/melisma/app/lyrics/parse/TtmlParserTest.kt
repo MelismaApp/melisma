@@ -134,19 +134,23 @@ class TtmlParserTest {
     }
 
     @Test
-    fun `a backing vocal's romanization stays with the backing vocal`() {
+    fun `a backing vocal's romanization and translation stay with the backing vocal`() {
         // Apple writes a line's transliteration in one <text>, backing vocal included.
         val ttml = """<tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyric-ttml-internal"
             xmlns:ttm="http://www.w3.org/ns/ttml#metadata" itunes:timing="Line">
           <head><metadata><iTunesMetadata xmlns="http://music.apple.com/lyric-ttml-internal"><transliterations>
             <transliteration xml:lang="ja-Latn"><text for="L1"><span>konnichiwa</span> <span>sekai</span><span
               ttm:role="x-bg"><span>(sayonara)</span></span></text></transliteration>
-          </transliterations></iTunesMetadata></metadata></head>
+          </transliterations><translations><translation xml:lang="en"><text for="L1">Hello world<span
+              ttm:role="x-bg">(goodbye)</span></text></translation></translations></iTunesMetadata></metadata></head>
           <body><div><p begin="0.000" end="2.000" itunes:key="L1">こんにちは世界<span
             ttm:role="x-bg">(さよなら)</span></p></div></body></tt>"""
         val lines = TtmlParser.parse(ttml, "Apple", "apple")!!.lines.filterNot { it.isInterlude }
         assertEquals("konnichiwa sekai", lines.single { it.role == LineRole.LEAD }.romanized)
         assertEquals("(sayonara)", lines.single { it.role == LineRole.BACKGROUND }.romanized)
+        // Translations are written the same way.
+        assertEquals("Hello world", lines.single { it.role == LineRole.LEAD }.translated)
+        assertEquals("(goodbye)", lines.single { it.role == LineRole.BACKGROUND }.translated)
     }
 
     @Test
