@@ -183,13 +183,15 @@ class RomanizedWrapTest {
     }
 
     /**
-     * A phrase timed as one syllable beside the next, as Apple does with 用言語完整表 then 達: the
-     * word has two pieces, so breaking between them left the first running off the side.
+     * A phrase timed as one syllable beside the next, as Apple does with 用言語完整表 then 達, laid
+     * out with the original under the reading. [characters] are the phrase's, one per reading.
      */
-    @Test
-    fun `a too-wide syllable inside a word is broken, and its characters go with their readings`() {
-        val characters = List(30) { index -> (0x4E00 + index).toChar() }.joinToString("")
-        val layout = LyricsLayoutBuilder.build(
+    private fun phraseThenSyllable(
+        characters: List<String>,
+        reading: (Int) -> String = { "zai" },
+    ): List<PlacedUnit> {
+        val phrase = characters.joinToString("")
+        return LyricsLayoutBuilder.build(
             document = LyricsDocument(
                 kind = LyricsKind.SYLLABLE,
                 lines = listOf(
@@ -197,13 +199,13 @@ class RomanizedWrapTest {
                         role = LineRole.LEAD,
                         startMs = 0,
                         endMs = 4_000,
-                        text = "${characters}達",
+                        text = "${phrase}達",
                         syllables = listOf(
                             Syllable(
-                                text = characters,
+                                text = phrase,
                                 startMs = 0,
                                 endMs = 3_000,
-                                romanized = List(30) { "zai" }.joinToString(" "),
+                                romanized = characters.indices.joinToString(" ") { reading(it) },
                             ),
                             Syllable(
                                 text = "達",
@@ -224,9 +226,15 @@ class RomanizedWrapTest {
             showTranslation = false,
             showOriginal = true,
             showCredits = false,
-        )
+        ).lines[0].units
+    }
 
-        val units = layout.lines[0].units
+    /** The word has two pieces, so breaking between them left the first running off the side. */
+    @Test
+    fun `a too-wide syllable inside a word is broken, and its characters go with their readings`() {
+        val characters = List(30) { index -> (0x4E00 + index).toChar().toString() }
+        val units = phraseThenSyllable(characters)
+
         assertTrue(
             "runs to ${units.maxOf { it.x + it.width }} in a $column column",
             units.maxOf { it.x + it.width } <= column + 0.5f,
@@ -235,11 +243,24 @@ class RomanizedWrapTest {
         for (unit in units) {
             assertEquals(unit.text, unit.text.split(' ').size, unit.under!!.length)
         }
-        assertEquals("${characters}達", units.joinToString("") { it.under!! })
+        assertEquals(characters.joinToString("") + "達", units.joinToString("") { it.under!! })
         assertEquals(0, units.first().startMs)
         assertEquals(4_000, units.last().endMs)
         for ((earlier, later) in units.zipWithNext()) {
             assertTrue("${earlier.endMs} then ${later.startMs}", later.startMs >= earlier.startMs)
+        }
+    }
+
+    @Test
+    fun `the original is cut between characters, never inside one`() {
+        // Each character carries a combining mark, and readings of uneven length make a cut by
+        // code point land between a character and its mark.
+        val characters = List(30) { index -> "${(0x4E00 + index).toChar()}\u0301" }
+        val units = phraseThenSyllable(characters) { index -> if (index < 20) "zhuang" else "e" }
+
+        assertEquals(characters.joinToString("") + "達", units.joinToString("") { it.under!! })
+        for (unit in units) {
+            assertTrue("${unit.under} starts with a mark", unit.under!!.first() != '\u0301')
         }
     }
 

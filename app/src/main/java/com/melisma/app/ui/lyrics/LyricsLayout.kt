@@ -685,7 +685,7 @@ object LyricsLayoutBuilder {
      * otherwise.
      */
     private fun underShares(under: String, parts: List<String>): List<String?> {
-        val characters = under.codePoints().toArray()
+        val characters = graphemesOf(under)
         val readings = parts.map { part -> part.split(' ').count { it.isNotEmpty() } }
         val paired = ' ' !in under && readings.sum() == characters.size
         val weights = if (paired) readings else parts.map { it.length }
@@ -695,7 +695,7 @@ object LyricsLayoutBuilder {
         return weights.map { share ->
             weight += share
             val end = (characters.size * weight + total / 2) / total
-            String(characters, taken, end - taken).also { taken = end }.takeIf { it.isNotBlank() }
+            characters.subList(taken, end).joinToString("").also { taken = end }.takeIf { it.isNotBlank() }
         }
     }
 
@@ -1005,7 +1005,7 @@ object LyricsLayoutBuilder {
             } else {
                 // No space to break at (CJK, or a very long word): break by character.
                 var chunk = StringBuilder()
-                for (character in word) {
+                for (character in graphemesOf(word)) {
                     if (paint.measureText("$chunk$character") > maxWidth && chunk.isNotEmpty()) {
                         out += chunk.toString()
                         chunk = StringBuilder()
