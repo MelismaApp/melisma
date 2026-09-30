@@ -182,6 +182,67 @@ class RomanizedWrapTest {
         )
     }
 
+    /**
+     * A phrase timed as one syllable beside the next, as Apple does with 用言語完整表 then 達: the
+     * word has two pieces, so breaking between them left the first running off the side.
+     */
+    @Test
+    fun `a too-wide syllable inside a word is broken, and its characters go with their readings`() {
+        val characters = List(30) { index -> (0x4E00 + index).toChar() }.joinToString("")
+        val layout = LyricsLayoutBuilder.build(
+            document = LyricsDocument(
+                kind = LyricsKind.SYLLABLE,
+                lines = listOf(
+                    LyricLine(
+                        role = LineRole.LEAD,
+                        startMs = 0,
+                        endMs = 4_000,
+                        text = "${characters}達",
+                        syllables = listOf(
+                            Syllable(
+                                text = characters,
+                                startMs = 0,
+                                endMs = 3_000,
+                                romanized = List(30) { "zai" }.joinToString(" "),
+                            ),
+                            Syllable(
+                                text = "達",
+                                startMs = 3_000,
+                                endMs = 4_000,
+                                partOfWord = true,
+                                romanized = "da",
+                            ),
+                        ),
+                    ),
+                ),
+                providerName = "test",
+                providerId = "test",
+            ),
+            metrics = LyricsMetrics(fontSizePx = 10f, simpleMode = false, showSecondaryLine = false),
+            widthPx = widthPx,
+            useRomanization = true,
+            showTranslation = false,
+            showOriginal = true,
+            showCredits = false,
+        )
+
+        val units = layout.lines[0].units
+        assertTrue(
+            "runs to ${units.maxOf { it.x + it.width }} in a $column column",
+            units.maxOf { it.x + it.width } <= column + 0.5f,
+        )
+        // Each part carries the characters its readings belong to, and none are lost or doubled.
+        for (unit in units) {
+            assertEquals(unit.text, unit.text.split(' ').size, unit.under!!.length)
+        }
+        assertEquals("${characters}達", units.joinToString("") { it.under!! })
+        assertEquals(0, units.first().startMs)
+        assertEquals(4_000, units.last().endMs)
+        for ((earlier, later) in units.zipWithNext()) {
+            assertTrue("${earlier.endMs} then ${later.startMs}", later.startMs >= earlier.startMs)
+        }
+    }
+
     @Test
     fun `a line that already fits is left on one row`() {
         val romanized = layout(useRomanization = true, width = 4_000f)

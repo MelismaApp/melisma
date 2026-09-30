@@ -475,46 +475,25 @@ object LyricsLayoutBuilder {
                 continue
             }
 
-            // One piece and no room for it, so the break has to fall inside the piece itself.
+            // A piece wider than a row has to be broken inside itself.
             //
-            // Leaving this case alone was not enough. A whole line can arrive as a *single* syllable
-            // — TTML from the cache server does exactly that for Chinese, where there are no spaces
-            // to split spans on — and then there is no boundary between syllables to use and the
-            // line ran off the screen anyway.
-            //
-            // The window is shared out across the parts in proportion to their length, which is what
-            // `emphasisLetters` already does to make a held syllable light up letter by letter, so
-            // the fill still tracks the singing. RTL is excluded: the run is shaped as a whole and
-            // cutting it would break the joins.
-            if (word.size == 1 && !line.rtl) {
-                val piece = word[0]
-                val parts = wrap(piece.text, paint, maxWidth)
-                if (parts.size > 1) {
-                    val span = (piece.endMs - piece.startMs).coerceAtLeast(0)
-                    val total = piece.text.length.coerceAtLeast(1)
-                    var consumed = 0
-                    for (part in parts) {
-                        val from = piece.startMs + span * consumed / total
-                        consumed += part.length
-                        val to = piece.startMs + span * consumed / total
-                        // No ruby on the parts: a kana gloss is centred over the syllable it reads,
-                        // and there is no honest place to put it once that syllable is in pieces.
-                        layoutWords += listOf(DisplayPiece(part, from, to, 0f, null))
-                    }
-                    continue
-                }
-            }
+            // A whole line can arrive as a *single* syllable — TTML from the cache server does exactly
+            // that for Chinese, where there are no spaces to split spans on — and Apple times phrases
+            // like 用言語完整表 as one syllable beside 達, so there is no boundary between syllables
+            // to use and the piece ran off the screen. RTL is excluded: the run is shaped as a whole
+            // and cutting it would break the joins.
+            val pieces = if (line.rtl) word else word.flatMap { splitPiece(it, paint, maxWidth, gap) }
 
-            if (word.size < 2) {
+            if (pieces.size < 2) {
                 // A single piece that even `wrap` could not divide — one enormous grapheme. Nothing
                 // to be done but let it overflow, which at least looks like the text it is.
-                layoutWords += word
+                layoutWords += pieces
                 continue
             }
 
             var chunk = mutableListOf<DisplayPiece>()
             var chunkWidth = 0f
-            for (piece in word) {
+            for (piece in pieces) {
                 val bare = paint.measureText(piece.text)
                 if (chunk.isNotEmpty() && chunkWidth + piece.leadingGap + bare > maxWidth) {
                     layoutWords += chunk
@@ -654,6 +633,71 @@ object LyricsLayoutBuilder {
         val ruby: String?,
         val under: String? = null,
     )
+
+    /**
+     * [piece] broken into parts no wider than [maxWidth], or [piece] itself if it fits. The window is
+     * shared out in proportion to length, which is what `emphasisLetters` already does to make a held
+     * syllable light up letter by letter, so the fill still tracks the singing. A part that followed
+     * a space keeps [gap] in front of it, so it only shares a row with the part before where the
+     * space would have fitted too.
+     */
+    private fun splitPiece(
+        piece: DisplayPiece,
+        paint: Paint,
+        maxWidth: Float,
+        gap: Float,
+    ): List<DisplayPiece> {
+        val text = piece.text
+        if (paint.measureText(text) <= maxWidth) return listOf(piece)
+        val parts = wrap(text, paint, maxWidth)
+        if (parts.size < 2) return listOf(piece)
+
+        val span = (piece.endMs - piece.startMs).coerceAtLeast(0)
+        val unders = piece.under?.let { underShares(it, parts) }
+        var from = 0
+        return parts.mapIndexed { index, part ->
+            val at = text.indexOf(part, from).coerceAtLeast(from)
+            from = at + part.length
+            DisplayPiece(
+                text = part,
+                startMs = piece.startMs + span * at / text.length,
+                endMs = if (index == parts.lastIndex) {
+                    piece.endMs
+                } else {
+                    piece.startMs + span * from / text.length
+                },
+                leadingGap = when {
+                    index == 0 -> piece.leadingGap
+                    text[at - 1] == ' ' -> gap
+                    else -> 0f
+                },
+                // No ruby on the parts: a kana gloss is centred over the syllable it reads, and
+                // there is no honest place to put it once that syllable is in pieces.
+                ruby = null,
+                under = unders?.get(index),
+            )
+        }
+    }
+
+    /**
+     * The original characters under a broken piece, cut to match its [parts]: a character to each
+     * reading when they pair up, as a Chinese syllable's pinyin does, and in proportion to length
+     * otherwise.
+     */
+    private fun underShares(under: String, parts: List<String>): List<String?> {
+        val characters = under.codePoints().toArray()
+        val readings = parts.map { part -> part.split(' ').count { it.isNotEmpty() } }
+        val paired = ' ' !in under && readings.sum() == characters.size
+        val weights = if (paired) readings else parts.map { it.length }
+        val total = weights.sum().coerceAtLeast(1)
+        var taken = 0
+        var weight = 0
+        return weights.map { share ->
+            weight += share
+            val end = (characters.size * weight + total / 2) / total
+            String(characters, taken, end - taken).also { taken = end }.takeIf { it.isNotBlank() }
+        }
+    }
 
     /** Katakana as the analyser gives it, or hiragana if that is what was asked for. */
     private fun kanaIn(katakana: String, hiragana: Boolean): String {
