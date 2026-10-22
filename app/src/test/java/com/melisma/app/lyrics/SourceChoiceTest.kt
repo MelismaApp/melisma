@@ -23,6 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -136,6 +137,16 @@ class SourceChoiceTest {
     @After
     fun stop() = scope.cancel()
 
+    /** Waits for [condition], which a lookup on another thread brings about. */
+    private suspend fun eventually(what: String, condition: () -> Boolean) {
+        try {
+            withTimeout(10_000) { while (!condition()) delay(20) }
+        } catch (timeout: TimeoutCancellationException) {
+            failure?.let { throw AssertionError("the lookup threw", it) }
+            throw AssertionError("$what did not happen; word=${word.fetches} line=${line.fetches}; seen=$seen", timeout)
+        }
+    }
+
     /** The next answer from [from]. */
     private suspend fun LyricsRepository.shown(from: String): LyricsDocument = try {
         withTimeout(10_000) {
@@ -194,9 +205,8 @@ class SourceChoiceTest {
 
         val asked = line.fetches
         repository.retry()
-        withTimeout(10_000) { repository.state.first { it is LyricsState.Loading } }
-        repository.shown("lrclib")
-        assertEquals(asked + 1, line.fetches)
+        eventually("asking LRCLIB again") { line.fetches == asked + 1 }
+        assertEquals("lrclib", repository.shown("lrclib").providerId)
     }
 
     @Test
@@ -226,11 +236,11 @@ class SourceChoiceTest {
         val lineAsked = line.fetches
         val wordAsked = word.fetches
         repository.chooseSource(track.cacheKey, "lrclib")
-        // Loading, then the ranking's answer again — and the choice is kept, so the row can say why.
-        withTimeout(10_000) { repository.state.first { it is LyricsState.Loading } }
+        // Asked once, not again by the ranking, then the ranking's answer again — and the choice is
+        // kept, so the row can say why.
+        eventually("asking LRCLIB") { line.fetches == lineAsked + 1 }
         assertEquals("musixmatch", repository.shown("musixmatch").providerId)
         assertEquals("lrclib", settings.current.sourceChoices[track.cacheKey])
-        // Asked once, not again by the ranking; and what it said is on record for the row.
         assertEquals(lineAsked + 1, line.fetches)
         assertEquals(wordAsked, word.fetches)
         assertEquals(LyricsCache.Outcome.NONE, repository.sourceOptions().first { it.id == "lrclib" }.outcome)
@@ -246,8 +256,9 @@ class SourceChoiceTest {
 
         // The source lost the track; looking it up again finds that out.
         line.document = null
+        val asked = line.fetches
         first.retry()
-        withTimeout(10_000) { first.state.first { it is LyricsState.Loading } }
+        eventually("asking LRCLIB again") { line.fetches == asked + 1 }
         first.shown("musixmatch")
 
         // The next play must not show the words it used to have.
