@@ -116,3 +116,15 @@ track nobody has transcribed. No credential comes back — only whether one work
 
 No answer at all usually means the URL is wrong, or the server is not on this network and wants the
 key.
+
+## What players publish
+
+Lists every media session on the phone with everything it publishes: the fields Melisma reads from
+it, its playback state, every metadata key, the session's extras and the queue around the playing
+item. Each session says whether the lyrics follow it, and if not, which rule passed it over.
+
+How exactly a track can be looked up depends on this. Spotify names the track by its own id in the
+media id, which gives an exact match; most players publish only a title and an artist, and some
+publish a second session of their own beside the real player's. The report shows which it is, and
+**Copy the report** puts it on the clipboard for a bug report. Nothing is sent anywhere; read it
+before posting it, since a player can put anything in its session.

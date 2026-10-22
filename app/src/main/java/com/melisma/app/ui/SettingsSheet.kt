@@ -1,5 +1,10 @@
 package com.melisma.app.ui
 
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -1847,6 +1852,55 @@ fun SettingsSheet(
                             "week, and a track nobody has transcribed — which need telling apart. " +
                             "This asks the server to test each of its own sources and report back. " +
                             "No token comes back, only whether one works.",
+                    )
+
+                    // ---- what each player tells Android --------------------------
+                    var sessionReport by remember { mutableStateOf<String?>(null) }
+                    val clipboard = LocalClipboard.current
+
+                    ActionRow(
+                        title = "What players publish",
+                        subtitle = "Everything each media session on the phone says about what it is playing",
+                        accent = accent,
+                        onClick = {
+                            scope.launch { sessionReport = container.media.describeSessions() }
+                        },
+                    )
+                    sessionReport?.let { report ->
+                        SelectionContainer {
+                            Text(
+                                report,
+                                color = Color.White.copy(alpha = 0.75f),
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                lineHeight = 13.sp,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color.White.copy(alpha = 0.06f))
+                                    .padding(10.dp),
+                            )
+                        }
+                        ActionRow(
+                            title = "Copy the report",
+                            subtitle = "Read it before posting it anywhere: a player can put anything in its session",
+                            accent = accent,
+                            onClick = {
+                                scope.launch {
+                                    clipboard.setClipEntry(
+                                        ClipEntry(android.content.ClipData.newPlainText("Media sessions", report)),
+                                    )
+                                    Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                        )
+                    }
+                    Help(
+                        "How exactly a track can be looked up depends on what its player publishes: " +
+                            "Spotify names the track by its own id, most players give only a title " +
+                            "and an artist. This lists every session on the phone with all of it, " +
+                            "and says which one the lyrics follow and why the others are passed " +
+                            "over. Nothing is sent anywhere.",
                     )
                 }
             }

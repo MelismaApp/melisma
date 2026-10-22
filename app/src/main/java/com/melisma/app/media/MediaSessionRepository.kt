@@ -279,26 +279,27 @@ class MediaSessionRepository(
         )
     }
 
+    private fun MediaController.track(md: MediaMetadata?): TrackInfo = TrackInfo(
+        title = md?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty().trim(),
+        artist = (
+            md?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+                ?: md?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
+                ?: md?.getString(MediaMetadata.METADATA_KEY_AUTHOR)
+            ).orEmpty().trim(),
+        album = md?.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty().trim(),
+        durationMs = (md?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L).coerceAtLeast(0L),
+        mediaId = md?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID),
+        artworkUri = md?.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+            ?: md?.getString(MediaMetadata.METADATA_KEY_ART_URI)
+            ?: md?.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI),
+        packageName = packageName,
+    )
+
     private fun MediaController.toSnapshot(): PlayerSnapshot {
         val md = metadata
         val state = playbackState
         val duration = md?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
-
-        val track = TrackInfo(
-            title = md?.getString(MediaMetadata.METADATA_KEY_TITLE).orEmpty().trim(),
-            artist = (
-                md?.getString(MediaMetadata.METADATA_KEY_ARTIST)
-                    ?: md?.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
-                    ?: md?.getString(MediaMetadata.METADATA_KEY_AUTHOR)
-                ).orEmpty().trim(),
-            album = md?.getString(MediaMetadata.METADATA_KEY_ALBUM).orEmpty().trim(),
-            durationMs = duration.coerceAtLeast(0L),
-            mediaId = md?.getString(MediaMetadata.METADATA_KEY_MEDIA_ID),
-            artworkUri = md?.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
-                ?: md?.getString(MediaMetadata.METADATA_KEY_ART_URI)
-                ?: md?.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI),
-            packageName = packageName,
-        )
+        val track = track(md)
 
         val isPlaying = state?.state == PlaybackState.STATE_PLAYING
         val playback = PlaybackPosition(
@@ -404,6 +405,42 @@ class MediaSessionRepository(
                 part.replaceFirstChar { it.uppercaseChar() }
             }
             .ifBlank { pkg }
+
+    /**
+     * Every session on the device, as *Developer → What players publish* shows it: what each one
+     * publishes, and whether the lyrics follow it.
+     */
+    suspend fun describeSessions(): String = withContext(Dispatchers.Main.immediate) {
+        val header = listOf(
+            "Melisma" to com.melisma.app.BuildConfig.VERSION_NAME,
+            "Android" to "${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})",
+            "Device" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
+        )
+        val controllers = try {
+            sessionManager?.getActiveSessions(listenerComponent).orEmpty()
+        } catch (e: SecurityException) {
+            return@withContext formatSessionReports(
+                header + ("Sessions" to "unreadable: notification access is off"),
+                emptyList(),
+            )
+        }
+        val now = SystemClock.elapsedRealtime()
+        val ignored = settings.current.ignoredPlayers
+        val reports = controllers.map { controller ->
+            val track = runCatching { controller.track(controller.metadata) }.getOrNull()
+            val status = sessionStatus(
+                own = controller.packageName == context.packageName,
+                followed = selected?.sessionToken == controller.sessionToken,
+                ignored = controller.packageName in ignored,
+                hasTitle = !track?.title.isNullOrBlank(),
+                playing = runCatching { controller.playbackState?.state }.getOrNull() ==
+                    PlaybackState.STATE_PLAYING,
+                lastPlayingAgoMs = lastPlayingAt[controller.packageName]?.let { now - it },
+            )
+            controller.report(appLabel(controller.packageName), status, track, now)
+        }
+        formatSessionReports(header, reports)
+    }
 
     // ---- transport controls -------------------------------------------------
 
