@@ -2378,12 +2378,15 @@ private fun SourceRow(container: AppContainer, settings: Settings, accent: Color
         onSelect = { id -> if (id != chosen) container.lyrics.chooseSource(key, id.takeIf { it != AUTOMATIC }) },
     )
     val shownName = shown?.providerName
-    val chosenName = options.firstOrNull { it.id == chosen }?.name
+    val chosenOption = options.firstOrNull { it.id == chosen }
     Hint(
         when {
             shownName == null -> "Looking it up."
-            chosen != AUTOMATIC && shown.providerId != chosen && chosenName != null ->
-                "$chosenName has nothing for this song, so the best answer is shown: $shownName."
+            chosen != AUTOMATIC && shown.providerId != chosen && chosenOption != null -> when (chosenOption.outcome) {
+                LyricsCache.Outcome.NONE -> "${chosenOption.name} has nothing for this song, so the best answer is shown: $shownName."
+                LyricsCache.Outcome.FAILED -> "${chosenOption.name} did not answer, so the best answer is shown: $shownName."
+                else -> "${chosenOption.name} could not be asked, so the best answer is shown: $shownName."
+            }
             else -> "Showing $shownName."
         },
     )

@@ -490,14 +490,26 @@ class LyricsRepository(
         val key = request.cacheIdentity()
 
         // The source the listener chose for this track comes before the ranking — but not before
-        // a file they imported, which outranks every source.
+        // a file they imported, which outranks every source. One that had nothing is recorded as
+        // having been asked, so the ranking below neither asks it again nor forgets what it said.
+        var missing: Pair<String, LyricsCache.Outcome>? = null
         chosenProvider(key)?.let { provider ->
-            if (localStore.fetch(request) == null && fetchChosen(request, key, provider, freshen)) return
+            if (localStore.fetch(request) != null) return@let
+            when (val chosen = fetchChosen(request, key, provider, freshen)) {
+                Chosen.SHOWN -> return
+                is Chosen.Missing -> missing = provider.id to chosen.outcome
+                null -> Unit
+            }
         }
 
         if (!freshen) {
             when (val cached = cache.get(key)) {
                 is LyricsCache.Result.Hit -> {
+                    missing?.let { (id, outcome) ->
+                        if (cached.outcomes[id] != outcome) {
+                            cache.put(key, cached.document, cached.outcomes + (id to outcome), savedAtMs = cached.savedAtMs)
+                        }
+                    }
                     base.value = Base.Ready(key, cached.document)
                     // Answered from the cache, then quietly improved for next time if anyone was
                     // never asked. Deliberately after the answer is on screen and never awaited.
@@ -520,7 +532,7 @@ class LyricsRepository(
             return
         }
 
-        when (val answer = query(request)) {
+        when (val answer = query(request, alreadyAsked = missing)) {
             is Query.Broke -> base.value = Base.Failed(answer.message)
             is Query.Answered -> {
                 // A miss is only worth remembering when it is a real answer. If a source
@@ -561,36 +573,57 @@ class LyricsRepository(
         return providersFor(settings, providers, localStore.id).firstOrNull { it.id == id }
     }
 
+    /** What became of asking the source chosen for a track. */
+    private sealed interface Chosen {
+        data object SHOWN : Chosen
+
+        /** It was asked and the words are not coming from it: nothing held, or no answer. */
+        data class Missing(val outcome: LyricsCache.Outcome) : Chosen
+    }
+
     /**
      * Shows the chosen source's lyrics for a track, if it has any.
      *
      * Cached under its own key, so the ranking's answer stays cached beside it and going back to
-     * Automatic costs nothing. False when the source has nothing, did not answer, or the phone is
-     * offline: the ordinary lookup then runs, and the toast names what it showed instead.
+     * Automatic costs nothing. [Chosen.Missing] when the source has nothing or did not answer, and
+     * null offline: the ordinary lookup then runs, and the toast names what it showed instead.
      */
     private suspend fun fetchChosen(
         request: LyricsRequest,
         key: String,
         provider: LyricsProvider,
         freshen: Boolean,
-    ): Boolean {
+    ): Chosen? {
         val chosenKey = "$key|from=${provider.id}"
         if (!freshen) {
             (cache.get(chosenKey) as? LyricsCache.Result.Hit)?.let { hit ->
                 base.value = Base.Ready(key, hit.document)
-                return true
+                return Chosen.SHOWN
             }
         }
-        if (!isOnline()) return false
+        if (!isOnline()) return null
+        var failed = false
         val finished = withTimeoutOrNull(PROVIDER_TIMEOUT_MS) {
-            Finished(runCatching { provider.fetch(request) }.getOrNull())
+            Finished(
+                runCatching { provider.fetch(request) }
+                    .onFailure { error ->
+                        if (error is kotlinx.coroutines.CancellationException) throw error
+                        failed = true
+                    }
+                    .getOrNull(),
+            )
         }
-        val document = finished?.document?.let { TimingSanity.honestKind(it, request.durationMs) } ?: return false
+        val document = finished?.document?.let { TimingSanity.honestKind(it, request.durationMs) }
+        if (document == null) {
+            // A settled "nothing" outdates whatever this source answered before; a timeout does not.
+            if (finished != null && !failed) cache.remove(chosenKey)
+            return Chosen.Missing(if (finished == null || failed) LyricsCache.Outcome.FAILED else LyricsCache.Outcome.NONE)
+        }
         cache.put(chosenKey, document, mapOf(provider.id to LyricsCache.Outcome.LYRICS))
         base.value = Base.Ready(key, document)
         // The chosen source is asked exactly too, once an ISRC banked during this lookup allows it.
         if (request.isrc == null && document.kind != LyricsKind.SYLLABLE) retryWithLateIsrc(request, key)
-        return true
+        return Chosen.SHOWN
     }
 
     /**
@@ -826,9 +859,13 @@ class LyricsRepository(
      * Touches no state, so it serves both the track on screen and the one queued behind
      * it.
      */
-    private suspend fun query(request: LyricsRequest): Query {
+    private suspend fun query(
+        request: LyricsRequest,
+        /** A source asked just before, with what it said: not asked again, still recorded. */
+        alreadyAsked: Pair<String, LyricsCache.Outcome>? = null,
+    ): Query {
         val settings = settingsStore.current
-        val enabled = providersFor(settings, providers, localStore.id)
+        val enabled = providersFor(settings, providers, localStore.id).filterNot { it.id == alreadyAsked?.first }
 
         // Nothing was asked, so nothing was learned — least of all that this track has no
         // lyrics.
@@ -876,14 +913,14 @@ class LyricsRepository(
         val bestLines = answers.maxOfOrNull { (_, document) -> lineCount(document) } ?: 0
 
         return Query.Answered(
-            provisional = results.any { it.failed },
+            provisional = results.any { it.failed } || alreadyAsked?.second == LyricsCache.Outcome.FAILED,
             outcomes = results.associate { answer ->
                 answer.id to when {
                     answer.failed -> LyricsCache.Outcome.FAILED
                     answer.document != null -> LyricsCache.Outcome.LYRICS
                     else -> LyricsCache.Outcome.NONE
                 }
-            },
+            } + listOfNotNull(alreadyAsked),
             document = pickBest(answers, settings.providerOrder, bestLines),
         )
     }

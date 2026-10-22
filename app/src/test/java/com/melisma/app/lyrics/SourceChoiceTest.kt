@@ -223,10 +223,36 @@ class SourceChoiceTest {
         repository.setTrack(track)
         repository.shown("musixmatch")
 
+        val lineAsked = line.fetches
+        val wordAsked = word.fetches
         repository.chooseSource(track.cacheKey, "lrclib")
         // Loading, then the ranking's answer again — and the choice is kept, so the row can say why.
         withTimeout(10_000) { repository.state.first { it is LyricsState.Loading } }
         assertEquals("musixmatch", repository.shown("musixmatch").providerId)
         assertEquals("lrclib", settings.current.sourceChoices[track.cacheKey])
+        // Asked once, not again by the ranking; and what it said is on record for the row.
+        assertEquals(lineAsked + 1, line.fetches)
+        assertEquals(wordAsked, word.fetches)
+        assertEquals(LyricsCache.Outcome.NONE, repository.sourceOptions().first { it.id == "lrclib" }.outcome)
+    }
+
+    @Test
+    fun `a chosen source that stops having the track does not come back from its cache`() = runBlocking {
+        val first = repository()
+        first.setTrack(track)
+        first.shown("musixmatch")
+        first.chooseSource(track.cacheKey, "lrclib")
+        first.shown("lrclib")
+
+        // The source lost the track; looking it up again finds that out.
+        line.document = null
+        first.retry()
+        withTimeout(10_000) { first.state.first { it is LyricsState.Loading } }
+        first.shown("musixmatch")
+
+        // The next play must not show the words it used to have.
+        val next = repository()
+        next.setTrack(track)
+        assertEquals("musixmatch", next.shown("musixmatch").providerId)
     }
 }
