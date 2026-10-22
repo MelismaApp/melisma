@@ -319,6 +319,13 @@ data class Settings(
      * instant the track changes, and it works with no signal.
      */
     val prefetchNextTrack: Boolean = true,
+    /**
+     * Ask a catalogue for the exact recording when the player names the track by its own id.
+     *
+     * Deezer answers for a Deezer id with no key, and the cache server for the rest. Only the id
+     * leaves the phone, and it turns every source's title search into an exact match.
+     */
+    val identifyTracks: Boolean = true,
     val enabledProviders: Set<String> = DEFAULT_ENABLED_PROVIDERS,
     val providerOrder: List<String> = DEFAULT_PROVIDER_ORDER,
 
@@ -702,6 +709,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         popupStillBackground = prefs.getBoolean(KEY_POPUP_STILL_BACKGROUND, true),
 
         prefetchNextTrack = prefs.getBoolean(KEY_PREFETCH_NEXT, true),
+        identifyTracks = prefs.getBoolean(KEY_IDENTIFY_TRACKS, true),
         enabledProviders = prefs.getStringSet(KEY_PROVIDERS_ON, null)
             ?: Settings.DEFAULT_ENABLED_PROVIDERS,
         ignoredPlayers = prefs.getStringSet(KEY_PLAYERS_IGNORED, null).orEmpty(),
@@ -886,6 +894,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
     }
 
     fun setPrefetchNextTrack(value: Boolean) = edit { putBoolean(KEY_PREFETCH_NEXT, value) }
+    fun setIdentifyTracks(value: Boolean) = edit { putBoolean(KEY_IDENTIFY_TRACKS, value) }
 
     fun setTranslationSource(value: TranslationSource) = edit {
         putString(KEY_TRANSLATE_SOURCE, value.name)
@@ -1206,6 +1215,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_POPUP_STILL_BACKGROUND = "popup_still_background"
 
         const val KEY_PREFETCH_NEXT = "prefetch_next"
+        const val KEY_IDENTIFY_TRACKS = "identify_tracks"
         const val KEY_PROVIDERS_ON = "providers_enabled"
         const val KEY_PROVIDER_ORDER = "provider_order"
         const val KEY_PLAYERS_IGNORED = "players_ignored"

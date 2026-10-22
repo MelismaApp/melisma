@@ -938,6 +938,21 @@ fun SettingsSheet(
                         "word-by-word beats line-by-line. Order breaks ties. Hold a handle to " +
                         "drag a source up or down.",
                 )
+                ToggleRow(
+                    title = "Identify the recording",
+                    subtitle = "When the player names the track by its own id, ask the catalogue " +
+                        "which recording it is before searching",
+                    checked = settings.identifyTracks,
+                    accent = accent,
+                    onCheckedChange = { store.setIdentifyTracks(it) },
+                )
+                Help(
+                    "Deezer, TIDAL and Amazon Music publish their own track id; Deezer answers " +
+                        "for one with no account, and your cache server for the others. The " +
+                        "recording's ISRC comes back, and every source then matches exactly " +
+                        "instead of by title. Only the id leaves the phone, and it is remembered " +
+                        "so each track is asked about once.",
+                )
                 Help(
                     "Asking in parallel rather than in turn is why a track resolves in one round " +
                         "trip instead of five. A source you have not given a token to is skipped " +

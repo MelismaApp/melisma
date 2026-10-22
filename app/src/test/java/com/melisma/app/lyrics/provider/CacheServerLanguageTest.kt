@@ -157,6 +157,25 @@ class CacheServerLanguageTest {
     }
 
     @Test
+    fun `a lookup names the recording every way the app knows it`() = runBlocking {
+        server.replies += 404 to ""
+        provider(key = null).fetch(request.copy(playerId = "deezer:2981739661"))
+        val line = server.received.poll()!!.requestLine
+        assertTrue(line, line.startsWith("GET /v1/lyrics?"))
+        assertTrue(line, "&spotifyId=5jmPdv7WGoWm5KeRM1WIAf" in line)
+        assertTrue(line, "&isrc=TWA531900001" in line)
+        assertTrue(line, "&playerId=deezer%3A2981739661" in line)
+    }
+
+    @Test
+    fun `what is not known is not sent`() = runBlocking {
+        server.replies += 404 to ""
+        provider(key = null).fetch(request.copy(spotifyTrackId = null, isrc = null, playerId = null))
+        val line = server.received.poll()!!.requestLine
+        assertTrue(line, "spotifyId" !in line && "isrc" !in line && "playerId" !in line)
+    }
+
+    @Test
     fun `the language the server reports is kept, a miss included`() = runBlocking {
         server.replies += 404 to "X-Lyrics-Language: nan\r\nX-Lyrics-Language-Source: tagged\r\n"
         assertNull(provider(key = null).fetch(request))

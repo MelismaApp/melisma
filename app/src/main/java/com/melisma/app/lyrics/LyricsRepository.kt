@@ -24,6 +24,7 @@ import com.melisma.app.settings.ChineseReading
 import com.melisma.app.settings.Settings
 import com.melisma.app.settings.SettingsStore
 import com.melisma.app.settings.TranslationSource
+import com.melisma.app.lyrics.identity.TrackIdentifier
 import com.melisma.app.media.IsrcStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -90,6 +91,7 @@ class LyricsRepository(
     private val spokenLanguages: SpokenLanguageStore,
     private val providers: List<LyricsProvider>,
     private val scope: CoroutineScope,
+    private val identifier: TrackIdentifier = TrackIdentifier(),
 ) {
 
     private sealed interface Base {
@@ -150,6 +152,7 @@ class LyricsRepository(
             durationMs = durationMs,
             spotifyTrackId = spotifyTrackId,
             isrc = isrc,
+            playerId = playerId?.toString(),
         ).apply {
             // Several sources hand one over without being asked, and two of them need no token to
             // do it — so this is how a phone with nothing configured still ends up matching exactly.
@@ -200,8 +203,18 @@ class LyricsRepository(
         scope.launch {
             // The ISRC, if this track has been played before with something that knew it. Read
             // first because it changes which sources can answer exactly rather than approximately.
-            val isrc = track?.let { isrcStore.get(it.cacheKey) }
+            var isrc = track?.let { isrcStore.get(it.cacheKey) }
             if (generation != trackGeneration) return@launch
+            // Or, when the player named the track, from the catalogue that knows that name. Asked
+            // before the sources rather than alongside them, so the first answer is already the
+            // exact one; bounded, so a slow catalogue cannot hold the lyrics up for long.
+            if (isrc == null && track != null && track.playerId != null &&
+                settingsStore.current.identifyTracks
+            ) {
+                isrc = withTimeoutOrNull(IDENTIFY_TIMEOUT_MS) { identifier.isrcFor(track.toRequest()) }
+                if (generation != trackGeneration) return@launch
+                isrc?.let { isrcStore.put(track.cacheKey, it) }
+            }
             setTrack(track, forceIsrc = isrc)
         }
     }
@@ -921,6 +934,8 @@ class LyricsRepository(
     internal companion object {
         const val TAG = "LyricsRepository"
         const val PROVIDER_TIMEOUT_MS = 12_000L
+        /** How long a catalogue may take to name the recording before the sources are asked anyway. */
+        const val IDENTIFY_TIMEOUT_MS = 3_000L
 
         /**
          * How long to leave a source alone after it failed to answer.

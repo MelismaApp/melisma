@@ -22,6 +22,14 @@ data class TrackInfo(
             }
         }
 
+    /**
+     * The player's own id for the track, when the player is one whose ids are understood. Spotify's
+     * is [spotifyTrackId] instead. Read with the package, because a bare number is only a Tidal id
+     * when Tidal published it.
+     */
+    val playerId: PlayerId?
+        get() = PlayerId.of(packageName, mediaId)
+
     /** Stable key for the lyrics cache. Deliberately excludes artwork and app. */
     val cacheKey: String
         get() = spotifyTrackId?.let { "sp:$it" }
@@ -49,6 +57,50 @@ data class TrackInfo(
      */
     val isPrefetchable: Boolean
         get() = title.isNotBlank() && (spotifyTrackId != null || durationMs > 0)
+}
+
+/**
+ * A track id as a player published it: `deezer:2981739661`, `tidal:134858527`, `amazon:B0DX1H5KT5`.
+ *
+ * What each player writes in `METADATA_KEY_MEDIA_ID` was read off real sessions: Deezer puts the
+ * queue index in front of the track id (`0.2981739661`), Tidal the bare id, Amazon Music the ASIN,
+ * SoundCloud a `soundcloud:tracks:` URI. Spotify's `spotify:track:` id is not one of these; it has
+ * its own field everywhere, because the sources take it directly.
+ */
+data class PlayerId(val service: String, val id: String) {
+    override fun toString(): String = "$service:$id"
+
+    companion object {
+        const val DEEZER = "deezer"
+        const val TIDAL = "tidal"
+        const val AMAZON = "amazon"
+        const val SOUNDCLOUD = "soundcloud"
+
+        private val DEEZER_ID = Regex("""\d+\.(\d{5,})""")
+        private val TIDAL_ID = Regex("""\d{4,}""")
+        private val ASIN = Regex("""B0[A-Z0-9]{8}""")
+        private val SOUNDCLOUD_ID = Regex("""soundcloud:tracks:(\d+)""")
+
+        fun of(packageName: String, mediaId: String?): PlayerId? {
+            val raw = mediaId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            return when (packageName) {
+                "deezer.android.app" -> DEEZER_ID.matchEntire(raw)?.let { PlayerId(DEEZER, it.groupValues[1]) }
+                "com.aspiro.tidal" -> TIDAL_ID.matchEntire(raw)?.let { PlayerId(TIDAL, raw) }
+                "com.amazon.mp3" -> ASIN.matchEntire(raw)?.let { PlayerId(AMAZON, raw) }
+                "com.soundcloud.android" ->
+                    SOUNDCLOUD_ID.matchEntire(raw)?.let { PlayerId(SOUNDCLOUD, it.groupValues[1]) }
+
+                else -> null
+            }
+        }
+
+        /** The other way round, for an id that travelled as text. */
+        fun parse(text: String): PlayerId? {
+            val colon = text.indexOf(':')
+            if (colon <= 0 || colon == text.lastIndex) return null
+            return PlayerId(text.substring(0, colon), text.substring(colon + 1))
+        }
+    }
 }
 
 data class PlaybackPosition(

@@ -36,6 +36,8 @@ data class LyricsRequest(
      * Spotify or from a cache server and is remembered.
      */
     val isrc: String? = null,
+    /** The player's own id for the track, as `service:id`, for whatever can resolve it. */
+    val playerId: String? = null,
 ) {
     /**
      * Where a provider puts an ISRC it found while answering.

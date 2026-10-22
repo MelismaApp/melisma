@@ -225,6 +225,7 @@ class CacheServerExtras(private val credentials: ProviderCredentials) {
         if (track.album.isNotBlank()) append("&album=").append(Http.encode(track.album))
         if (track.durationMs > 0) append("&durationMs=").append(track.durationMs)
         track.spotifyTrackId?.let { append("&spotifyId=").append(Http.encode(it)) }
+        track.playerId?.let { append("&playerId=").append(Http.encode(it.toString())) }
     }
 
     private fun headers(): Map<String, String> {

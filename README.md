@@ -184,7 +184,7 @@ while you go and find its token costs nothing.
 | Permission | Why | What leaves your phone |
 |---|---|---|
 | **Notification access** | The only way Android lets an app read another app's media session. The service that holds it ignores notifications entirely. | Nothing |
-| **Internet**, network state | Looking lyrics up, and noticing when there is no connection to look with. | The track title, artist, album and duration, to the lyrics sources you have enabled |
+| **Internet**, network state | Looking lyrics up, and noticing when there is no connection to look with. | The track title, artist, album and duration, to the lyrics sources you have enabled; a Deezer track's id to Deezer, to identify the recording (*Settings → Where lyrics come from → Identify the recording*) |
 | **Install packages** | Only when you press Install on an in-app update. On Android 12 and up it installs without Android's own confirmation screen when Android allows it, and shows that screen when not. Only an update signed with the release key installs. | Nothing |
 
 There is no analytics, no crash reporting and no account. Lyrics are cached on the device for 30

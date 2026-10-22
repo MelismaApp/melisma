@@ -58,6 +58,8 @@ class CacheServerProvider(
                 }
                 if (request.durationMs > 0) append("&durationMs=").append(request.durationMs)
                 request.spotifyTrackId?.let { append("&spotifyId=").append(Http.encode(it)) }
+                request.isrc?.let { append("&isrc=").append(Http.encode(it)) }
+                request.playerId?.let { append("&playerId=").append(Http.encode(it)) }
             }
 
             // runCatching around the whole parse, not just the JSON: this is a server the

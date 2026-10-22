@@ -23,7 +23,7 @@ token rather than per user.
 ## The request
 
 ```
-GET {baseUrl}/v1/lyrics?title=…&artist=…&album=…&durationMs=…&spotifyId=…
+GET {baseUrl}/v1/lyrics?title=…&artist=…&album=…&durationMs=…&spotifyId=…&isrc=…&playerId=…
 ```
 
 | Parameter | Always sent | Notes |
@@ -33,6 +33,8 @@ GET {baseUrl}/v1/lyrics?title=…&artist=…&album=…&durationMs=…&spotifyId=
 | `album` | when known | Absent for a queue entry, which publishes none. |
 | `durationMs` | when known | Milliseconds. Absent or 0 when the player did not say. |
 | `spotifyId` | when known | 22-character track id, when playing from Spotify. |
+| `isrc` | when known | The recording's ISRC, learned earlier from a source or from this server. |
+| `playerId` | when known | The player's own track id as `service:id` — `deezer:2981739661`, `tidal:134858527`, `amazon:B0DX1H5KT5`, `soundcloud:2417794317`. A server holding the catalogue's credentials can resolve it to an ISRC and answer the `isrc` in `/v1/extras`. |
 
 Everything is URL-encoded with `%20` for spaces. `Accept: application/json,
 application/xml, text/plain`.
