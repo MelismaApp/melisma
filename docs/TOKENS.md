@@ -39,9 +39,9 @@ developer tools.
 
 ## Spotify
 
-**Gives you:** Spotify's own line-synced lyrics, the full-size cover (640 px instead of the
-200–300 px thumbnail a media session publishes), the artist's image for the *Artist* background,
-and the song's tempo, which paces how fast the background drifts.
+**Gives you:** Spotify's own line-synced lyrics, the artist's image for the *Artist* background,
+and the song's tempo, which paces how fast the background drifts. The full-size 640 px cover
+needs no token: the Spotify app publishes its address with every track.
 
 Spotify closed the endpoint that traded a cookie for a token, so the token itself has to be copied
 out of the web player.

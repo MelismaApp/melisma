@@ -669,7 +669,6 @@ class AppContainer(context: Context) {
      * the two disagree about which artwork it was comparing.
      */
     private suspend fun searchForArtwork(track: TrackInfo, inputs: ExtrasInputs) {
-        if (inputs.artworkSource == ArtworkSource.PLAYER) return
         // Nothing above found one, so there is something to improve on by definition — but the
         // player's own may already be good enough, including once a bitmap it sent late arrives.
         if (inputs.playerArtworkSize >= ARTWORK_GOOD_ENOUGH_PX) {
@@ -677,8 +676,15 @@ class AppContainer(context: Context) {
             return
         }
 
-        val found = runCatching { artworkSearch.find(track, inputs.artworkSource) }.getOrNull()
-            ?: return
+        // The address the player itself published comes first: it is the right cover, not a search
+        // for one, and it is the player's own, so it is allowed whatever source is chosen below.
+        val published = track.coverUrl?.let { url -> runCatching { artworkSearch.load(url) }.getOrNull() }
+        val found = published
+            ?: if (inputs.artworkSource == ArtworkSource.PLAYER) {
+                return
+            } else {
+                runCatching { artworkSearch.find(track, inputs.artworkSource) }.getOrNull() ?: return
+            }
         if (media.snapshot.value.track?.cacheKey != track.cacheKey) return
         // And only if it is actually an improvement on what the player gave us.
         if (minOf(found.width, found.height) <= inputs.playerArtworkSize) {

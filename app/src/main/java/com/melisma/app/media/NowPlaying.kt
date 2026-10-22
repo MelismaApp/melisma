@@ -12,6 +12,8 @@ data class TrackInfo(
     val mediaId: String? = null,
     val artworkUri: String? = null,
     val packageName: String = "",
+    /** An https address of the full-size cover, when the player published one. See [coverUrlOf]. */
+    val coverUrl: String? = null,
 ) {
     val spotifyTrackId: String?
         get() = mediaId?.let { id ->
@@ -58,6 +60,16 @@ data class TrackInfo(
     val isPrefetchable: Boolean
         get() = title.isNotBlank() && (spotifyTrackId != null || durationMs > 0)
 }
+
+/**
+ * The full-size cover a player publishes beside its thumbnail, if any.
+ *
+ * Spotify sends its 640 px cover under its own key, which is how a phone with no Spotify token
+ * still gets it; other players' `ALBUM_ART_URI` is sometimes an https image of a usable size.
+ * A `content://` address is not one: it is read for the thumbnail already.
+ */
+fun coverUrlOf(spotifyArtUrl: String?, artworkUri: String?): String? =
+    listOfNotNull(spotifyArtUrl, artworkUri).map { it.trim() }.firstOrNull { it.startsWith("https://") }
 
 /**
  * A track id as a player published it: `deezer:2981739661`, `tidal:134858527`, `amazon:B0DX1H5KT5`.

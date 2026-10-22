@@ -105,4 +105,21 @@ class TrackInfoTest {
         assertNull(PlayerId.parse(":1"))
         assertNull(PlayerId.parse("nocolon"))
     }
+
+    // ---- the full-size cover a player publishes beside its thumbnail ---------------
+
+    @Test
+    fun `spotify's own https cover wins, and a content uri is not a cover address`() {
+        val spotify = "https://image-cdn.spotifycdn.com/image/ab67616d0000b27313134929dd979f89b8f4f477"
+        assertEquals(spotify, coverUrlOf(spotify, "content://com.spotify.mobile.android.mediaapi/x"))
+        assertNull(coverUrlOf(null, "content://com.spotify.mobile.android.mediaapi/x"))
+        assertNull(coverUrlOf("http://insecure.example/cover.jpg", null))
+        assertNull(coverUrlOf(null, null))
+    }
+
+    @Test
+    fun `another player's https artwork address serves as its cover`() {
+        val amazon = "https://m.media-amazon.com/images/I/51eCcra3G5L._QL70_.jpg"
+        assertEquals(amazon, coverUrlOf(null, " $amazon "))
+    }
 }

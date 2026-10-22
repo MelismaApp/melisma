@@ -293,6 +293,10 @@ class MediaSessionRepository(
             ?: md?.getString(MediaMetadata.METADATA_KEY_ART_URI)
             ?: md?.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI),
         packageName = packageName,
+        coverUrl = coverUrlOf(
+            spotifyArtUrl = md?.getString(SPOTIFY_ART_HTTPS_URI),
+            artworkUri = md?.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI),
+        ),
     )
 
     private fun MediaController.toSnapshot(): PlayerSnapshot {
@@ -548,5 +552,8 @@ class MediaSessionRepository(
          * track on screen, the one before it, and one in flight.
          */
         const val ARTWORK_CACHE_SIZE = 3
+
+        /** Spotify's own key for the 640 px cover's https address. */
+        const val SPOTIFY_ART_HTTPS_URI = "com.spotify.music.extra.ART_HTTPS_URI"
     }
 }

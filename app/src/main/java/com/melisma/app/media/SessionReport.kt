@@ -72,6 +72,8 @@ private fun readLines(track: TrackInfo): List<Pair<String, String>> = listOf(
     "album" to quoted(track.album),
     "durationMs" to track.durationMs.toString(),
     "mediaId" to (track.mediaId?.let(::quoted) ?: "none"),
+    "playerId" to (track.playerId?.toString() ?: "none"),
+    "coverUrl" to (track.coverUrl?.let(::quoted) ?: "none"),
     "spotifyTrackId" to (track.spotifyTrackId ?: "none"),
     "cacheKey" to quoted(track.cacheKey),
 )

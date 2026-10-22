@@ -165,7 +165,7 @@ Skip this unless something is missing. Pasting your own credentials adds:
 
 | | |
 |---|---|
-| **Spotify** | Its own lyrics, the cover at full size, the artist's image, and the song's tempo |
+| **Spotify** | Its own lyrics, the artist's image, and the song's tempo (the full-size cover already comes free from the Spotify app) |
 | **Apple Music** | Word-by-word lyrics with official romanizations and translations |
 | **Musixmatch / NetEase** | Higher rate limits and a wider catalogue |
 

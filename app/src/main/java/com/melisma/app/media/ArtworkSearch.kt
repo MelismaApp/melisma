@@ -142,7 +142,7 @@ class ArtworkSearch {
         return "https://coverartarchive.org/release/$id/front-1200"
     }
 
-    private suspend fun load(url: String): Bitmap? = runCatching {
+    internal suspend fun load(url: String): Bitmap? = runCatching {
         Http.execute(Http.client.newCall(Http.request(url))) { response ->
             if (!response.isSuccessful) null else response.body?.bytes()?.let(ArtworkDecoding::decode)
         }
