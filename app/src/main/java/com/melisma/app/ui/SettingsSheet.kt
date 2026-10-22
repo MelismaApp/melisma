@@ -1,5 +1,6 @@
 package com.melisma.app.ui
 
+import com.melisma.app.lyrics.LyricsCache
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.platform.ClipEntry
@@ -1166,6 +1167,7 @@ fun SettingsSheet(
                     onClick = { container.lyrics.retry() },
                 )
 
+                if (!hasLocal) SourceRow(container = container, settings = settings, accent = accent)
                 ReadAsRow(container = container, settings = settings, accent = accent)
             }
 
@@ -2351,6 +2353,49 @@ private fun ReadAsRow(container: AppContainer, settings: Settings, accent: Color
         )
     }
 }
+
+/** Which source's lyrics to show for the playing track, over the one the ranking picked. */
+@Composable
+private fun SourceRow(container: AppContainer, settings: Settings, accent: Color) {
+    val playing by container.media.snapshot.collectAsState()
+    val lyricsState by container.lyrics.state.collectAsState()
+    val key = playing.track?.cacheKey ?: return
+    val shown = (lyricsState as? LyricsState.Loaded)?.document
+    val options by produceState(emptyList<LyricsRepository.SourceOption>(), key, shown) {
+        value = container.lyrics.sourceOptions()
+    }
+    if (options.isEmpty()) return
+    val chosen = settings.sourceChoices[key] ?: AUTOMATIC
+
+    ChipGroup(
+        label = "Lyrics from",
+        options = listOf(AUTOMATIC to "Automatic") + options.map { option ->
+            option.id to if (option.outcome == LyricsCache.Outcome.NONE) "${option.name} · none" else option.name
+        },
+        selected = chosen,
+        accent = accent,
+        perRow = 2,
+        onSelect = { id -> if (id != chosen) container.lyrics.chooseSource(id.takeIf { it != AUTOMATIC }) },
+    )
+    val shownName = shown?.providerName
+    val chosenName = options.firstOrNull { it.id == chosen }?.name
+    Hint(
+        when {
+            shownName == null -> "Looking it up."
+            chosen != AUTOMATIC && shown.providerId != chosen && chosenName != null ->
+                "$chosenName has nothing for this song, so the best answer is shown: $shownName."
+            else -> "Showing $shownName."
+        },
+    )
+    Help(
+        "The best timing wins and your order breaks ties, which is usually right. When a source " +
+            "with simpler timing fits this recording better — a line-synced Spotify over a " +
+            "word-synced match for a different cut — pick it here, and this song shows it from now " +
+            "on whatever the others have. Kept on this phone.",
+    )
+}
+
+private const val AUTOMATIC = ""
 
 private fun tagNote(result: CacheServerProvider.LanguageTag?, reading: ChineseReading): String? {
     val told = if (reading == ChineseReading.AUTO) "The server decides for itself again." else "Told the server too."

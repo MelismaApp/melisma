@@ -462,6 +462,12 @@ class LyricsRepository(
     private suspend fun fetchBase(request: LyricsRequest, freshen: Boolean = false) {
         val key = request.cacheIdentity()
 
+        // The source the listener chose for this track comes before the ranking — but not before
+        // a file they imported, which outranks every source.
+        chosenProvider(key)?.let { provider ->
+            if (localStore.fetch(request) == null && fetchChosen(request, key, provider, freshen)) return
+        }
+
         if (!freshen) {
             when (val cached = cache.get(key)) {
                 is LyricsCache.Result.Hit -> {
@@ -520,6 +526,73 @@ class LyricsRepository(
         if (currentRequest !== request) return
         trackGeneration++
         setTrack(track, forceIsrc = late, freshen = true)
+    }
+
+    private fun chosenProvider(key: String): LyricsProvider? {
+        val settings = settingsStore.current
+        val id = settings.sourceChoices[key] ?: return null
+        return providersFor(settings, providers, localStore.id).firstOrNull { it.id == id }
+    }
+
+    /**
+     * Shows the chosen source's lyrics for a track, if it has any.
+     *
+     * Cached under its own key, so the ranking's answer stays cached beside it and going back to
+     * Automatic costs nothing. False when the source has nothing, did not answer, or the phone is
+     * offline: the ordinary lookup then runs, and the toast names what it showed instead.
+     */
+    private suspend fun fetchChosen(
+        request: LyricsRequest,
+        key: String,
+        provider: LyricsProvider,
+        freshen: Boolean,
+    ): Boolean {
+        val chosenKey = "$key|from=${provider.id}"
+        if (!freshen) {
+            (cache.get(chosenKey) as? LyricsCache.Result.Hit)?.let { hit ->
+                base.value = Base.Ready(key, hit.document)
+                return true
+            }
+        }
+        if (!isOnline()) return false
+        val finished = withTimeoutOrNull(PROVIDER_TIMEOUT_MS) {
+            Finished(runCatching { provider.fetch(request) }.getOrNull())
+        }
+        val document = finished?.document?.let { TimingSanity.honestKind(it, request.durationMs) } ?: return false
+        cache.put(chosenKey, document, mapOf(provider.id to LyricsCache.Outcome.LYRICS))
+        base.value = Base.Ready(key, document)
+        return true
+    }
+
+    /**
+     * Show [providerId]'s lyrics for the playing track from now on, or the ranking's with null.
+     *
+     * Remembered against the track, so the next play starts from the choice. Spoken out loud like
+     * [retry], because a source with nothing for this track leaves the screen as it was.
+     */
+    fun chooseSource(providerId: String?) {
+        val request = currentRequest ?: return
+        settingsStore.setSourceChoice(request.cacheIdentity(), providerId)
+        fetchJob?.cancel()
+        derived.clear()
+        romanizable.clear()
+        languages.clear()
+        base.value = Base.Loading
+        fetchJob = scope.launch {
+            fetchBase(request)
+            announce()
+        }
+    }
+
+    /** A source the listener may choose for the playing track, and what it is known to have. */
+    data class SourceOption(val id: String, val name: String, val outcome: LyricsCache.Outcome?)
+
+    /** The sources in play for the current track, with what each said when the ranking last asked. */
+    suspend fun sourceOptions(): List<SourceOption> {
+        val request = currentRequest ?: return emptyList()
+        val outcomes = (cache.get(request.cacheIdentity()) as? LyricsCache.Result.Hit)?.outcomes.orEmpty()
+        return providersFor(settingsStore.current, providers, localStore.id)
+            .map { SourceOption(it.id, it.displayName, outcomes[it.id]) }
     }
 
     /**

@@ -153,7 +153,9 @@ class LyricsTranslator {
 
         detectScript(corpus).languageTag()?.let { return it }
 
-        val client = LanguageIdentification.getClient()
+        // ML Kit is not there to ask without Play services — or in a unit test — and an unknown
+        // language is the honest answer then, not a failed lookup.
+        val client = runCatching { LanguageIdentification.getClient() }.getOrNull() ?: return null
         return try {
             // A few lines is plenty, and keeps a long song from being pointlessly hashed.
             client.identifyLanguage(corpus.take(IDENTIFY_SAMPLE_CHARS)).await()

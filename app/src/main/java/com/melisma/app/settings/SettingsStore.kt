@@ -288,6 +288,11 @@ data class Settings(
     val chineseReadings: Map<String, ChineseReading> = emptyMap(),
     /** Songs whose singer sings the particle 了 *liǎo*, by track key. */
     val liaoTracks: Set<String> = emptySet(),
+    /**
+     * The source whose lyrics to show for a track, by its cache key, where the listener chose one
+     * over the best answer. Absent means the ranking decides.
+     */
+    val sourceChoices: Map<String, String> = emptyMap(),
     val translationSource: TranslationSource = TranslationSource.PROVIDER,
     val translationTarget: String = "en",
     val translationWifiOnly: Boolean = true,
@@ -692,6 +697,10 @@ class SettingsStore(context: Context) : ProviderCredentials {
         hokkienSpelling = prefs.enum(KEY_HOKKIEN_SPELLING, HokkienSpelling.TAILO),
         detectHokkien = prefs.getBoolean(KEY_DETECT_HOKKIEN, true),
         liaoTracks = prefs.getStringSet(KEY_LIAO_TRACKS, null).orEmpty().toSet(),
+        sourceChoices = prefs.getStringSet(KEY_SOURCE_CHOICES, null).orEmpty().mapNotNull { entry ->
+            val split = entry.lastIndexOf(READING_SEPARATOR)
+            if (split <= 0 || split == entry.lastIndex) null else entry.substring(0, split) to entry.substring(split + 1)
+        }.toMap(),
         chineseReadings = prefs.getStringSet(KEY_CHINESE_READINGS, null).orEmpty().mapNotNull { entry ->
             val split = entry.lastIndexOf(READING_SEPARATOR)
             if (split <= 0) return@mapNotNull null
@@ -891,6 +900,13 @@ class SettingsStore(context: Context) : ProviderCredentials {
         val next = current.chineseReadings.toMutableMap()
         if (reading == ChineseReading.AUTO) next.remove(key) else next[key] = reading
         putStringSet(KEY_CHINESE_READINGS, next.map { (k, v) -> "$k$READING_SEPARATOR${v.name}" }.toSet())
+    }
+
+    /** Show [providerId]'s lyrics for the track under [key]; null lets the ranking decide again. */
+    fun setSourceChoice(key: String, providerId: String?) = edit {
+        val next = current.sourceChoices.toMutableMap()
+        if (providerId == null) next.remove(key) else next[key] = providerId
+        putStringSet(KEY_SOURCE_CHOICES, next.map { (k, v) -> "$k$READING_SEPARATOR$v" }.toSet())
     }
 
     fun setPrefetchNextTrack(value: Boolean) = edit { putBoolean(KEY_PREFETCH_NEXT, value) }
@@ -1195,6 +1211,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_DETECT_HOKKIEN = "detect_hokkien"
         const val KEY_CHINESE_READINGS = "chinese_readings"
         const val KEY_LIAO_TRACKS = "liao_tracks"
+        const val KEY_SOURCE_CHOICES = "source_choices"
 
         /**
          * Between a track key and its reading. Split at the last one, so a key may contain it too. Not

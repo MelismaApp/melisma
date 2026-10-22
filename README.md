@@ -247,6 +247,12 @@ not mention is left as it is.
 *Settings → This track → Look this track up again* forces a fresh lookup. If nothing has it, you can
 import a `.lrc` or `.ttml` file yourself, and that always wins.
 
+**The best-ranked source is not the one I want for this song.**
+
+*Settings → This track → Lyrics from* lists every source and shows the one you pick for that song
+from then on — say Spotify's line timing over a word-by-word match that was made for a different
+cut. *Automatic* hands the choice back to the ranking.
+
 ## Building it
 
 ```bash
