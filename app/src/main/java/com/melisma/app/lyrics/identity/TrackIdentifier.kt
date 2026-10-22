@@ -5,6 +5,7 @@ import com.melisma.app.lyrics.provider.LyricsRequest
 import com.melisma.app.lyrics.provider.Matching
 import com.melisma.app.lyrics.provider.cleanTrackTitle
 import com.melisma.app.media.PlayerId
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -27,8 +28,8 @@ import kotlin.math.abs
 class TrackIdentifier {
 
     /** The ISRC behind the player's own id, where a catalogue answers for one without a key. */
-    suspend fun isrcFor(request: LyricsRequest): String? = withContext(Dispatchers.IO) {
-        val playerId = request.playerId?.let(PlayerId::parse) ?: return@withContext null
+    suspend fun isrcFor(request: LyricsRequest): String? = quietly {
+        val playerId = request.playerId?.let(PlayerId::parse) ?: return@quietly null
         when (playerId.service) {
             PlayerId.DEEZER -> deezerTrack(playerId.id, request.durationMs)
             else -> null
@@ -42,9 +43,23 @@ class TrackIdentifier {
      * MusicBrainz first, because its search results carry ISRCs; Deezer second, where a hit costs
      * one more request for the ISRC. Both are asked by name, so both are held to [acceptable].
      */
-    suspend fun searchIsrc(request: LyricsRequest): String? = withContext(Dispatchers.IO) {
-        if (request.title.isBlank()) return@withContext null
+    suspend fun searchIsrc(request: LyricsRequest): String? = quietly {
+        if (request.title.isBlank()) return@quietly null
         musicBrainz(request) ?: deezerSearch(request)
+    }
+
+    /**
+     * A catalogue that cannot be reached — offline, a 429, a 5xx — is a miss, not a failure: the
+     * words must still be looked up without an ISRC. Cancellation alone passes through.
+     */
+    private suspend fun quietly(block: suspend () -> String?): String? = withContext(Dispatchers.IO) {
+        try {
+            block()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private suspend fun musicBrainz(request: LyricsRequest): String? {

@@ -176,6 +176,23 @@ class CacheServerLanguageTest {
     }
 
     @Test
+    fun `the recording the server resolved is reported, a miss included`() = runBlocking {
+        server.replies += 404 to "X-Lyrics-Isrc: jp-vi0-24-03562\r\n"
+        val learned = ArrayList<String>()
+        val asked = request.copy(isrc = null).apply { onIsrc = { learned += it } }
+        assertNull(provider(key = null).fetch(asked))
+        assertEquals(listOf("JPVI02403562"), learned)
+    }
+
+    @Test
+    fun `a header that is not an ISRC is ignored`() = runBlocking {
+        server.replies += 404 to "X-Lyrics-Isrc: unknown\r\n"
+        val learned = ArrayList<String>()
+        provider(key = null).fetch(request.copy(isrc = null).apply { onIsrc = { learned += it } })
+        assertTrue(learned.isEmpty())
+    }
+
+    @Test
     fun `the language the server reports is kept, a miss included`() = runBlocking {
         server.replies += 404 to "X-Lyrics-Language: nan\r\nX-Lyrics-Language-Source: tagged\r\n"
         assertNull(provider(key = null).fetch(request))

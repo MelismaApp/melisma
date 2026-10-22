@@ -147,7 +147,7 @@ class AppContainer(context: Context) {
 
     private val spotifyExtras = SpotifyExtras(settings)
     private val appleArtwork = AppleArtwork(settings)
-    private val cacheServerExtras = CacheServerExtras(settings)
+    private val cacheServerExtras = CacheServerExtras(settings, identifyTracks = { settings.current.identifyTracks })
 
     private val artworkSearch = ArtworkSearch()
 
@@ -334,7 +334,11 @@ class AppContainer(context: Context) {
         scope.launch {
             media.snapshot
                 .map { it.track }
-                .distinctUntilChanged { old, new -> old?.cacheKey == new?.cacheKey }
+                // The player's id as well as the key: a player that publishes its id a moment after
+                // the names is still the same track, but one that can now be identified.
+                .distinctUntilChanged { old, new ->
+                    old?.cacheKey == new?.cacheKey && old?.playerId == new?.playerId
+                }
                 .collect { track -> lyrics.setTrack(track) }
         }
 

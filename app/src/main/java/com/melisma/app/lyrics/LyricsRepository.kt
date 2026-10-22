@@ -117,6 +117,7 @@ class LyricsRepository(
 
     private var fetchJob: Job? = null
     private var currentRequest: LyricsRequest? = null
+    private var currentTrack: TrackInfo? = null
 
     /** Tracks already re-asked this run. See [upgradeAfter]. */
     private val upgraded = HashSet<String>()
@@ -152,7 +153,9 @@ class LyricsRepository(
             durationMs = durationMs,
             spotifyTrackId = spotifyTrackId,
             isrc = isrc,
-            playerId = playerId?.toString(),
+            // Only while identification is on: the id goes to the cache server too, and switching
+            // identification off has to mean nobody is asked to resolve it.
+            playerId = playerId?.toString()?.takeIf { settingsStore.current.identifyTracks },
         ).apply {
             // Several sources hand one over without being asked, and two of them need no token to
             // do it — so this is how a phone with nothing configured still ends up matching exactly.
@@ -178,9 +181,14 @@ class LyricsRepository(
             isrcStore.put(track.cacheKey, isrc)
             // Only worth redoing if the answer we have is not already the best kind. Word-by-word
             // is as good as it gets, so an ISRC that arrives alongside one — which is the usual
-            // case, since AMLL and Apple are the sources that volunteer it — is simply banked.
-            val ready = base.value as? Base.Ready
-            if (ready == null || ready.document.kind == LyricsKind.SYLLABLE) return@launch
+            // case, since AMLL and Apple are the sources that volunteer it — is simply banked. A
+            // miss is worth redoing: an exact lookup can find what a title search did not.
+            val worthRedoing = when (val current = base.value) {
+                is Base.Ready -> current.document.kind != LyricsKind.SYLLABLE
+                Base.NotFound -> true
+                else -> false
+            }
+            if (!worthRedoing) return@launch
 
             // And only while this is still the track playing: the lookup takes time, and by now the
             // listener may have moved on.
@@ -205,6 +213,18 @@ class LyricsRepository(
             // first because it changes which sources can answer exactly rather than approximately.
             var isrc = track?.let { isrcStore.get(it.cacheKey) }
             if (generation != trackGeneration) return@launch
+
+            // The same track, now with the id the player left out of its first metadata. Not a new
+            // lookup — the one running is this track's — but the id can still name the recording,
+            // and noteIsrc re-asks if that improves on the answer.
+            val current = currentRequest
+            if (track != null && isrc == null && current != null && current.isrc == null &&
+                current.playerId == null && track.playerId != null &&
+                current.cacheIdentity() == track.cacheKey && settingsStore.current.identifyTracks
+            ) {
+                identifier.isrcFor(track.toRequest())?.let { noteIsrc(track, it) }
+                return@launch
+            }
             // Or, when the player named the track, from the catalogue that knows that name. Asked
             // before the sources rather than alongside them, so the first answer is already the
             // exact one; bounded, so a slow catalogue cannot hold the lyrics up for long.
@@ -234,6 +254,7 @@ class LyricsRepository(
 
         fetchJob?.cancel()
         currentRequest = request
+        currentTrack = track
         derived.clear()
         romanizable.clear()
         languages.clear()
@@ -479,8 +500,26 @@ class LyricsRepository(
                 base.value = answer.document
                     ?.let { Base.Ready(key, it) }
                     ?: Base.NotFound
+                if (request.isrc == null && answer.document?.kind != LyricsKind.SYLLABLE) {
+                    retryWithLateIsrc(request, key)
+                }
             }
         }
+    }
+
+    /**
+     * Asks again with an ISRC that arrived while the sources were running.
+     *
+     * [noteIsrc] leaves a lookup in progress alone and only banks the ISRC — the server sends it in
+     * a header on its answer, so that is the usual moment — and this is where the banked one is
+     * spent: once, and only when the answer it would improve on is not already word-by-word.
+     */
+    private suspend fun retryWithLateIsrc(request: LyricsRequest, key: String) {
+        val track = currentTrack?.takeIf { it.cacheKey == key } ?: return
+        val late = isrcStore.get(key) ?: return
+        if (currentRequest !== request) return
+        trackGeneration++
+        setTrack(track, forceIsrc = late, freshen = true)
     }
 
     /**

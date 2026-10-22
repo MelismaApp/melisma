@@ -66,6 +66,16 @@ private fun kotlinx.serialization.json.JsonObject.extrasString(key: String): Str
     runCatching { get(key)?.jsonPrimitive?.contentOrNull }.getOrNull()
         ?.takeIf { it.isNotBlank() }
 
+/** The query string of an extras lookup. The player's id only when identification is on. */
+internal fun extrasQuery(track: TrackInfo, sendPlayerId: Boolean): String = buildString {
+    append("title=").append(Http.encode(track.title))
+    append("&artist=").append(Http.encode(track.artist))
+    if (track.album.isNotBlank()) append("&album=").append(Http.encode(track.album))
+    if (track.durationMs > 0) append("&durationMs=").append(track.durationMs)
+    track.spotifyTrackId?.let { append("&spotifyId=").append(Http.encode(it)) }
+    if (sendPlayerId) track.playerId?.let { append("&playerId=").append(Http.encode(it.toString())) }
+}
+
 /** One of the server's sources, as the server describes itself. */
 data class ServerSource(
     val id: String,
@@ -127,7 +137,11 @@ data class CachedExtras(
  * Which is why there is nothing to contribute from here, and no credential to send. The phone
  * asks; being wrong about a track is not something it can make stick.
  */
-class CacheServerExtras(private val credentials: ProviderCredentials) {
+class CacheServerExtras(
+    private val credentials: ProviderCredentials,
+    /** Whether the player's own track id may be sent for the server to resolve. */
+    private val identifyTracks: () -> Boolean = { true },
+) {
 
     private val cache = LinkedHashMap<String, CachedExtras?>()
     private var cachedFrom: String? = null
@@ -219,14 +233,7 @@ class CacheServerExtras(private val credentials: ProviderCredentials) {
 
     private fun parse(body: String): CachedExtras? = parseCachedExtras(body)
 
-    private fun query(track: TrackInfo): String = buildString {
-        append("title=").append(Http.encode(track.title))
-        append("&artist=").append(Http.encode(track.artist))
-        if (track.album.isNotBlank()) append("&album=").append(Http.encode(track.album))
-        if (track.durationMs > 0) append("&durationMs=").append(track.durationMs)
-        track.spotifyTrackId?.let { append("&spotifyId=").append(Http.encode(it)) }
-        track.playerId?.let { append("&playerId=").append(Http.encode(it.toString())) }
-    }
+    private fun query(track: TrackInfo): String = extrasQuery(track, sendPlayerId = identifyTracks())
 
     private fun headers(): Map<String, String> {
         val json = mapOf("Accept" to "application/json")

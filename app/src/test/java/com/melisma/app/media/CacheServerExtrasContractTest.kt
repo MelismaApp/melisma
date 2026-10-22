@@ -1,7 +1,9 @@
 package com.melisma.app.media
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -175,5 +177,27 @@ class CacheServerExtrasContractTest {
         // It paces the animated background; zero or negative would stop or reverse it.
         assertNull(parseCachedExtras("""{"tempo":0}"""))
         assertNull(parseCachedExtras("""{"tempo":-4}"""))
+    }
+
+    // ---- the query ------------------------------------------------------------------
+
+    private val deezerTrack = TrackInfo(
+        title = "Armageddon", artist = "aespa", album = "", durationMs = 196_000,
+        mediaId = "0.2981739661", packageName = "deezer.android.app",
+    )
+
+    @Test
+    fun `the player's id goes with the query only while identification is on`() {
+        val sent = extrasQuery(deezerTrack, sendPlayerId = true)
+        assertTrue(sent, sent.endsWith("&playerId=deezer%3A2981739661"))
+        val withheld = extrasQuery(deezerTrack, sendPlayerId = false)
+        assertFalse(withheld, "playerId" in withheld)
+        assertEquals("title=Armageddon&artist=aespa&durationMs=196000", withheld)
+    }
+
+    @Test
+    fun `an answer holding only the ISRC the server resolved is an answer`() {
+        assertEquals("KRA302400093", parseCachedExtras("""{"isrc":"KRA302400093"}""")?.isrc)
+        assertNull(parseCachedExtras("""{}"""))
     }
 }

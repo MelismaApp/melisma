@@ -34,7 +34,7 @@ GET {baseUrl}/v1/lyrics?title=…&artist=…&album=…&durationMs=…&spotifyId=
 | `durationMs` | when known | Milliseconds. Absent or 0 when the player did not say. |
 | `spotifyId` | when known | 22-character track id, when playing from Spotify. |
 | `isrc` | when known | The recording's ISRC, learned earlier from a source or from this server. |
-| `playerId` | when known | The player's own track id as `service:id` — `deezer:2981739661`, `tidal:134858527`, `amazon:B0DX1H5KT5`, `soundcloud:2417794317`. A server holding the catalogue's credentials can resolve it to an ISRC and answer the `isrc` in `/v1/extras`. |
+| `playerId` | when known | The player's own track id as `service:id` — `deezer:2981739661`, `tidal:134858527`, `amazon:B0DX1H5KT5`, `soundcloud:2417794317`. Sent only while *Identify the recording* is on. A server holding the catalogue's credentials can resolve it to an ISRC and answer it in an `X-Lyrics-Isrc` header on any response, a 404 included, and as `isrc` in `/v1/extras`. |
 
 Everything is URL-encoded with `%20` for spaces. `Accept: application/json,
 application/xml, text/plain`.

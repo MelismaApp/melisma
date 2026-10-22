@@ -71,6 +71,10 @@ class CacheServerProvider(
             val onHeaders = { headers: okhttp3.Headers ->
                 headers[LANGUAGE_HEADER]?.trim()?.lowercase()?.takeIf { it in LANGUAGES }
                     ?.let { languages?.put(request.cacheIdentity(), it) }
+                // The recording the server resolved this to, from a player id or its own sources.
+                // On a miss as well: that is the case an exact re-ask helps most.
+                headers[ISRC_HEADER]?.trim()?.uppercase()?.replace("-", "")?.takeIf { it.length == 12 }
+                    ?.let { request.onIsrc?.invoke(it) }
                 Unit
             }
             Http.get("$base/v1/lyrics?$query", headers(), onHeaders = onHeaders) { body ->
@@ -182,6 +186,7 @@ class CacheServerProvider(
         val HEADERS = mapOf("Accept" to "application/json, application/xml, text/plain")
 
         const val LANGUAGE_HEADER = "X-Lyrics-Language"
+        const val ISRC_HEADER = "X-Lyrics-Isrc"
         val LANGUAGES = setOf("nan", "zh", "yue")
     }
 }
