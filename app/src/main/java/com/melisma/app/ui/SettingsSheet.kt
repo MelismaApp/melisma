@@ -940,18 +940,18 @@ fun SettingsSheet(
                 )
                 ToggleRow(
                     title = "Identify the recording",
-                    subtitle = "When the player names the track by its own id, ask the catalogue " +
-                        "which recording it is before searching",
+                    subtitle = "Ask MusicBrainz and Deezer which recording is playing, so every " +
+                        "source can match it exactly",
                     checked = settings.identifyTracks,
                     accent = accent,
                     onCheckedChange = { store.setIdentifyTracks(it) },
                 )
                 Help(
-                    "Deezer, TIDAL and Amazon Music publish their own track id; Deezer answers " +
-                        "for one with no account, and your cache server for the others. The " +
-                        "recording's ISRC comes back, and every source then matches exactly " +
-                        "instead of by title. Only the id leaves the phone, and it is remembered " +
-                        "so each track is asked about once.",
+                    "A Deezer track is asked about by the id Deezer publishes, before any source " +
+                        "is; everything else by title, artist and length, accepted only when all " +
+                        "three agree. The recording's ISRC comes back and is remembered, so each " +
+                        "track is asked about once and matched exactly from then on. Only the " +
+                        "names and the id leave the phone.",
                 )
                 Help(
                     "Asking in parallel rather than in turn is why a track resolves in one round " +

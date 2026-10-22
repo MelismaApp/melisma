@@ -245,7 +245,22 @@ class LyricsRepository(
 
         base.value = Base.Loading
         fetchJob = scope.launch { fetchBase(request, freshen = freshen) }
+
+        // Nothing named the recording, so look it up by name alongside the sources rather than
+        // ahead of them: a search is a guess of the same kind the sources make, not worth holding
+        // the words up for, and an ISRC it finds improves this play through noteIsrc and every
+        // later one through the store.
+        identifyJob?.cancel()
+        if (request.isrc == null && request.spotifyTrackId == null && track != null &&
+            settingsStore.current.identifyTracks
+        ) {
+            identifyJob = scope.launch {
+                identifier.searchIsrc(request)?.let { noteIsrc(track, it) }
+            }
+        }
     }
+
+    private var identifyJob: Job? = null
 
     /**
      * Look up the next track in the queue now, so it is already cached when it starts.

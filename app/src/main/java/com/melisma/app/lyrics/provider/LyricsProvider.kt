@@ -453,7 +453,7 @@ object Matching {
      * Whether two names are written in scripts that can meaningfully be compared letter
      * by letter. A Latin name and a CJK, Cyrillic or Greek one cannot be.
      */
-    private fun comparableScripts(a: String, b: String): Boolean {
+    internal fun comparableScripts(a: String, b: String): Boolean {
         // A mixed name — `YOASOBI` credited as `YOASOBI (ヨアソビ)` — still has Latin in
         // common, so the usual comparison holds.
         if (hasLatinLetters(a) && hasLatinLetters(b)) return true
