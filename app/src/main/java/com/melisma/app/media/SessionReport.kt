@@ -202,15 +202,26 @@ private val ACTIONS = listOf(
     PlaybackState.ACTION_SKIP_TO_QUEUE_ITEM to "SKIP_TO_QUEUE_ITEM",
     PlaybackState.ACTION_PLAY_FROM_URI to "PLAY_FROM_URI",
     PlaybackState.ACTION_PREPARE to "PREPARE",
+    PlaybackState.ACTION_PREPARE_FROM_MEDIA_ID to "PREPARE_FROM_MEDIA_ID",
+    PlaybackState.ACTION_PREPARE_FROM_SEARCH to "PREPARE_FROM_SEARCH",
+    PlaybackState.ACTION_PREPARE_FROM_URI to "PREPARE_FROM_URI",
     PlaybackState.ACTION_SET_PLAYBACK_SPEED to "SET_PLAYBACK_SPEED",
 )
 
-private fun actionNames(actions: Long): String =
-    ACTIONS.filter { (flag, _) -> actions and flag != 0L }.joinToString(" ") { it.second }.ifEmpty { "none" }
+/** Each flag by name, and any bit newer than this list as a number, so nothing is dropped. */
+internal fun actionNames(actions: Long): String {
+    val named = ACTIONS.filter { (flag, _) -> actions and flag != 0L }.map { it.second }
+    val unknown = actions and ACTIONS.fold(0L) { mask, (flag, _) -> mask or flag }.inv()
+    val parts = if (unknown != 0L) named + "0x${unknown.toString(16)}" else named
+    return parts.joinToString(" ").ifEmpty { "none" }
+}
 
 private const val QUEUE_SHOWN = 5
 
-/** Whether the lyrics follow a session, and if not, the rule in [chooseSession] that passed it over. */
+/**
+ * Whether the lyrics follow a session, and if not, the rule in [chooseSession] that passed it over.
+ * [lastPlayingAgoMs] is the session's app's, shared by every session that app publishes.
+ */
 internal fun sessionStatus(
     own: Boolean,
     followed: Boolean,
@@ -227,6 +238,8 @@ internal fun sessionStatus(
         playing -> "Not followed: another playing session reported playing more recently"
         else -> "Not followed: not playing"
     }
-    val last = lastPlayingAgoMs?.let { "last reported playing ${it / 1000} s ago" } ?: "not seen playing"
+    // Playing history is kept per app, not per session, so it is said of the app.
+    val last = lastPlayingAgoMs?.let { "its app last reported playing ${it / 1000} s ago" }
+        ?: "its app not seen playing"
     return "$reason; $last"
 }

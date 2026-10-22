@@ -187,6 +187,19 @@ class SessionReportTest {
     }
 
     @Test
+    fun `every action flag is named, and a bit this build does not know is kept as a number`() {
+        assertEquals("none", actionNames(0))
+        assertEquals(
+            "PREPARE_FROM_MEDIA_ID PREPARE_FROM_SEARCH PREPARE_FROM_URI",
+            actionNames(
+                PlaybackState.ACTION_PREPARE_FROM_MEDIA_ID or PlaybackState.ACTION_PREPARE_FROM_SEARCH or
+                    PlaybackState.ACTION_PREPARE_FROM_URI,
+            ),
+        )
+        assertEquals("PLAY 0x100000000", actionNames(PlaybackState.ACTION_PLAY or (1L shl 32)))
+    }
+
+    @Test
     fun `the status names the rule that passed a session over`() {
         fun status(
             own: Boolean = false,
@@ -197,8 +210,8 @@ class SessionReportTest {
             ago: Long? = null,
         ) = sessionStatus(own, followed, ignored, hasTitle, playing, ago)
 
-        assertEquals("Melisma's own session, never followed; not seen playing", status(own = true, followed = true))
-        assertEquals("FOLLOWED by the lyrics; last reported playing 2 s ago", status(followed = true, ago = 2_500))
+        assertEquals("Melisma's own session, never followed; its app not seen playing", status(own = true, followed = true))
+        assertEquals("FOLLOWED by the lyrics; its app last reported playing 2 s ago", status(followed = true, ago = 2_500))
         assertTrue(status(ignored = true).startsWith("Not followed: switched off under Players to follow"))
         assertTrue(status(hasTitle = false).startsWith("Not followed: publishes no title"))
         assertTrue(status(playing = true).startsWith("Not followed: another playing session"))
