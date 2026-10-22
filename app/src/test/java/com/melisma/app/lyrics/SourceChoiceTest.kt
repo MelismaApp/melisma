@@ -24,6 +24,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -36,6 +37,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowNetworkCapabilities
+import java.io.File
 
 /**
  * Choosing a source for one track, over the ranking.
@@ -92,6 +94,9 @@ class SourceChoiceTest {
     )
     private val track = TrackInfo(title = "Lemon", artist = "Kenshi Yonezu", album = "", durationMs = 130_000)
 
+    /** Every state the repository went through, for a failure message that says what happened. */
+    private val seen = java.util.Collections.synchronizedList(ArrayList<String>())
+
     private fun repository() = LyricsRepository(
         context = context,
         settingsStore = settings,
@@ -103,7 +108,13 @@ class SourceChoiceTest {
         spokenLanguages = SpokenLanguageStore(context),
         providers = listOf(word, line),
         scope = scope,
-    )
+    ).also { repository ->
+        scope.launch {
+            repository.state.collect { state ->
+                seen += (state as? LyricsState.Loaded)?.document?.providerId ?: state.toString()
+            }
+        }
+    }
 
     @Before
     fun freshPhone() {
@@ -111,7 +122,10 @@ class SourceChoiceTest {
         // left by one test is exactly what the next one must not start from.
         context.getSharedPreferences("melisma", Context.MODE_PRIVATE).edit().clear().commit()
         runBlocking { LyricsCache(context).clear() }
+        File(context.filesDir, "isrc-index.json").delete()
         settings = SettingsStore(context)
+        // Identification would ask real catalogues over the network; the sources here are fakes.
+        settings.setIdentifyTracks(false)
 
         val manager = context.getSystemService(ConnectivityManager::class.java)
         val capabilities = ShadowNetworkCapabilities.newInstance()
@@ -129,7 +143,11 @@ class SourceChoiceTest {
         }
     } catch (timeout: TimeoutCancellationException) {
         failure?.let { throw AssertionError("the lookup threw", it) }
-        throw AssertionError("still ${state.value} after 10 s waiting for $from", timeout)
+        throw AssertionError(
+            "waiting for $from; choices=${settings.current.sourceChoices} word=${word.fetches} line=${line.fetches}; " +
+                "seen=$seen",
+            timeout,
+        )
     }
 
     @Test
@@ -138,13 +156,13 @@ class SourceChoiceTest {
         repository.setTrack(track)
         assertEquals(LyricsKind.SYLLABLE, repository.shown("musixmatch").kind)
 
-        repository.chooseSource("lrclib")
+        repository.chooseSource(track.cacheKey, "lrclib")
         assertEquals(LyricsKind.LINE, repository.shown("lrclib").kind)
         assertEquals("lrclib", settings.current.sourceChoices[track.cacheKey])
 
         // Back to the ranking's answer from the cache: nobody is asked again.
         val asked = word.fetches
-        repository.chooseSource(null)
+        repository.chooseSource(track.cacheKey, null)
         repository.shown("musixmatch")
         assertEquals(asked, word.fetches)
         assertNull(settings.current.sourceChoices[track.cacheKey])
@@ -155,7 +173,7 @@ class SourceChoiceTest {
         val first = repository()
         first.setTrack(track)
         first.shown("musixmatch")
-        first.chooseSource("lrclib")
+        first.chooseSource(track.cacheKey, "lrclib")
         first.shown("lrclib")
 
         val asked = line.fetches
@@ -167,13 +185,45 @@ class SourceChoiceTest {
     }
 
     @Test
+    fun `looking the track up again asks the chosen source afresh`() = runBlocking {
+        val repository = repository()
+        repository.setTrack(track)
+        repository.shown("musixmatch")
+        repository.chooseSource(track.cacheKey, "lrclib")
+        repository.shown("lrclib")
+
+        val asked = line.fetches
+        repository.retry()
+        withTimeout(10_000) { repository.state.first { it is LyricsState.Loading } }
+        repository.shown("lrclib")
+        assertEquals(asked + 1, line.fetches)
+    }
+
+    @Test
+    fun `a choice for a track that is not the one being looked up is only remembered`() = runBlocking {
+        val repository = repository()
+        repository.setTrack(track)
+        repository.shown("musixmatch")
+
+        val other = TrackInfo(title = "Ditto", artist = "NewJeans", album = "", durationMs = 185_000)
+        val asked = line.fetches
+        repository.chooseSource(other.cacheKey, "lrclib")
+        assertEquals("lrclib", settings.current.sourceChoices[other.cacheKey])
+        assertNull(settings.current.sourceChoices[track.cacheKey])
+        assertEquals(asked, line.fetches)
+        // And it takes effect when that track plays.
+        repository.setTrack(other)
+        assertEquals("lrclib", repository.shown("lrclib").providerId)
+    }
+
+    @Test
     fun `a chosen source with nothing for the track leaves the best answer showing`() = runBlocking {
         line.document = null
         val repository = repository()
         repository.setTrack(track)
         repository.shown("musixmatch")
 
-        repository.chooseSource("lrclib")
+        repository.chooseSource(track.cacheKey, "lrclib")
         // Loading, then the ranking's answer again — and the choice is kept, so the row can say why.
         withTimeout(10_000) { repository.state.first { it is LyricsState.Loading } }
         assertEquals("musixmatch", repository.shown("musixmatch").providerId)

@@ -41,10 +41,15 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.scan
+import kotlinx.coroutines.flow.withIndex
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Collections
 import java.util.concurrent.TimeUnit
 
 sealed interface LyricsState {
@@ -100,20 +105,31 @@ class LyricsRepository(
         data object NotFound : Base
         data object Offline : Base
         data class Failed(val message: String) : Base
-        data class Ready(val key: String, val document: LyricsDocument) : Base
+        data class Ready(val key: String, val document: LyricsDocument) : Base {
+            /**
+             * What this document's derivations are memoised under: the track *from this source*.
+             * The track alone was not enough once a source can be chosen — a derivation computed
+             * for one source's words was being handed to another's under the same key.
+             */
+            val derivation: String get() = "$key|${document.providerId}"
+        }
     }
 
     private val base = MutableStateFlow<Base>(Base.Idle)
     private val translating = MutableStateFlow(false)
 
+    // Synchronised, because present() runs on the scope's dispatcher while the calls that clear
+    // these come from whoever holds the repository: a concurrent write on a plain HashMap can hang
+    // the next read, which is a lyrics screen that never settles.
+
     /** Memoised derivations, so toggling romanization is instant after the first time. */
-    private val derived = HashMap<String, LyricsDocument>()
+    private val derived: MutableMap<String, LyricsDocument> = Collections.synchronizedMap(HashMap())
 
     /** Whether each track could be romanized, asked once of the document as fetched. */
-    private val romanizable = HashMap<String, Boolean>()
+    private val romanizable: MutableMap<String, Boolean> = Collections.synchronizedMap(HashMap())
 
     /** The language each track turned out to be in. Null is an answer: unknown. */
-    private val languages = HashMap<String, String?>()
+    private val languages: MutableMap<String, String?> = Collections.synchronizedMap(HashMap())
 
     private var fetchJob: Job? = null
     private var currentRequest: LyricsRequest? = null
@@ -131,8 +147,9 @@ class LyricsRepository(
         // The Hokkien dictionary's revision only to redo the readings when one is added or removed.
         combine(base, settingsStore.settings, translating, HokkienWords.revision) { base, settings, isTranslating, _ ->
             Triple(base, settings, isTranslating)
-        }.mapLatest { (base, settings, isTranslating) ->
-            when (base) {
+        }.withIndex().mapLatest { (index, inputs) ->
+            val (base, settings, isTranslating) = inputs
+            index to when (base) {
                 Base.Idle -> LyricsState.Idle
                 Base.Loading -> LyricsState.Loading
                 Base.NotFound -> LyricsState.NotFound
@@ -140,7 +157,15 @@ class LyricsRepository(
                 is Base.Failed -> LyricsState.Failed(base.message)
                 is Base.Ready -> present(base, settings, isTranslating)
             }
-        }.stateIn(scope, SharingStarted.Eagerly, LyricsState.Idle)
+        }
+            // mapLatest cancels a derivation when its inputs change, but a derivation that never
+            // suspends finishes anyway and its result can land after the newer one. Each result
+            // carries its inputs' index, and one older than the last published is dropped — or
+            // choosing a source and then changing back could leave the first choice on screen.
+            .scan(-1 to LyricsState.Idle as LyricsState) { latest, next -> if (next.first > latest.first) next else latest }
+            .map { it.second }
+            .distinctUntilChanged()
+            .stateIn(scope, SharingStarted.Eagerly, LyricsState.Idle)
 
     // ---- track lifecycle ----------------------------------------------------
 
@@ -333,7 +358,9 @@ class LyricsRepository(
         base.value = Base.Loading
         fetchJob = scope.launch {
             cache.remove(request.cacheIdentity())
-            fetchBase(request)
+            // Fresh, so a source chosen for this track is asked again too rather than served from
+            // its own cache.
+            fetchBase(request, freshen = true)
             // Said out loud, because this was a button with no visible effect. Dropping the cached
             // answer and asking again usually produces the same words from the same source, so the
             // screen is identical and the only honest report is a sentence naming what answered. It
@@ -561,18 +588,23 @@ class LyricsRepository(
         val document = finished?.document?.let { TimingSanity.honestKind(it, request.durationMs) } ?: return false
         cache.put(chosenKey, document, mapOf(provider.id to LyricsCache.Outcome.LYRICS))
         base.value = Base.Ready(key, document)
+        // The chosen source is asked exactly too, once an ISRC banked during this lookup allows it.
+        if (request.isrc == null && document.kind != LyricsKind.SYLLABLE) retryWithLateIsrc(request, key)
         return true
     }
 
     /**
-     * Show [providerId]'s lyrics for the playing track from now on, or the ranking's with null.
+     * Show [providerId]'s lyrics for the track under [trackKey] from now on, or the ranking's with
+     * null.
      *
-     * Remembered against the track, so the next play starts from the choice. Spoken out loud like
-     * [retry], because a source with nothing for this track leaves the screen as it was.
+     * Remembered against the track, so the next play starts from the choice. Redone now only if
+     * that track is the one being looked up — the row names the track on screen, and a track that
+     * is still being identified must not have the choice made for the previous one. Spoken out
+     * loud like [retry], because a source with nothing for this track leaves the screen as it was.
      */
-    fun chooseSource(providerId: String?) {
-        val request = currentRequest ?: return
-        settingsStore.setSourceChoice(request.cacheIdentity(), providerId)
+    fun chooseSource(trackKey: String, providerId: String?) {
+        settingsStore.setSourceChoice(trackKey, providerId)
+        val request = currentRequest?.takeIf { it.cacheIdentity() == trackKey } ?: return
         fetchJob?.cancel()
         derived.clear()
         romanizable.clear()
@@ -867,7 +899,7 @@ class LyricsRepository(
         var document = ready.document
 
         val chinese = chineseReading(ready.key, settings)
-        val annotation = annotationKey(ready.key, settings, chinese)
+        val annotation = annotationKey(ready.derivation, settings, chinese)
         if (annotation != null) {
             document = deriveAnnotated(annotation, document, settings, chinese, ready.key in settings.liaoTracks)
         }
@@ -878,7 +910,7 @@ class LyricsRepository(
         // Keyed on the annotation too: the translation is added to a copy of the annotated
         // document, so a cached one carries whatever readings it was made with.
         if (settings.translationSource == TranslationSource.DEVICE) {
-            document = deriveTranslated(annotation ?: ready.key, document, settings, sourceLanguage(ready))
+            document = deriveTranslated(annotation ?: ready.derivation, document, settings, sourceLanguage(ready))
         }
 
         return LyricsState.Loaded(
@@ -907,9 +939,9 @@ class LyricsRepository(
      * translation and actually doing it.
      */
     private suspend fun sourceLanguage(ready: Base.Ready): String? {
-        if (languages.containsKey(ready.key)) return languages[ready.key]
+        if (languages.containsKey(ready.derivation)) return languages[ready.derivation]
         val tag = translator.identify(ready.document)
-        languages[ready.key] = tag
+        languages[ready.derivation] = tag
         return tag
     }
 
@@ -922,7 +954,7 @@ class LyricsRepository(
      * flipping the setting cannot change the answer.
      */
     private fun romanizationPossible(ready: Base.Ready): Boolean =
-        romanizable.getOrPut(ready.key) {
+        romanizable.getOrPut(ready.derivation) {
             val document = ready.document
             document.hasRomanization ||
                 document.lines.any { it.romanized != null } ||

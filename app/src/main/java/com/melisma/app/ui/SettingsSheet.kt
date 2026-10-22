@@ -2375,7 +2375,7 @@ private fun SourceRow(container: AppContainer, settings: Settings, accent: Color
         selected = chosen,
         accent = accent,
         perRow = 2,
-        onSelect = { id -> if (id != chosen) container.lyrics.chooseSource(id.takeIf { it != AUTOMATIC }) },
+        onSelect = { id -> if (id != chosen) container.lyrics.chooseSource(key, id.takeIf { it != AUTOMATIC }) },
     )
     val shownName = shown?.providerName
     val chosenName = options.firstOrNull { it.id == chosen }?.name
