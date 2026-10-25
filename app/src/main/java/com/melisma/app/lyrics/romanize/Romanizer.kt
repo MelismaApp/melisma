@@ -463,7 +463,13 @@ class Romanizer {
         }
         val over = surface.substring(head, surface.length - tail)
         if (over.none { it.isHanCharacter() } || spoken.size - tail <= head) return null
-        return Ruby(position + head, position + surface.length - tail, reading.substring(head, reading.length - tail))
+        return Ruby(
+            start = position + head,
+            end = position + surface.length - tail,
+            kana = reading.substring(head, reading.length - tail),
+            wordStart = position,
+            wordEnd = position + surface.length,
+        )
     }
 
     private fun isKana(c: Char) = c in '\u3041'..'\u3096' || c in '\u30a1'..'\u30f6'

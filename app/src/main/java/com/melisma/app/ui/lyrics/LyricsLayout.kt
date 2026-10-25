@@ -864,6 +864,9 @@ object LyricsLayoutBuilder {
                     val width = paint.measureText(piece.text)
                     val ruby = piece.kana?.let { kanaIn(it, furiganaHiragana!!) }
                     val rubyWidth = ruby?.let { metrics.rubyPaint.measureText(it) } ?: 0f
+                    // Centred over the characters it reads, which may be only part of the word.
+                    val glossedFrom = paint.measureText(piece.text, 0, piece.rubyStart)
+                    val glossedWidth = paint.measureText(piece.text, piece.rubyStart, piece.rubyEnd)
                     placed += PlacedUnit(
                         text = piece.text,
                         x = x,
@@ -874,7 +877,7 @@ object LyricsLayoutBuilder {
                         gradientTop = 0f,
                         gradientHeight = contentHeight,
                         ruby = ruby,
-                        rubyX = x + (width - rubyWidth) / 2f,
+                        rubyX = x + glossedFrom + (glossedWidth - rubyWidth) / 2f,
                         rubyBaseline = rowIndex * lineHeight + metrics.rubyFontSizePx * 1.05f,
                     )
                     x += width
@@ -933,8 +936,17 @@ object LyricsLayoutBuilder {
         )
     }
 
-    /** A piece of a row: its text, the reading over it if any, and whether a space precedes it. */
-    private data class RubyPiece(val text: String, val kana: String?, val spaceBefore: Boolean)
+    /**
+     * A piece of a row: a word or a run between words, the reading over `text[rubyStart until
+     * rubyEnd]` if it has one, and whether a space precedes it.
+     */
+    private data class RubyPiece(
+        val text: String,
+        val kana: String?,
+        val spaceBefore: Boolean,
+        val rubyStart: Int = 0,
+        val rubyEnd: Int = text.length,
+    )
 
     /**
      * [text] cut at every reading's edges and at spaces, then wrapped by piece so a reading is
@@ -955,12 +967,17 @@ object LyricsLayoutBuilder {
                 spaceBefore = false
             }
         }
-        for (ruby in rubies.sortedBy { it.start }) {
-            if (ruby.start < at || ruby.end > text.length || ruby.start >= ruby.end) continue
-            if (ruby.start > at) plain(text.substring(at, ruby.start))
-            pieces += RubyPiece(text.substring(ruby.start, ruby.end), ruby.kana, spaceBefore)
+        for (ruby in rubies.sortedBy { it.wordStart }) {
+            val wordStart = minOf(ruby.wordStart, ruby.start)
+            val wordEnd = maxOf(ruby.wordEnd, ruby.end)
+            if (wordStart < at || wordEnd > text.length || ruby.start >= ruby.end) continue
+            if (wordStart > at) plain(text.substring(at, wordStart))
+            pieces += RubyPiece(
+                text.substring(wordStart, wordEnd), ruby.kana, spaceBefore,
+                rubyStart = ruby.start - wordStart, rubyEnd = ruby.end - wordStart,
+            )
             spaceBefore = false
-            at = ruby.end
+            at = wordEnd
         }
         if (at < text.length) plain(text.substring(at))
         if (pieces.isEmpty()) return null

@@ -98,9 +98,13 @@ data class LyricLine(
         }
 }
 
-/** A reading for `text[start until end]`, in katakana as the analyser gives it. */
+/**
+ * A reading for `text[start until end]`, in katakana as the analyser gives it. The word those
+ * characters belong to runs `wordStart until wordEnd` — 帰る for a reading over 帰 — and is what a
+ * row break must not fall inside.
+ */
 @Serializable
-data class Ruby(val start: Int, val end: Int, val kana: String)
+data class Ruby(val start: Int, val end: Int, val kana: String, val wordStart: Int = start, val wordEnd: Int = end)
 
 @Serializable
 data class LyricsDocument(

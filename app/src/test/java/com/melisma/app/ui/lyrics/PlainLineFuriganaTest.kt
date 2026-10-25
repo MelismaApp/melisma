@@ -24,8 +24,8 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class PlainLineFuriganaTest {
 
-    /** 夜に駆ける with readings over 夜 and 駆, as the analyser would give them. */
-    private fun line(text: String = "夜に駆ける", rubies: List<Ruby> = listOf(Ruby(0, 1, "ヨル"), Ruby(2, 3, "カ"))) =
+    /** 夜に駆ける: ヨル over 夜, and カ over the 駆 of the word 駆ける. */
+    private fun line(text: String = "夜に駆ける", rubies: List<Ruby> = listOf(Ruby(0, 1, "ヨル"), Ruby(2, 3, "カ", 2, 5))) =
         LyricLine(role = LineRole.LEAD, startMs = 1_000, endMs = 4_000, text = text, furigana = rubies)
 
     private fun layout(
@@ -47,11 +47,15 @@ class PlainLineFuriganaTest {
     @Test
     fun `each reading sits over its own characters, in hiragana`() {
         val units = layout().units
-        assertEquals(listOf("夜", "に", "駆", "ける"), units.map { it.text })
-        assertEquals(listOf("よる", null, "か", null), units.map { it.ruby })
-        // Centred over the character it reads, and above the text.
+        // The word is the piece; the reading covers only its kanji.
+        assertEquals(listOf("夜", "に", "駆ける"), units.map { it.text })
+        assertEquals(listOf("よる", null, "か"), units.map { it.ruby })
+        // Centred over the characters it reads, and above the text: か over the one-wide 駆 at the
+        // start of 駆ける, not over the three-wide word.
         val yoru = units[0]
         assertTrue(yoru.rubyX < yoru.x + yoru.width / 2f && yoru.rubyBaseline < yoru.baseline)
+        val kakeru = units[2]
+        assertEquals(kakeru.x + (1f - 1f) / 2f, kakeru.rubyX, 0.01f)
         // Pieces follow one another with no gap, since the line is written without spaces.
         for ((before, after) in units.zipWithNext()) assertEquals(before.x + before.width, after.x, 0.01f)
         // All one line's window, unlike syllables.
@@ -99,9 +103,9 @@ class PlainLineFuriganaTest {
 
     @Test
     fun `spaces in the line stay as breaks between pieces`() {
-        val spaced = line(text = "夜に 駆ける", rubies = listOf(Ruby(0, 1, "ヨル"), Ruby(3, 4, "カ")))
+        val spaced = line(text = "夜に 駆ける", rubies = listOf(Ruby(0, 1, "ヨル"), Ruby(3, 4, "カ", 3, 6)))
         val units = layout(spaced).units
-        assertEquals(listOf("夜", "に", "駆", "ける"), units.map { it.text })
+        assertEquals(listOf("夜", "に", "駆ける"), units.map { it.text })
         // The space before 駆 is kept as a gap, not drawn as a piece.
         assertTrue(units[2].x > units[1].x + units[1].width)
         assertEquals(listOf("夜に 駆ける"), layout(spaced).flatRows.map { it.text })
@@ -113,8 +117,8 @@ class PlainLineFuriganaTest {
         // gloss, so the readings go against the text and the line is placed piece by piece.
         val block = line().copy(syllables = listOf(com.melisma.app.lyrics.model.Syllable("夜に駆ける", 1_000, 4_000)))
         val units = layout(block, kind = LyricsKind.SYLLABLE).units
-        assertEquals(listOf("夜", "に", "駆", "ける"), units.map { it.text })
-        assertEquals(listOf("よる", null, "か", null), units.map { it.ruby })
+        assertEquals(listOf("夜", "に", "駆ける"), units.map { it.text })
+        assertEquals(listOf("よる", null, "か"), units.map { it.ruby })
         // Still one window: the sweep across the line is what a one-block line always had.
         assertTrue(units.all { it.startMs == 1_000 && it.endMs == 4_000 })
     }
@@ -148,5 +152,17 @@ class PlainLineFuriganaTest {
         val timed = line().copy(syllables = listOf(word))
         val units = layout(timed, kind = LyricsKind.SYLLABLE).units
         assertTrue(units.all { it.startMs == 1_500 && it.endMs == 3_200 })
+    }
+
+    @Test
+    fun `a row never breaks inside a word, even where its reading ends`() {
+        // 帰る at the end of a row 24 wide: 帰 would fit and る would not. The word moves whole.
+        val text = "な".repeat(23) + "帰るように"
+        val word = line(text = text, rubies = listOf(Ruby(23, 24, "カエ", 23, 25)))
+        val units = layout(word, widthPx = 24f / 0.95f).units
+        val kaeru = units.single { it.ruby != null }
+        assertEquals("帰る", kaeru.text)
+        val rows = units.groupBy { it.baseline }.values.toList()
+        assertEquals(listOf("帰る", "ように"), rows[1].map { it.text })
     }
 }

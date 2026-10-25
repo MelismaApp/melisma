@@ -80,5 +80,10 @@ class PlainLineFuriganaReadingTest {
         assertTrue(readings.toString(), ("願" to "ネガ") in readings)
         assertTrue(readings.toString(), readings.any { (over, _) -> over == "思い出" })
         assertTrue(readings.none { (over, _) -> over.endsWith("る") || over.startsWith("お") })
+        // The word the reading belongs to is kept whole beside it, for the layout to wrap by.
+        val kaeru = line.furigana.single { line.text.substring(it.start, it.end) == "帰" }
+        assertEquals("帰る", line.text.substring(kaeru.wordStart, kaeru.wordEnd))
+        val negai = line.furigana.single { line.text.substring(it.start, it.end) == "願" }
+        assertEquals("お願い", line.text.substring(negai.wordStart, negai.wordEnd))
     }
 }
