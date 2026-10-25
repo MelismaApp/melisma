@@ -70,4 +70,15 @@ class PlainLineFuriganaReadingTest {
         assertTrue(worded.furigana.isEmpty())
         assertEquals("ヨルニ", worded.syllables[0].kana)
     }
+
+    @Test
+    fun `a reading covers the kanji, not the kana written beside them`() = runBlocking {
+        val line = Romanizer().annotate(document("お願い 帰る 思い出"), romanize = false, furigana = true).lines[0]
+        val readings = line.furigana.map { line.text.substring(it.start, it.end) to it.kana }
+        // Okurigana and a kana prefix are left out of the gloss; kana inside a word stay in it.
+        assertTrue(readings.toString(), ("帰" to "カエ") in readings)
+        assertTrue(readings.toString(), ("願" to "ネガ") in readings)
+        assertTrue(readings.toString(), readings.any { (over, _) -> over == "思い出" })
+        assertTrue(readings.none { (over, _) -> over.endsWith("る") || over.startsWith("お") })
+    }
 }

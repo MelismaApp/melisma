@@ -288,7 +288,7 @@ object LyricsLayoutBuilder {
 
             // A line timed as one block carries its readings against the text, and the plain layout
             // is the one that places those; its single window sweeps the line as it did before.
-            val oneBlockWithReadings = rubyRoom && line.furigana.isNotEmpty() && line.syllables.size == 1
+            val oneBlockWithReadings = rubyRoom && line.furigana.isNotEmpty() && line.isOneBlock
             val layout = when {
                 line.isInterlude -> interludeLayout(line, index, metrics, maxWidth, alignRight, y)
                 line.syllables.isNotEmpty() && document.kind == LyricsKind.SYLLABLE && !oneBlockWithReadings ->

@@ -163,8 +163,7 @@ class Romanizer {
 
         // A line timed as one block has no syllables to put readings on either: one reading over
         // the whole line is no gloss. Its readings go against the text, like a plain line's.
-        val oneBlock = wantFurigana && hanScript == Script.JAPANESE && line.furigana.isEmpty() &&
-            line.syllables.size == 1 && line.syllables[0].text.trim() == line.text.trim()
+        val oneBlock = wantFurigana && hanScript == Script.JAPANESE && line.furigana.isEmpty() && line.isOneBlock
         val furigana = if (oneBlock) rubyFor(line.text).orEmpty() else line.furigana
 
         val syllables = (if (hokkien != null && wantRomaji) {
@@ -437,10 +436,39 @@ class Romanizer {
             val surface = token.surface
             if (!surface.any { it.isHanCharacter() }) return@mapNotNull null
             val kana = token.kanaReading()?.takeIf { it.isNotBlank() && it != surface } ?: return@mapNotNull null
-            Ruby(token.position, token.position + surface.length, kana)
+            kanjiRuby(surface, kana, token.position)
         }
         return rubies.takeIf { it.isNotEmpty() }
     }
+
+    /**
+     * [reading] narrowed to the kanji of [surface]: a token's kana at either end is in the reading
+     * too, and a gloss belongs over the characters that need one. 帰る with カエル gives カエ over
+     * 帰. Kana inside the token stays with the kanji — 思い出 is read as one.
+     */
+    private fun kanjiRuby(surface: String, reading: String, position: Int): Ruby? {
+        val spoken = reading.map { toKatakana(it) }
+        var head = 0
+        while (head < surface.length && head < spoken.size && isKana(surface[head]) &&
+            toKatakana(surface[head]) == spoken[head]
+        ) {
+            head++
+        }
+        var tail = 0
+        while (tail < surface.length - head && tail < spoken.size - head &&
+            isKana(surface[surface.length - 1 - tail]) &&
+            toKatakana(surface[surface.length - 1 - tail]) == spoken[spoken.size - 1 - tail]
+        ) {
+            tail++
+        }
+        val over = surface.substring(head, surface.length - tail)
+        if (over.none { it.isHanCharacter() } || spoken.size - tail <= head) return null
+        return Ruby(position + head, position + surface.length - tail, reading.substring(head, reading.length - tail))
+    }
+
+    private fun isKana(c: Char) = c in '\u3041'..'\u3096' || c in '\u30a1'..'\u30f6'
+
+    private fun toKatakana(c: Char) = if (c in '\u3041'..'\u3096') c + 0x60 else c
 
     private fun kanaFor(range: IntRange, spans: List<TokenSpan>, surface: String): String? {
         if (!surface.any { it.isHanCharacter() }) return null

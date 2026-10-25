@@ -139,4 +139,14 @@ class PlainLineFuriganaTest {
         assertEquals(listOf("夢", "な".repeat(23)), rows[0].map { it.text })
         assertEquals(listOf("な".repeat(7), "光"), rows[1].map { it.text })
     }
+
+    @Test
+    fun `a genuinely one-word line keeps its own syllable's timing`() {
+        // The syllable is timed more closely than the line, so it is not a line-timed block in
+        // disguise and the word's own window must survive — even with readings on hand.
+        val word = com.melisma.app.lyrics.model.Syllable("夜に駆ける", 1_500, 3_200, kana = "ヨルニカケル")
+        val timed = line().copy(syllables = listOf(word))
+        val units = layout(timed, kind = LyricsKind.SYLLABLE).units
+        assertTrue(units.all { it.startMs == 1_500 && it.endMs == 3_200 })
+    }
 }

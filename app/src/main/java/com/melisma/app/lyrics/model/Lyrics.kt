@@ -85,6 +85,17 @@ data class LyricLine(
 ) {
     val durationMs: Int get() = (endMs - startMs).coerceAtLeast(0)
     val isInterlude: Boolean get() = role == LineRole.INTERLUDE
+
+    /**
+     * Whether the line's one syllable is the line itself: the same text over the same window. A
+     * source that times by line but writes word-timed data, as Musixmatch does, produces these,
+     * and they are line-timed lines in all but shape. A genuinely one-word line whose syllable is
+     * timed more closely than the line is not one.
+     */
+    val isOneBlock: Boolean
+        get() = syllables.size == 1 && syllables[0].let {
+            it.text.trim() == text.trim() && it.startMs == startMs && it.endMs == endMs
+        }
 }
 
 /** A reading for `text[start until end]`, in katakana as the analyser gives it. */
