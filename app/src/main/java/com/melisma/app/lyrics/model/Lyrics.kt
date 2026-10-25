@@ -76,10 +76,20 @@ data class LyricLine(
     val rtl: Boolean = false,
     val romanized: String? = null,
     val translated: String? = null,
+    /**
+     * Readings over the kanji of a line that has no syllables to carry them. A word-timed line
+     * keeps its kana on each [Syllable]; a line-timed or unsynced one has only [text], so its
+     * readings are kept against offsets into it.
+     */
+    val furigana: List<Ruby> = emptyList(),
 ) {
     val durationMs: Int get() = (endMs - startMs).coerceAtLeast(0)
     val isInterlude: Boolean get() = role == LineRole.INTERLUDE
 }
+
+/** A reading for `text[start until end]`, in katakana as the analyser gives it. */
+@Serializable
+data class Ruby(val start: Int, val end: Int, val kana: String)
 
 @Serializable
 data class LyricsDocument(

@@ -233,7 +233,8 @@ watch-the-road reminder each drive, and *Settings → Android Auto* has a plain 
 You do have to turn on **Unknown sources** in Android Auto's own developer settings first, because
 Melisma is not on Google Play and never can be for cars: the Car App Library has seven app categories
 and none of them is lyrics. [docs/ANDROID-AUTO.md](docs/ANDROID-AUTO.md) has the five steps and the
-reasoning.
+reasoning — and what to do on the phones that still hide it, which need the APK installed with Google
+Play recorded as the installer (`adb install -i com.android.vending`, or KingInstaller).
 
 **Can I move my settings to a new phone?**
 

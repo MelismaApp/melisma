@@ -26,6 +26,22 @@ want apps it did not get from the store.
 
 One time per phone, and it is the same switch any sideloaded car app needs.
 
+### If it still does not appear
+
+On some phones Android Auto lists only apps whose *installer of record* is Google Play, whatever
+the switch above says — reported on a Redmi Note 11 running Android 13, where other sideloaded car
+apps showed and Melisma did not. The fix is to install the APK so that Google Play is recorded as
+the installer:
+
+- From a computer: `adb install -i com.android.vending melisma.apk`.
+- On the phone: an installer that can set the installer package, such as KingInstaller (needs
+  Shizuku or root), choosing Google Play.
+
+The app cannot do this for itself, and Android does not let it keep the record either: an update
+installed from inside the app records Melisma as the installer again. Until that changes, a phone
+that needed this step needs it again after each update — install the new APK the same way rather
+than from the in-app prompt.
+
 ## What you get
 
 | | |

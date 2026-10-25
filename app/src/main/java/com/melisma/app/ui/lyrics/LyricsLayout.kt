@@ -4,6 +4,7 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import com.melisma.app.lyrics.model.LineRole
 import com.melisma.app.lyrics.model.LyricLine
+import com.melisma.app.lyrics.model.Ruby
 import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.lyrics.model.LyricsKind
 import com.melisma.app.lyrics.model.Syllable
@@ -270,8 +271,9 @@ object LyricsLayoutBuilder {
     ): LyricsLayout {
         // Reserve the ruby band across the whole document rather than per line, so the
         // spacing does not jump between a line with kanji and one without.
-        val rubyRoom = furiganaHiragana != null &&
-            document.lines.any { line -> line.syllables.any { !it.kana.isNullOrBlank() } }
+        val rubyRoom = furiganaHiragana != null && document.lines.any { line ->
+            line.syllables.any { !it.kana.isNullOrBlank() } || line.furigana.isNotEmpty()
+        }
         val hasDuet = document.lines.any { it.oppositeAligned }
         // A duet gets a wide inset so the two voices read as separate columns; a single
         // voice only gets the small trailing inset every line has.
@@ -297,6 +299,7 @@ object LyricsLayoutBuilder {
                     line, index, metrics, maxWidth, alignRight, y,
                     useRomanization, showTranslation, showOriginal,
                     timed = document.kind != LyricsKind.STATIC,
+                    furiganaHiragana = if (rubyRoom) furiganaHiragana else null,
                 )
             }
             out += layout
@@ -821,33 +824,85 @@ object LyricsLayoutBuilder {
         showTranslation: Boolean,
         showOriginal: Boolean,
         timed: Boolean,
+        furiganaHiragana: Boolean? = null,
     ): LineLayout {
         val paint = metrics.paintFor(line.role)
         val fontSize = metrics.fontSizeFor(line.role)
-        val lineHeight = fontSize * 1.1818182f
         val romanizedText = line.romanized?.takeIf { it.isNotBlank() }.takeIf { useRomanization }
         val text = romanizedText ?: line.text
 
-        val rows = wrap(text, paint, maxWidth)
-        val contentHeight = rows.size * lineHeight
+        // Furigana glosses the characters, so only while they are what is shown.
+        val rubies = if (furiganaHiragana != null && romanizedText == null) line.furigana else emptyList()
+        val rubyRoom = if (furiganaHiragana != null) metrics.rubyHeightPx else 0f
+        val lineHeight = fontSize * 1.1818182f + rubyRoom
+        val endMs = if (timed) line.endMs else line.startMs
 
-        // One unit per wrapped row, all sharing the line's window. The gradient box
-        // spans the whole line so the sweep runs continuously down through the rows
-        // instead of restarting on each one.
-        val units = rows.mapIndexed { rowIndex, rowText ->
-            val width = paint.measureText(rowText)
-            val x = if (alignRight) maxWidth - width else 0f
-            PlacedUnit(
-                text = rowText,
-                x = x,
-                baseline = rowIndex * lineHeight + lineHeight * 0.78f,
-                width = width,
-                startMs = line.startMs,
-                endMs = if (timed) line.endMs else line.startMs,
-                gradientTop = 0f,
-                gradientHeight = contentHeight,
-            )
+        val rows: List<String>
+        val units: List<PlacedUnit>
+        val flatRows: List<TextRow>
+        val rubied = if (rubies.isNotEmpty()) rubyRows(text, rubies, paint, maxWidth) else null
+        if (rubied != null) {
+            // Readings over their characters: a unit per piece, so each reading has a place; the
+            // flat row is the pieces joined, so the quiet drawing matches the lit one.
+            rows = rubied.map { row -> row.joinToString("") { piece -> (if (piece.spaceBefore) " " else "") + piece.text } }
+            val contentHeight = rows.size * lineHeight
+            val spaceWidth = paint.measureText(" ")
+            val placed = ArrayList<PlacedUnit>()
+            val flat = ArrayList<TextRow>(rows.size)
+            for ((rowIndex, row) in rubied.withIndex()) {
+                val rowWidth = row.sumOf { piece ->
+                    (paint.measureText(piece.text) + if (piece.spaceBefore) spaceWidth else 0f).toDouble()
+                }.toFloat()
+                val rowStartX = if (alignRight) maxWidth - rowWidth else 0f
+                val baseline = rowIndex * lineHeight + rubyRoom + (lineHeight - rubyRoom) * 0.78f
+                var x = rowStartX
+                for (piece in row) {
+                    if (piece.spaceBefore) x += spaceWidth
+                    val width = paint.measureText(piece.text)
+                    val ruby = piece.kana?.let { kanaIn(it, furiganaHiragana!!) }
+                    val rubyWidth = ruby?.let { metrics.rubyPaint.measureText(it) } ?: 0f
+                    placed += PlacedUnit(
+                        text = piece.text,
+                        x = x,
+                        baseline = baseline,
+                        width = width,
+                        startMs = line.startMs,
+                        endMs = endMs,
+                        gradientTop = 0f,
+                        gradientHeight = contentHeight,
+                        ruby = ruby,
+                        rubyX = x + (width - rubyWidth) / 2f,
+                        rubyBaseline = rowIndex * lineHeight + metrics.rubyFontSizePx * 1.05f,
+                    )
+                    x += width
+                }
+                flat += TextRow(rows[rowIndex], rowStartX, baseline)
+            }
+            units = placed
+            flatRows = flat
+        } else {
+            rows = wrap(text, paint, maxWidth)
+            val contentHeight = rows.size * lineHeight
+            // One unit per wrapped row, all sharing the line's window. The gradient box
+            // spans the whole line so the sweep runs continuously down through the rows
+            // instead of restarting on each one.
+            units = rows.mapIndexed { rowIndex, rowText ->
+                val width = paint.measureText(rowText)
+                val x = if (alignRight) maxWidth - width else 0f
+                PlacedUnit(
+                    text = rowText,
+                    x = x,
+                    baseline = rowIndex * lineHeight + rubyRoom + (lineHeight - rubyRoom) * 0.78f,
+                    width = width,
+                    startMs = line.startMs,
+                    endMs = endMs,
+                    gradientTop = 0f,
+                    gradientHeight = contentHeight,
+                )
+            }
+            flatRows = units.map { TextRow(it.text, it.x, it.baseline) }
         }
+        val contentHeight = rows.size * lineHeight
 
         // No syllables to desynchronise here, so the romanization simply replaces the
         // text above and needs no row of its own.
@@ -867,12 +922,62 @@ object LyricsLayoutBuilder {
             index = index,
             units = units,
             secondaryRows = secondary,
-            flatRows = units.map { TextRow(it.text, it.x, it.baseline) },
+            flatRows = flatRows,
             contentHeight = contentHeight + secondaryHeight,
             height = contentHeight + secondaryHeight + metrics.lineSpacingPx,
             top = top,
             alignRight = alignRight,
         )
+    }
+
+    /** A piece of a row: its text, the reading over it if any, and whether a space precedes it. */
+    private data class RubyPiece(val text: String, val kana: String?, val spaceBefore: Boolean)
+
+    /**
+     * [text] cut at every reading's edges and at spaces, then wrapped by piece so a reading is
+     * never split from its characters. Null when a piece alone is too wide for a row, which the
+     * ordinary wrap handles by breaking inside it.
+     */
+    private fun rubyRows(text: String, rubies: List<Ruby>, paint: Paint, maxWidth: Float): List<List<RubyPiece>>? {
+        val pieces = ArrayList<RubyPiece>()
+        var at = 0
+        var spaceBefore = false
+        fun plain(segment: String) {
+            // Split at spaces, each a break opportunity; the space itself becomes a flag.
+            for ((index, word) in segment.split(' ').withIndex()) {
+                if (index > 0) spaceBefore = true
+                if (word.isEmpty()) continue
+                pieces += RubyPiece(word, null, spaceBefore)
+                spaceBefore = false
+            }
+        }
+        for (ruby in rubies.sortedBy { it.start }) {
+            if (ruby.start < at || ruby.end > text.length || ruby.start >= ruby.end) continue
+            if (ruby.start > at) plain(text.substring(at, ruby.start))
+            pieces += RubyPiece(text.substring(ruby.start, ruby.end), ruby.kana, spaceBefore)
+            spaceBefore = false
+            at = ruby.end
+        }
+        if (at < text.length) plain(text.substring(at))
+        if (pieces.isEmpty()) return null
+
+        val spaceWidth = paint.measureText(" ")
+        val rows = ArrayList<MutableList<RubyPiece>>()
+        var rowWidth = 0f
+        for (piece in pieces) {
+            val width = paint.measureText(piece.text)
+            if (width > maxWidth) return null
+            val needed = if (rows.isEmpty() || rows.last().isEmpty()) width else rowWidth + (if (piece.spaceBefore) spaceWidth else 0f) + width
+            if (rows.isEmpty() || needed > maxWidth) {
+                // A row never starts with a space.
+                rows += mutableListOf(piece.copy(spaceBefore = false))
+                rowWidth = width
+            } else {
+                rows.last() += piece
+                rowWidth = needed
+            }
+        }
+        return rows
     }
 
     /**

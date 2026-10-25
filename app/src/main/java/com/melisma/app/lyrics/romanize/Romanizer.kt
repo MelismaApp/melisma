@@ -5,6 +5,7 @@ import com.atilika.kuromoji.ipadic.Token
 import com.atilika.kuromoji.ipadic.Tokenizer
 import com.melisma.app.lyrics.model.LyricLine
 import com.melisma.app.lyrics.model.LyricsDocument
+import com.melisma.app.lyrics.model.Ruby
 import com.melisma.app.lyrics.model.Syllable
 import com.melisma.app.settings.ChineseReading
 import com.melisma.app.settings.HokkienSpelling
@@ -111,7 +112,7 @@ class Romanizer {
         var produced = false
         val lines = document.lines.map { line ->
             if (line.isInterlude || line.text.isBlank()) return@map line
-            val annotated = annotateLine(line, hanScript, stripDiacritics, wantRomaji, hokkien, held, singsLiao)
+            val annotated = annotateLine(line, hanScript, stripDiacritics, wantRomaji, hokkien, held, singsLiao, wantFurigana)
             if (annotated !== line) produced = true
             annotated
         }
@@ -143,15 +144,21 @@ class Romanizer {
         hokkien: HokkienSpelling? = null,
         held: Int = Int.MAX_VALUE,
         liao: Boolean = false,
+        wantFurigana: Boolean = false,
     ): LyricLine {
         // What a provider ships for a Hokkien song is its own spelling, pinyin-like and without tones,
         // where there is one at all; Tâi-lô replaces it, so the whole song is spelled one way.
         val replacing = hokkien != null && line.text.any { it.isHanCharacter() }
 
         if (line.syllables.isEmpty()) {
-            if (!wantRomaji || (!replacing && !line.romanized.isNullOrBlank())) return line
-            val text = romanizeMixed(line.text, hanScript, stripDiacritics, hokkien, liao) ?: return line
-            return line.copy(romanized = text)
+            // No syllables to carry kana, so the readings go against the text itself.
+            var out = line
+            if (wantFurigana && hanScript == Script.JAPANESE && line.furigana.isEmpty()) {
+                rubyFor(line.text)?.let { out = out.copy(furigana = it) }
+            }
+            if (!wantRomaji || (!replacing && !line.romanized.isNullOrBlank())) return out
+            val text = romanizeMixed(line.text, hanScript, stripDiacritics, hokkien, liao) ?: return out
+            return out.copy(romanized = text)
         }
 
         val syllables = if (hokkien != null && wantRomaji) {
@@ -413,6 +420,20 @@ class Romanizer {
      * takes a proportional slice of that token's reading, on the same basis as the
      * romaji: approximate per syllable, but never losing or repeating a sound.
      */
+    /** A reading over each run of kanji in [text], or null when there is none to give. */
+    private fun rubyFor(text: String): List<Ruby>? {
+        if (!text.any { it.isHanCharacter() }) return null
+        val tokenizer = this.tokenizer ?: return null
+        val tokens = runCatching { tokenizer.tokenize(text) }.getOrNull() ?: return null
+        val rubies = tokens.mapNotNull { token ->
+            val surface = token.surface
+            if (!surface.any { it.isHanCharacter() }) return@mapNotNull null
+            val kana = token.kanaReading()?.takeIf { it.isNotBlank() && it != surface } ?: return@mapNotNull null
+            Ruby(token.position, token.position + surface.length, kana)
+        }
+        return rubies.takeIf { it.isNotEmpty() }
+    }
+
     private fun kanaFor(range: IntRange, spans: List<TokenSpan>, surface: String): String? {
         if (!surface.any { it.isHanCharacter() }) return null
 
