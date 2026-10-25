@@ -286,9 +286,12 @@ object LyricsLayoutBuilder {
             val alignRight = line.oppositeAligned != line.rtl
             val maxWidth = (widthPx - insetPx).coerceAtLeast(metrics.fontSizePx * 2f)
 
+            // A line timed as one block carries its readings against the text, and the plain layout
+            // is the one that places those; its single window sweeps the line as it did before.
+            val oneBlockWithReadings = rubyRoom && line.furigana.isNotEmpty() && line.syllables.size == 1
             val layout = when {
                 line.isInterlude -> interludeLayout(line, index, metrics, maxWidth, alignRight, y)
-                line.syllables.isNotEmpty() && document.kind == LyricsKind.SYLLABLE ->
+                line.syllables.isNotEmpty() && document.kind == LyricsKind.SYLLABLE && !oneBlockWithReadings ->
                     syllableLayout(
                         line, index, metrics, maxWidth, alignRight, y,
                         useRomanization, showTranslation, showOriginal,
@@ -935,8 +938,9 @@ object LyricsLayoutBuilder {
 
     /**
      * [text] cut at every reading's edges and at spaces, then wrapped by piece so a reading is
-     * never split from its characters. Null when a piece alone is too wide for a row, which the
-     * ordinary wrap handles by breaking inside it.
+     * never split from its characters. A piece too wide for a row on its own — a long run of kana
+     * between two kanji is the usual one — is broken the way a plain row would be; a reading that
+     * wide loses its gloss, since there is no one place left to put it.
      */
     private fun rubyRows(text: String, rubies: List<Ruby>, paint: Paint, maxWidth: Float): List<List<RubyPiece>>? {
         val pieces = ArrayList<RubyPiece>()
@@ -964,20 +968,46 @@ object LyricsLayoutBuilder {
         val spaceWidth = paint.measureText(" ")
         val rows = ArrayList<MutableList<RubyPiece>>()
         var rowWidth = 0f
+        fun newRow() {
+            rows += mutableListOf<RubyPiece>()
+            rowWidth = 0f
+        }
+        fun place(piece: RubyPiece, width: Float) {
+            val lead = if (piece.spaceBefore && rows.last().isNotEmpty()) spaceWidth else 0f
+            if (rows.last().isNotEmpty() && rowWidth + lead + width > maxWidth) newRow()
+            // A row never starts with a space.
+            rows.last() += if (rows.last().isEmpty()) piece.copy(spaceBefore = false) else piece
+            rowWidth += (if (rows.last().size > 1 && piece.spaceBefore) spaceWidth else 0f) + width
+        }
+        newRow()
         for (piece in pieces) {
             val width = paint.measureText(piece.text)
-            if (width > maxWidth) return null
-            val needed = if (rows.isEmpty() || rows.last().isEmpty()) width else rowWidth + (if (piece.spaceBefore) spaceWidth else 0f) + width
-            if (rows.isEmpty() || needed > maxWidth) {
-                // A row never starts with a space.
-                rows += mutableListOf(piece.copy(spaceBefore = false))
-                rowWidth = width
-            } else {
-                rows.last() += piece
-                rowWidth = needed
+            if (width <= maxWidth) {
+                place(piece, width)
+                continue
+            }
+            // Wider than a row on its own. Japanese wraps anywhere, so the run is laid down
+            // character by character from wherever the row has got to; a reading that wide has
+            // nowhere to go, so its characters are laid down without it.
+            var first = true
+            for (grapheme in graphemesOf(piece.text)) {
+                val graphemeWidth = paint.measureText(grapheme)
+                val lead = if (first && piece.spaceBefore && rows.last().isNotEmpty()) spaceWidth else 0f
+                if (rows.last().isNotEmpty() && rowWidth + lead + graphemeWidth > maxWidth) newRow()
+                val last = rows.last()
+                if (last.isNotEmpty() && last.last().kana == null && !(first && piece.spaceBefore)) {
+                    // Continue the run already on this row rather than placing every character.
+                    last[last.lastIndex] = last.last().copy(text = last.last().text + grapheme)
+                    rowWidth += graphemeWidth
+                } else {
+                    last += RubyPiece(grapheme, null, spaceBefore = first && piece.spaceBefore && last.isNotEmpty())
+                    rowWidth += lead + graphemeWidth
+                }
+                first = false
             }
         }
-        return rows
+        if (rows.last().isEmpty()) rows.removeAt(rows.lastIndex)
+        return rows.takeIf { it.isNotEmpty() }
     }
 
     /**

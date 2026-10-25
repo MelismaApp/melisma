@@ -106,4 +106,37 @@ class PlainLineFuriganaTest {
         assertTrue(units[2].x > units[1].x + units[1].width)
         assertEquals(listOf("夜に 駆ける"), layout(spaced).flatRows.map { it.text })
     }
+
+    @Test
+    fun `a word-timed song's line that arrived as one block is read like a plain line`() {
+        // Musixmatch times some lines as a single syllable; one reading over the whole line is no
+        // gloss, so the readings go against the text and the line is placed piece by piece.
+        val block = line().copy(syllables = listOf(com.melisma.app.lyrics.model.Syllable("夜に駆ける", 1_000, 4_000)))
+        val units = layout(block, kind = LyricsKind.SYLLABLE).units
+        assertEquals(listOf("夜", "に", "駆", "ける"), units.map { it.text })
+        assertEquals(listOf("よる", null, "か", null), units.map { it.ruby })
+        // Still one window: the sweep across the line is what a one-block line always had.
+        assertTrue(units.all { it.startMs == 1_000 && it.endMs == 4_000 })
+    }
+
+    @Test
+    fun `a run of kana longer than a row is broken, and the reading before it stays`() {
+        // 夢 then fifteen kana, in a row 24 wide: the kana run alone fits, but 夢 and the run do not,
+        // and a kana run of thirty would not fit any row. Neither may cost 夢 its reading.
+        val short = line(text = "夢" + "な".repeat(15), rubies = listOf(Ruby(0, 1, "ユメ")))
+        assertEquals("ゆめ", layout(short, widthPx = 24f / 0.95f).units.first().ruby)
+
+        val long = line(text = "夢" + "な".repeat(30) + "光", rubies = listOf(Ruby(0, 1, "ユメ"), Ruby(31, 32, "ヒカリ")))
+        val units = layout(long, widthPx = 24f / 0.95f).units
+        assertEquals("ゆめ", units.first().ruby)
+        assertEquals("ひかり", units.last().ruby)
+        assertEquals("夢" + "な".repeat(30) + "光", units.joinToString("") { it.text })
+        // The run fills the rest of 夢's row rather than starting one of its own: two rows, the
+        // first full, with the kana on it continuing straight after 夢.
+        val rows = units.groupBy { it.baseline }.values.toList()
+        assertEquals(2, rows.size)
+        assertEquals(24f, rows[0].sumOf { it.width.toDouble() }.toFloat(), 0.01f)
+        assertEquals(listOf("夢", "な".repeat(23)), rows[0].map { it.text })
+        assertEquals(listOf("な".repeat(7), "光"), rows[1].map { it.text })
+    }
 }

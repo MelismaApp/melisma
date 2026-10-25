@@ -161,12 +161,19 @@ class Romanizer {
             return out.copy(romanized = text)
         }
 
-        val syllables = if (hokkien != null && wantRomaji) {
+        // A line timed as one block has no syllables to put readings on either: one reading over
+        // the whole line is no gloss. Its readings go against the text, like a plain line's.
+        val oneBlock = wantFurigana && hanScript == Script.JAPANESE && line.furigana.isEmpty() &&
+            line.syllables.size == 1 && line.syllables[0].text.trim() == line.text.trim()
+        val furigana = if (oneBlock) rubyFor(line.text).orEmpty() else line.furigana
+
+        val syllables = (if (hokkien != null && wantRomaji) {
             hokkienSyllables(line.syllables, stripDiacritics, hokkien)
         } else {
             annotateSyllables(line.syllables, hanScript, stripDiacritics, wantRomaji, held, liao)
-        } ?: return line
-        if (!wantRomaji) return line.copy(syllables = syllables)
+        })?.let { annotated -> if (furigana.isNotEmpty()) annotated.map { it.copy(kana = null) } else annotated }
+            ?: return if (furigana.isNotEmpty()) line.copy(furigana = furigana) else line
+        if (!wantRomaji) return line.copy(syllables = syllables, furigana = furigana)
 
         val joined = syllables.joinToString("") { syllable ->
             val part = syllable.romanized ?: syllable.text
@@ -182,6 +189,7 @@ class Romanizer {
         return line.copy(
             syllables = syllables,
             romanized = if (replacing) joined else line.romanized ?: joined,
+            furigana = furigana,
         )
     }
 

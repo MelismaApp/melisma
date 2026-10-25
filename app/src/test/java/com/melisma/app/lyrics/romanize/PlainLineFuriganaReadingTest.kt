@@ -4,6 +4,7 @@ import com.melisma.app.lyrics.model.LineRole
 import com.melisma.app.lyrics.model.LyricLine
 import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.lyrics.model.LyricsKind
+import com.melisma.app.lyrics.model.Syllable
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -38,5 +39,35 @@ class PlainLineFuriganaReadingTest {
     fun `a line in another script is left alone`() = runBlocking {
         val line = Romanizer().annotate(document("Hello world"), romanize = false, furigana = true).lines[0]
         assertTrue(line.furigana.isEmpty())
+    }
+
+    @Test
+    fun `a line timed as one block gets readings against its text, not one over the whole line`() = runBlocking {
+        val oneBlock = LyricsDocument(
+            kind = LyricsKind.SYLLABLE,
+            lines = listOf(
+                LyricLine(
+                    role = LineRole.LEAD, startMs = 0, endMs = 3_000, text = "夜に駆ける",
+                    syllables = listOf(Syllable("夜に駆ける", 0, 3_000)),
+                ),
+            ),
+            providerName = "test",
+            providerId = "test",
+        )
+        val line = Romanizer().annotate(oneBlock, romanize = false, furigana = true).lines[0]
+        assertTrue(line.furigana.toString(), line.furigana.size >= 2)
+        assertTrue(line.syllables.all { it.kana == null })
+
+        // A line with real syllables keeps its readings on them.
+        val timed = oneBlock.copy(
+            lines = listOf(
+                oneBlock.lines[0].copy(
+                    syllables = listOf(Syllable("夜に", 0, 1_500), Syllable("駆ける", 1_500, 3_000, partOfWord = true)),
+                ),
+            ),
+        )
+        val worded = Romanizer().annotate(timed, romanize = false, furigana = true).lines[0]
+        assertTrue(worded.furigana.isEmpty())
+        assertEquals("ヨルニ", worded.syllables[0].kana)
     }
 }
