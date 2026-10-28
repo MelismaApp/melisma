@@ -150,6 +150,10 @@ Lyrics belong to their writers and publishers. This app stores nothing but a loc
 on your own device, and queries the same community and public sources the desktop
 extensions do:
 
+- **[lrc.red](https://lrc.red)** — Apple Music's lyrics, romanizations and translations by
+  ISRC, served without a token. Its terms ask for a User-Agent that names the app and for a
+  credit linking back wherever its data is shown; the source line under the lyrics is that
+  credit, and the app sends the one it asks for.
 - **[AMLL TTML Database](https://github.com/amll-dev/amll-ttml-db)** — community-timed,
   public-domain, word-by-word. The first thing tried after your own files, because nothing
   else gives syllable timings without a token.
