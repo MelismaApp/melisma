@@ -16,7 +16,7 @@ import org.junit.Test
 /** A cancelled load has to let go of its request, or the one replacing it waits out the timeout. */
 class HttpExecuteTest {
 
-    private val server = ServerSocket(0, 8, java.net.InetAddress.getLoopbackAddress())
+    private val server = ServerSocket(0, 8, java.net.InetAddress.getByName("127.0.0.1"))
     private val held = ConcurrentLinkedQueue<Socket>()
 
     private fun serve(answer: String?) = thread(isDaemon = true) {

@@ -36,7 +36,7 @@ class CacheServerLanguageTest {
 
     /** Answers each request with the next queued status and extra headers, recording what it was sent. */
     private class Responder {
-        val socket = ServerSocket(0, 8, java.net.InetAddress.getLoopbackAddress())
+        val socket = ServerSocket(0, 8, java.net.InetAddress.getByName("127.0.0.1"))
         val replies = ConcurrentLinkedQueue<Pair<Int, String>>()
         val received = ConcurrentLinkedQueue<Received>()
 
