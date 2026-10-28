@@ -60,10 +60,21 @@ works too, pointed at this repository, for anyone who already updates their side
 
 Android asks you to confirm an update unless the app asking is the one recorded as having installed
 the current copy. The first in-app update therefore asks; from then on Melisma is the installer of
-record and later updates go through without the question, until something else installs the app
-again. *Settings → Developer → What players publish* says who the recorded installer is. If you
-would rather not be asked at all, Obtainium offers to install through Shizuku, which also needs no
-confirmation.
+record and later updates go through without that question, until something else installs the app
+again. *Settings → Developer → What players publish* says who the recorded installer is.
+
+Play Protect is the other interruption, and a separate one: it offers to scan any APK it has not
+seen, which is every new release. Answering it is one tap.
+
+### Updating through Shizuku
+
+With [Shizuku](https://shizuku.rikka.app) running, *Settings → About → Install updates through
+Shizuku* takes both taps away. Shizuku holds an ADB-level identity that you grant it yourself, and
+an install made with that identity is not asked about, the same as installing from a computer. The
+row only appears when Shizuku is on the device, the switch asks Shizuku for permission the first
+time, and an update falls back to Android's installer whenever Shizuku is not running. Nothing else
+about the update changes: it is the same APK from the same Releases page, and Android still refuses
+one signed with a different key.
 
 If you installed the APK so that Google Play is recorded as the installer — the Android Auto case,
 see [ANDROID-AUTO.md](ANDROID-AUTO.md) — install updates the same way rather than from the in-app

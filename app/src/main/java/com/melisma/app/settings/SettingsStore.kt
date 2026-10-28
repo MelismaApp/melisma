@@ -434,6 +434,15 @@ data class Settings(
     val autoUpdateCheck: Boolean = true,
     val lastUpdateCheckAt: Long = 0L,
 
+    /**
+     * Install updates through Shizuku, when it is there and has given permission.
+     *
+     * Off until asked for, and only offered when Shizuku is on the device. Its point is the
+     * tap it removes: Play Protect asks about every APK it has not seen, and an install made
+     * with the identity the user granted Shizuku is not asked about at all.
+     */
+    val shizukuUpdates: Boolean = false,
+
     /** A version the user chose to skip. A later one is still offered. */
     val skippedUpdateVersion: String? = null,
 
@@ -799,6 +808,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         saverSkipPrefetch = prefs.getBoolean(KEY_SAVER_SKIP_PREFETCH, true),
         autoUpdateCheck = prefs.getBoolean(KEY_AUTO_UPDATE, true),
         lastUpdateCheckAt = prefs.getLong(KEY_UPDATE_CHECKED_AT, 0L),
+        shizukuUpdates = prefs.getBoolean(KEY_SHIZUKU_UPDATES, false),
         skippedUpdateVersion = prefs.trimmed(KEY_UPDATE_SKIPPED),
 
         developerMode = prefs.getBoolean(KEY_DEVELOPER_MODE, false),
@@ -1098,6 +1108,8 @@ class SettingsStore(context: Context) : ProviderCredentials {
 
     fun setAutoUpdateCheck(value: Boolean) = edit { putBoolean(KEY_AUTO_UPDATE, value) }
 
+    fun setShizukuUpdates(value: Boolean) = edit { putBoolean(KEY_SHIZUKU_UPDATES, value) }
+
     fun noteUpdateCheck(at: Long) = edit { putLong(KEY_UPDATE_CHECKED_AT, at) }
 
     fun skipUpdateVersion(version: String?) = edit { putString(KEY_UPDATE_SKIPPED, version) }
@@ -1310,6 +1322,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_SAVER_RELEASE_SCREEN = "saver_release_screen"
         const val KEY_SAVER_SKIP_PREFETCH = "saver_skip_prefetch"
         const val KEY_AUTO_UPDATE = "auto_update_check"
+        const val KEY_SHIZUKU_UPDATES = "shizuku_updates"
         const val KEY_UPDATE_CHECKED_AT = "update_checked_at"
         const val KEY_UPDATE_SKIPPED = "update_skipped_version"
         const val KEY_DEVELOPER_MODE = "developer_mode"

@@ -68,6 +68,14 @@ class Updater(
      * state we were left in.
      */
     private val handOver: ((File) -> Boolean)? = null,
+    /**
+     * The privileged install, tried first when the user has switched it on. Returns null when
+     * it worked and a reason when it did not. Null here means the real Shizuku path.
+     *
+     * A seam because Shizuku cannot exist in a unit test: what is worth checking is that it is
+     * only tried when asked for, and that a failure still ends at the normal installer.
+     */
+    private val privilegedInstall: (suspend (File) -> String?)? = null,
 ) {
 
     sealed interface State {
@@ -218,6 +226,16 @@ class Updater(
         }
 
         _state.value = State.ReadyToInstall(release)
+
+        // Shizuku first when it is switched on. On success the app is replaced and this
+        // coroutine ends with it; a failure falls through to the installer everyone else gets,
+        // because an update that cannot be installed quietly should still be installable.
+        if (settingsStore.current.shizukuUpdates) {
+            val refused = (privilegedInstall ?: { shizuku.install(it) })(file)
+            if (refused == null) return
+            Log.w(TAG, "Shizuku did not install the update: $refused")
+        }
+
         if (!(handOver ?: { installSession(it) || openInstaller(it) })(file)) {
             _state.value = State.Failed(
                 "Could not start the install. The update is downloaded — " +
@@ -225,6 +243,18 @@ class Updater(
             )
         }
     }
+
+    /** Shizuku, if the user has it. Built lazily so the library is untouched otherwise. */
+    private val shizuku by lazy { ShizukuInstall(context) }
+
+    /** Whether to offer the Shizuku setting at all. */
+    val shizukuPresent: Boolean get() = runCatching { shizuku.installed }.getOrDefault(false)
+
+    /** Whether Shizuku has given Melisma permission, which the setting's hint reports. */
+    val shizukuGranted: Boolean get() = runCatching { shizuku.granted }.getOrDefault(false)
+
+    /** Ask Shizuku for permission; the answer appears in Shizuku's own dialog. */
+    fun askShizuku() = shizuku.requestPermission()
 
     /** Where a given release's APK lives once it is fully downloaded. */
     private fun apkFor(release: AvailableRelease) =

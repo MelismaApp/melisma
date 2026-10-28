@@ -100,6 +100,8 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+        // The one interface the privileged installer is reached through.
+        aidl = true
     }
 
     testOptions {
@@ -139,6 +141,12 @@ dependencies {
     // Android Auto. `app` alone is what a templated app needs; the projected and automotive
     // artifacts are for functionality this does not use.
     implementation(libs.androidx.car.app)
+
+    // Optional: installs an update through Shizuku when the user has granted it. `provider`
+    // is what hands the app Shizuku's binder; neither pulls anything in at run time when
+    // Shizuku is absent.
+    implementation(libs.shizuku.api)
+    implementation(libs.shizuku.provider)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)

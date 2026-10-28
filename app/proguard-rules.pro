@@ -28,3 +28,12 @@
 -keepclassmembers class com.melisma.app.lyrics.provider.SpotifyBrowserToken$TokenBridge {
     @android.webkit.JavascriptInterface <methods>;
 }
+
+# The installer Shizuku starts, and the interface it is reached through.
+#
+# Nothing in this app ever constructs PrivilegedInstallerService: Shizuku does, by name and
+# reflectively, in a process of its own. R8 sees a class with no instantiation and marks it
+# abstract, which fails at exactly that point with "cannot be instantiated".
+-keep class com.melisma.app.update.PrivilegedInstallerService { *; }
+-keep class com.melisma.app.update.IPrivilegedInstaller { *; }
+-keep class com.melisma.app.update.IPrivilegedInstaller$* { *; }

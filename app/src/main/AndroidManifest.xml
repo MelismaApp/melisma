@@ -46,6 +46,8 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.APP_MUSIC" />
         </intent>
+        <!-- Named so the Shizuku setting can say "Shizuku is not installed" rather than nothing. -->
+        <package android:name="moe.shizuku.privileged.api" />
     </queries>
 
     <application
@@ -162,6 +164,20 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/update_paths" />
         </provider>
+
+        <!--
+          How Shizuku hands the app its binder, when the user has Shizuku and has switched the
+          setting on. Exported because Shizuku is a different app and has to reach it;
+          INTERACT_ACROSS_USERS_FULL is the permission Shizuku's own documentation specifies for
+          it, which no ordinary app holds, so nothing else can.
+        -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
     </application>
 </manifest>

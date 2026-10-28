@@ -1503,6 +1503,33 @@ fun SettingsSheet(
                     )
                 }
 
+                // Only for people who already run Shizuku; to everyone else this would be a
+                // row about an app they do not have.
+                if (updater.shizukuPresent) {
+                    ToggleRow(
+                        title = "Install updates through Shizuku",
+                        subtitle = if (updater.shizukuGranted) {
+                            "Permission granted"
+                        } else {
+                            "Needs permission from Shizuku"
+                        },
+                        checked = settings.shizukuUpdates,
+                        accent = accent,
+                        onCheckedChange = { wanted ->
+                            store.setShizukuUpdates(wanted)
+                            if (wanted && !updater.shizukuGranted) updater.askShizuku()
+                        },
+                    )
+                    Help(
+                        "An update still needs a tap without this: Play Protect asks about " +
+                            "every APK it has not seen before. Shizuku holds an identity you " +
+                            "granted it yourself, and an install made with that identity is " +
+                            "not asked about — the same as installing from a computer. Shizuku " +
+                            "has to be running; if it is not, the update goes through Android's " +
+                            "installer as usual.",
+                    )
+                }
+
                 (updateState as? Updater.State.Available)?.let { available ->
                     ActionRow(
                         title = "Skip ${available.release.versionName}",
