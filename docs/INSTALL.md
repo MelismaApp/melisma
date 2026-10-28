@@ -58,6 +58,13 @@ The app checks GitHub for new releases itself and offers to install them (*Setti
 Only an update signed with the release key installs. [Obtainium](https://obtainium.imranr.dev)
 works too, pointed at this repository, for anyone who already updates their sideloaded apps that way.
 
+Android asks you to confirm an update unless the app asking is the one recorded as having installed
+the current copy. The first in-app update therefore asks; from then on Melisma is the installer of
+record and later updates go through without the question, until something else installs the app
+again. *Settings → Developer → What players publish* says who the recorded installer is. If you
+would rather not be asked at all, Obtainium offers to install through Shizuku, which also needs no
+confirmation.
+
 If you installed the APK so that Google Play is recorded as the installer — the Android Auto case,
 see [ANDROID-AUTO.md](ANDROID-AUTO.md) — install updates the same way rather than from the in-app
 prompt, which would record Melisma as the installer again.
