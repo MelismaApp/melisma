@@ -128,3 +128,7 @@ media id, which gives an exact match; most players publish only a title and an a
 publish a second session of their own beside the real player's. The report shows which it is, and
 **Copy the report** puts it on the clipboard for a bug report. Nothing is sent anywhere; read it
 before posting it, since a player can put anything in its session.
+
+The header also says who installed Melisma. Android skips the confirmation on an update only when
+the app asking is the installer of record, so this is why an in-app update did or did not ask; see
+[INSTALL.md](INSTALL.md#updates).

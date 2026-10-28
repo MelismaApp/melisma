@@ -419,6 +419,9 @@ class MediaSessionRepository(
             "Melisma" to com.melisma.app.BuildConfig.VERSION_NAME,
             "Android" to "${android.os.Build.VERSION.RELEASE} (SDK ${android.os.Build.VERSION.SDK_INT})",
             "Device" to "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
+            // Who installed this copy: Android skips the confirmation on an update only when the
+            // updater is the installer of record, so this says why an update asked.
+            "Installed by" to installerOfRecord(),
         )
         val controllers = try {
             sessionManager?.getActiveSessions(listenerComponent).orEmpty()
@@ -445,6 +448,16 @@ class MediaSessionRepository(
         }
         formatSessionReports(header, reports)
     }
+
+    private fun installerOfRecord(): String = runCatching {
+        val pm = context.packageManager
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            pm.getInstallSourceInfo(context.packageName).installingPackageName
+        } else {
+            @Suppress("DEPRECATION")
+            pm.getInstallerPackageName(context.packageName)
+        }
+    }.getOrNull() ?: "unknown"
 
     // ---- transport controls -------------------------------------------------
 
