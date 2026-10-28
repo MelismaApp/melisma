@@ -130,6 +130,21 @@ class ShizukuInstallTest {
         assertEquals("nothing to install", PrivilegedInstallerService().install(null, 0L, null))
     }
 
+    @Test
+    fun `a bind is answered once, by whoever gets there first`() {
+        val answers = ArrayList<String>()
+        val connection = ShizukuInstall.Connection()
+        connection.onBound = { answers += if (it == null) "nothing" else "binder" }
+
+        // The bind failed and Shizuku called back anyway, which is the order that used to
+        // resume the same continuation twice.
+        connection.give(null)
+        connection.onServiceDisconnected(null)
+        connection.give(null)
+
+        assertEquals(listOf("nothing"), answers)
+    }
+
     /**
      * `pm install` would take whatever package the file declares, so the check that it is this
      * app happens first — before Shizuku, and before the permission that would allow it.

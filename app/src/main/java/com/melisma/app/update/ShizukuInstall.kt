@@ -119,14 +119,22 @@ class ShizukuInstall(private val context: Context) {
       * Resuming a continuation twice is a crash, so the first answer takes it and the rest are
       * dropped.
       */
-    private class Connection : ServiceConnection {
+    internal class Connection : ServiceConnection {
         private val answered = AtomicBoolean(false)
+
+        @Volatile
         var onBound: ((IBinder?) -> Unit)? = null
 
+        /**
+         * Winning the claim comes first. Reading the callback before claiming would let two
+         * threads take one answer each — one the callback, the other the claim — and the bind
+         * would then wait out its timeout with the answer already in hand.
+         */
         fun give(binder: IBinder?) {
+            if (!answered.compareAndSet(false, true)) return
             val waiting = onBound
             onBound = null
-            if (answered.compareAndSet(false, true)) waiting?.invoke(binder)
+            waiting?.invoke(binder)
         }
 
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) =
