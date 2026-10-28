@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import rikka.shizuku.Shizuku
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 
 /**
@@ -61,6 +62,16 @@ class ShizukuInstall(private val context: Context) {
      * On success the app is replaced and this process ends, so nothing here runs afterwards.
      */
     suspend fun install(apk: File): String? = withContext(Dispatchers.IO) {
+        // `pm install` takes whatever package the file declares, where the PackageInstaller
+        // session is told ours and refuses anything else. So the same limit is imposed here,
+        // before Shizuku is involved at all: this installs Melisma or nothing. Android's
+        // signature check then applies as it does to any replacement of an installed app.
+        val declared = runCatching {
+            context.packageManager.getPackageArchiveInfo(apk.path, 0)?.packageName
+        }.getOrNull()
+        if (declared != context.packageName) {
+            return@withContext "the download is not Melisma — it declares ${declared ?: "nothing"}"
+        }
         if (!granted) return@withContext "Shizuku has not given Melisma permission"
         val connection = Connection()
         try {
@@ -81,8 +92,11 @@ class ShizukuInstall(private val context: Context) {
     private suspend fun bind(connection: Connection): IBinder? =
         suspendCancellableCoroutine { waiting ->
             connection.onBound = { binder -> waiting.resume(binder) }
+            waiting.invokeOnCancellation { connection.give(null) }
             runCatching { Shizuku.bindUserService(serviceArgs(), connection) }
-                .onFailure { waiting.resume(null) }
+                // Shizuku registered the connection before this failed, and keeps it; the answer
+                // below is the only one it will ever give, and a late callback finds it spent.
+                .onFailure { connection.give(null) }
         }
 
     /**
@@ -97,18 +111,28 @@ class ShizukuInstall(private val context: Context) {
         .debuggable(BuildConfig.DEBUG)
         .version(BuildConfig.VERSION_CODE)
 
+    /**
+      * Answers the bind exactly once.
+      *
+      * Shizuku holds on to a connection it has registered, including one whose bind call then
+      * failed, so the same object can be called back after the attempt it belonged to is over.
+      * Resuming a continuation twice is a crash, so the first answer takes it and the rest are
+      * dropped.
+      */
     private class Connection : ServiceConnection {
+        private val answered = AtomicBoolean(false)
         var onBound: ((IBinder?) -> Unit)? = null
 
-        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-            onBound?.invoke(binder.takeIf { it?.pingBinder() == true })
+        fun give(binder: IBinder?) {
+            val waiting = onBound
             onBound = null
+            if (answered.compareAndSet(false, true)) waiting?.invoke(binder)
         }
 
-        override fun onServiceDisconnected(name: ComponentName?) {
-            onBound?.invoke(null)
-            onBound = null
-        }
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) =
+            give(binder.takeIf { it?.pingBinder() == true })
+
+        override fun onServiceDisconnected(name: ComponentName?) = give(null)
     }
 
     private companion object {

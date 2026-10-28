@@ -129,4 +129,17 @@ class ShizukuInstallTest {
     fun `nothing to install is refused rather than handed to pm`() {
         assertEquals("nothing to install", PrivilegedInstallerService().install(null, 0L, null))
     }
+
+    /**
+     * `pm install` would take whatever package the file declares, so the check that it is this
+     * app happens first — before Shizuku, and before the permission that would allow it.
+     */
+    @Test
+    fun `a download that is not this app is refused before Shizuku is involved`() = runBlocking {
+        val notAnApk = File(context.cacheDir, "someone-elses.apk").apply { writeText("not an apk") }
+
+        val refusal = ShizukuInstall(context).install(notAnApk)
+
+        assertTrue(refusal, refusal!!.startsWith("the download is not Melisma"))
+    }
 }
