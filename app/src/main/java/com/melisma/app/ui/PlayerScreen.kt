@@ -1137,6 +1137,39 @@ private fun PermissionGate(accent: Color, onGrant: () -> Unit) {
                 fontSize = 15.sp,
             )
         }
+
+        // Android 13 greys the switch out for an app installed from a browser until the user
+        // allows it once from the app's own settings page, and says only "Restricted setting".
+        // The step is not findable from the message, so it is spelled out here, with the way there.
+        Spacer(Modifier.height(28.dp))
+        Text(
+            text = "Switch greyed out, or “Restricted setting”? Tap it once anyway, then in " +
+                "Melisma's app settings open the ⋮ menu → Allow restricted settings, and try again.",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(10.dp))
+        val context = LocalContext.current
+        Text(
+            text = "Open Melisma's app settings",
+            color = accent,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .clickable {
+                    runCatching {
+                        context.startActivity(
+                            android.content.Intent(
+                                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                android.net.Uri.parse("package:${context.packageName}"),
+                            ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                        )
+                    }
+                }
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+        )
     }
 }
 

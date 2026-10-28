@@ -106,13 +106,17 @@ A port of Spicy Lyrics' visual language, down to the curve constants:
 ## Install
 
 1. **Download the APK** from the [latest release](https://github.com/MelismaApp/melisma/releases/latest)
-   and install it. Android will warn you about installing outside the Play Store; that is expected for
-   any APK.
+   and install it. Android will warn you about installing outside the Play Store, and Play Protect may
+   warn because the app asks for notification access; both are expected for any APK — choose
+   *Install anyway*.
 2. **Open it and tap "Open notification access"**, then enable Melisma in the list that appears
-   and come back. It picks the permission up on its own.
+   and come back. It picks the permission up on its own. If the switch is greyed out ("Restricted
+   setting"), Android 13+ wants one more tap: *Settings → Apps → Melisma → ⋮ → Allow restricted
+   settings*.
 3. **Play something.** Lyrics appear.
 
-That is the whole setup. Android 10 or newer.
+That is the whole setup. Android 10 or newer. [docs/INSTALL.md](docs/INSTALL.md) has every step with
+what each warning means and what to do when lyrics do not appear.
 
 ## Using it
 
@@ -204,6 +208,13 @@ Yes — anything that publishes a media session, which is everything that plays 
 can also switch a player off under *Settings → Players to follow*, which is how you stop a podcast or
 a video being looked up as a song.
 
+**The notification access switch is greyed out, or says "Restricted setting".**
+
+Android 13 and newer block that permission for apps installed from a browser until you allow it once:
+tap the switch anyway so Android shows the message, then *Settings → Apps → Melisma → ⋮ → Allow
+restricted settings*, and try again. The in-app gate has a button that opens that screen.
+[docs/INSTALL.md](docs/INSTALL.md).
+
 **Why does it want notification access? That sounds like a lot.**
 
 Because it is the only way Android will let an app read another app's playback position. The service
@@ -270,6 +281,7 @@ More in **[docs/DEVELOPING.md](docs/DEVELOPING.md)**.
 
 | | |
 |---|---|
+| **[INSTALL.md](docs/INSTALL.md)** | Installing: unknown sources, Play Protect, the greyed-out notification access switch |
 | **[TOKENS.md](docs/TOKENS.md)** | Every optional token, step by step |
 | **[DEVELOPER-OPTIONS.md](docs/DEVELOPER-OPTIONS.md)** | The developer menu, and what each switch does |
 | **[CACHE-SERVER.md](docs/CACHE-SERVER.md)** | The request/response contract for a lyrics server of your own |

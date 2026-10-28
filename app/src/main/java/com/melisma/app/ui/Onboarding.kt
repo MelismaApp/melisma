@@ -155,6 +155,13 @@ fun WelcomeSheet(
 
             if (!permissionGranted) {
                 PrimaryButton("Open notification access", accent, onGrantPermission)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Greyed out? Android 13 wants one more tap for an app installed from a browser: " +
+                        "Settings → Apps → Melisma → ⋮ → Allow restricted settings.",
+                    color = Color.White.copy(alpha = 0.45f),
+                    fontSize = 12.sp,
+                )
                 Spacer(Modifier.height(10.dp))
             }
             SecondaryButton("Add tokens in settings", accent, onOpenSettings)
