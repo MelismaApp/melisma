@@ -106,6 +106,7 @@ class ProviderConfigurationTest {
             NeteaseProvider(credentials).id,
             MusixmatchProvider(credentials).id,
             LrcLibProvider(credentials).id,
+            LrcRedProvider().id,
             "local",
         )
         // Guards against adding a provider to the settings order and forgetting to build

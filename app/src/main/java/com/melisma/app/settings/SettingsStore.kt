@@ -501,7 +501,9 @@ data class Settings(
             // certainty. Apple and Spotify identify the recording — Spotify by the id the
             // media session handed us, which cannot be the wrong song — so they come before
             // the databases that have to guess from a title.
-            "local", "cacheserver", "applemusic", "spotify", "amll", "netease", "musixmatch",
+            // lrc.red serves Apple's own data by ISRC, so it sits with Apple: exact when the
+            // recording is known, a guess from a title when it is not.
+            "local", "cacheserver", "applemusic", "lrcred", "spotify", "amll", "netease", "musixmatch",
             "lrclib",
         )
 
@@ -519,7 +521,13 @@ data class Settings(
          * is a paid membership away.
          */
         val DEFAULT_ENABLED_PROVIDERS =
-            setOf("local", "cacheserver", "spotify", "amll", "netease", "musixmatch", "lrclib")
+            setOf("local", "cacheserver", "spotify", "lrcred", "amll", "netease", "musixmatch", "lrclib")
+
+        /**
+         * Default-on sources added after installs started keeping their own list. An install
+         * from before one of these existed has it switched on once; see [offerNewDefaults].
+         */
+        val DEFAULTS_ADDED_LATER = setOf("lrcred")
 
         const val DEFAULT_LRCLIB_URL = "https://lrclib.net"
         const val DEFAULT_NETEASE_URL = "https://music.163.com"
@@ -556,6 +564,27 @@ class SettingsStore(context: Context) : ProviderCredentials {
     init {
         adoptPreRenameFiles(context)
         migrateSecrets()
+        offerNewDefaults()
+    }
+
+    /**
+     * Switch on a default-on source that this install never had the chance to leave on.
+     *
+     * The enabled set is stored whole once the user touches it, so a source added to the defaults
+     * later would stay off for everyone who installed before it — a free source nobody knew to look
+     * for. Each default is offered once: the ones offered are remembered, and a source the user then
+     * switches off stays off.
+     */
+    private fun offerNewDefaults() {
+        val offered = prefs.getStringSet(KEY_PROVIDERS_OFFERED, null)
+            ?: (Settings.DEFAULT_ENABLED_PROVIDERS - Settings.DEFAULTS_ADDED_LATER)
+        val fresh = Settings.DEFAULT_ENABLED_PROVIDERS - offered
+        if (fresh.isEmpty() && offered == Settings.DEFAULT_ENABLED_PROVIDERS) return
+        val editor = prefs.edit().putStringSet(KEY_PROVIDERS_OFFERED, Settings.DEFAULT_ENABLED_PROVIDERS)
+        prefs.getStringSet(KEY_PROVIDERS_ON, null)?.let { stored ->
+            if (fresh.isNotEmpty()) editor.putStringSet(KEY_PROVIDERS_ON, stored + fresh)
+        }
+        editor.apply()
     }
 
     /**
@@ -1234,6 +1263,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_PREFETCH_NEXT = "prefetch_next"
         const val KEY_IDENTIFY_TRACKS = "identify_tracks"
         const val KEY_PROVIDERS_ON = "providers_enabled"
+        const val KEY_PROVIDERS_OFFERED = "providers_offered"
         const val KEY_PROVIDER_ORDER = "provider_order"
         const val KEY_PLAYERS_IGNORED = "players_ignored"
         const val KEY_PLAYERS_SEEN = "players_seen"

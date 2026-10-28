@@ -11,6 +11,7 @@ import com.melisma.app.lyrics.provider.AppleMusicProvider
 import com.melisma.app.lyrics.provider.CacheServerProvider
 import com.melisma.app.lyrics.provider.LocalLyricsStore
 import com.melisma.app.lyrics.provider.LrcLibProvider
+import com.melisma.app.lyrics.provider.LrcRedProvider
 import com.melisma.app.lyrics.provider.LyricsProvider
 import com.melisma.app.lyrics.provider.MusixmatchProvider
 import com.melisma.app.lyrics.provider.NeteaseProvider
@@ -116,6 +117,7 @@ class AppContainer(context: Context) {
         localLyrics,
         CacheServerProvider(settings, spokenLanguages),
         AppleMusicProvider(settings),
+        LrcRedProvider(),
         AmllTtmlProvider(settings),
         SpotifyLyricsProvider(settings),
         NeteaseProvider(settings),

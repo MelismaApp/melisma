@@ -148,6 +148,7 @@ really is word-timed wins even if you put it last.
 | Source | Timing | Needs |
 |---|---|---|
 | **Your own files** | up to word | `.lrc` / `.ttml` you import. Always wins. |
+| **lrc.red** | **word** | **Nothing.** Apple Music's lyrics, romanizations and translations by ISRC — exact for any song the app has identified. |
 | **AMLL TTML Database** | **word** | **Nothing.** Community-timed, hand-made, public domain. |
 | **NetEase Cloud Music** | **word** | **Nothing.** Best for Japanese, Korean and Chinese — ships hand-checked romanization and translation. |
 | **Musixmatch** | **word** | **Nothing.** Most Western music. |
@@ -156,7 +157,7 @@ really is word-timed wins even if you put it last.
 | **Apple Music** | **word** | Two tokens. The best data there is: official romanizations and translations. |
 | **Your own cache server** | any | Optional, for putting one server in front of the free ones — [CACHE-SERVER.md](docs/CACHE-SERVER.md). |
 
-**Four sources need no account at all** — the four in the middle — and they are the ones switched on
+**Five sources need no account at all** — the five in the middle — and they are the ones switched on
 when you install it. The rest are there for the tracks the free ones miss.
 
 ## Optional tokens
@@ -293,7 +294,8 @@ Android — its look, its animation curves, its lyric model and its TTML dialect
 of [Fraktality's `spr`](https://github.com/Fraktality/spr) (MIT) and the curves of `cubic-spline`
 (MIT). The word-by-word lyrics that arrive with no account come from the
 [**AMLL TTML Database**](https://github.com/amll-dev/amll-ttml-db), hand-timed by its contributors
-and dedicated to the public domain. [**Beautiful Lyrics**](https://github.com/surfbryce/beautiful-lyrics)
+and dedicated to the public domain, and from [**lrc.red**](https://lrc.red), which serves Apple
+Music's lyrics by ISRC and asks only to be credited where they are shown. [**Beautiful Lyrics**](https://github.com/surfbryce/beautiful-lyrics)
 by surfbryce is prior art and a reference point; no code from it is used.
 
 Lyrics belong to their writers and publishers. None of the sources here are affiliated with this app.

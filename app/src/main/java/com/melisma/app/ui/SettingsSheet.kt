@@ -156,6 +156,11 @@ private val PROVIDER_INFO = mapOf(
         "Word-by-word, with official romanizations and translations. The best data there is.",
         needs = "Needs a developer token and a music user token below",
     ),
+    "lrcred" to ProviderInfo(
+        "lrc.red",
+        "Apple Music's word-by-word lyrics, romanizations and translations by ISRC, with no " +
+            "account. Exact for any song the app has identified; a title search otherwise.",
+    ),
     "amll" to ProviderInfo(
         "AMLL TTML Database",
         "Community-timed, word-by-word, public domain. Hand-made syllable timings with " +
@@ -1969,6 +1974,14 @@ private fun CreditsPanel(accent: Color, onBack: () -> Unit) {
             "lyric model and its TTML dialect. Spicy Lyrics is licensed AGPL-3.0, so " +
             "Melisma is too.",
         link = "github.com/Spikerko/spicy-lyrics",
+        accent = accent,
+    )
+    Credit(
+        title = "lrc.red",
+        body = "Apple Music's lyrics by ISRC, free and without a token. Its terms ask that its " +
+            "data be credited and linked wherever it is shown; the source line under the lyrics " +
+            "is that credit.",
+        link = "lrc.red",
         accent = accent,
     )
     Credit(
