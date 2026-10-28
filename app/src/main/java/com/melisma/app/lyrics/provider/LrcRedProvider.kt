@@ -26,6 +26,8 @@ class LrcRedProvider(private val base: String = BASE) : LyricsProvider {
     override val id = "lrcred"
     override val displayName = "lrc.red"
     override val canBeWordSynced = true
+    override val link = BASE
+    override val creditRequired = true
 
     @Serializable
     private data class Search(val hits: List<Hit> = emptyList())

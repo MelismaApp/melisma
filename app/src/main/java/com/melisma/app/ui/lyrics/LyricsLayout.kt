@@ -229,6 +229,13 @@ class LyricsLayout(
     }
 
     fun lineAt(y: Float): LineLayout? = lines.firstOrNull { y >= it.top && y < it.bottom }
+
+    /** Whether [y], in content coordinates, falls on the songwriters-and-source footer. */
+    fun footerAt(y: Float): Boolean {
+        val first = footer.firstOrNull() ?: return false
+        val last = footer.last()
+        return y >= first.baseline - first.sizePx * 1.2f && y <= last.baseline + last.sizePx * 0.5f
+    }
 }
 
 /**

@@ -47,4 +47,24 @@ class NewDefaultSourceTest {
         assertTrue("lrcred" in enabled)
         assertTrue(prefs.getStringSet(SettingsStore.KEY_PROVIDERS_OFFERED, null) == Settings.DEFAULT_ENABLED_PROVIDERS)
     }
+
+    @Test
+    fun `a backup from before the source existed gets it on restore, a newer one keeps its choice`() {
+        val store = SettingsStore(context)
+
+        // Older backup: its own list, nothing about what it had been offered.
+        store.restore(mapOf(SettingsStore.KEY_PROVIDERS_ON to setOf("local", "amll", "lrclib")), emptyMap())
+        assertTrue(store.current.enabledProviders.toString(), "lrcred" in store.current.enabledProviders)
+        assertTrue("amll" in store.current.enabledProviders)
+
+        // Newer backup: lrc.red was offered and switched off on purpose.
+        store.restore(
+            mapOf(
+                SettingsStore.KEY_PROVIDERS_ON to setOf("local", "amll"),
+                SettingsStore.KEY_PROVIDERS_OFFERED to Settings.DEFAULT_ENABLED_PROVIDERS,
+            ),
+            emptyMap(),
+        )
+        assertFalse("lrcred" in store.current.enabledProviders)
+    }
 }

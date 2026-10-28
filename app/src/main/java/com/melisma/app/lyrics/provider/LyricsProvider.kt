@@ -108,6 +108,15 @@ interface LyricsProvider {
     /** Shown in the credits line under the lyrics. */
     val displayName: String
 
+    /** Where the credits line leads when tapped, for a source that asks to be linked. */
+    val link: String? get() = null
+
+    /**
+     * True for a source whose terms require the credit wherever its lyrics are shown, so the
+     * footer stays even when the user has switched credits off.
+     */
+    val creditRequired: Boolean get() = false
+
     /** True when the provider can return per-word timings. */
     val canBeWordSynced: Boolean get() = false
 

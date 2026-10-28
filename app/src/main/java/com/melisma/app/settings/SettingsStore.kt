@@ -639,7 +639,15 @@ class SettingsStore(context: Context) : ProviderCredentials {
      * written anyway and simply never read — harmless, and cheaper than a list to keep in step.
      */
     fun restore(settings: Map<String, Any?>, credentials: Map<String, Any?>) {
-        if (settings.isNotEmpty()) apply(prefs, settings)
+        if (settings.isNotEmpty()) {
+            apply(prefs, settings)
+            // A backup with its own list of sources but no record of what it was offered predates
+            // the offering, so this install's record must not stand in for it.
+            if (KEY_PROVIDERS_ON in settings && KEY_PROVIDERS_OFFERED !in settings) {
+                prefs.edit().remove(KEY_PROVIDERS_OFFERED).commit()
+            }
+            offerNewDefaults()
+        }
         if (credentials.isNotEmpty()) apply(secrets, credentials)
         _settings.value = read()
     }

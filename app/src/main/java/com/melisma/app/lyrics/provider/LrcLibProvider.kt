@@ -17,6 +17,7 @@ class LrcLibProvider(private val credentials: ProviderCredentials) : LyricsProvi
 
     override val id = "lrclib"
     override val displayName = "LRCLIB"
+    override val link = "https://lrclib.net"
 
     @Serializable
     private data class Entry(

@@ -20,7 +20,7 @@ class LrcRedProviderTest {
 
     /** Answers by path, recording each request line. */
     private class Server {
-        val socket = ServerSocket(0)
+        val socket = ServerSocket(0, 8, java.net.InetAddress.getLoopbackAddress())
         val routes = HashMap<String, Pair<Int, String>>()
         val requests = ConcurrentLinkedQueue<String>()
 

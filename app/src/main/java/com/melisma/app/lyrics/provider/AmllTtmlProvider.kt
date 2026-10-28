@@ -35,6 +35,7 @@ class AmllTtmlProvider(private val credentials: ProviderCredentials) : LyricsPro
 
     override val id = "amll"
     override val displayName = "AMLL TTML DB"
+    override val link = "https://github.com/amll-dev/amll-ttml-db"
     override val canBeWordSynced = true
 
     override suspend fun fetch(request: LyricsRequest): LyricsDocument? =

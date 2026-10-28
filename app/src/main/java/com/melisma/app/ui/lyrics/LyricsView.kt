@@ -94,6 +94,10 @@ fun LyricsView(
     onLongPressLine: (LyricLine) -> Unit = {},
     /** Bump to pull the scroll back to the line that is playing. */
     jumpToActiveSignal: Int = 0,
+    /** The source's terms want its credit shown whatever the settings say. */
+    creditRequired: Boolean = false,
+    /** Called when the songwriters-and-source footer is tapped; null when there is nowhere to go. */
+    onSourceTap: (() -> Unit)? = null,
     /** Every line lit and the scroll left to the reader. See [LyricsRenderer.freeRead]. */
     freeRead: Boolean = false,
 ) {
@@ -133,7 +137,8 @@ fun LyricsView(
         // Either source ends up in the same place: a smaller row under the line. The
         // difference between them is who wrote the text, which is settled by now.
         val showTranslation = settings.translationSource != TranslationSource.OFF && !tight
-        val showCredits = settings.showCredits && !tight
+        // A source whose terms require the credit keeps it, in the floating window included.
+        val showCredits = (settings.showCredits && !tight) || creditRequired
 
         val metrics = remember(fontSizePx, settings.simpleMode, showTranslation, settings.font, tight) {
             LyricsMetrics(
@@ -326,6 +331,11 @@ fun LyricsView(
                                     // song still is, because the player has not been told
                                     // yet.
                                     renderer.followAfterSeek()
+                                } else if (line == null && onSourceTap != null &&
+                                    renderer.footerAtViewY(down.position.y)
+                                ) {
+                                    // The credit under the last line leads to the source.
+                                    onSourceTap()
                                 } else {
                                     // A tap that seeks nothing is a request to re-centre.
                                     renderer.jumpToActive()

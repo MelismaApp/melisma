@@ -209,6 +209,8 @@ class LyricsRenderer(
     /** Returns the line under [yInView], for tap-to-seek, copy and the hover highlight. */
     fun lineAtViewY(yInView: Float): LineLayout? = layout.lineAt(yInView + scrollY)
 
+    fun footerAtViewY(yInView: Float): Boolean = layout.footerAt(yInView + scrollY)
+
     /** Back to the playing line: a jump while following, a glide while reading freely. */
     fun jumpToActive() {
         userScrolling = false

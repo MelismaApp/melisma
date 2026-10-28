@@ -22,7 +22,7 @@ class CacheServerExtrasCacheTest {
 
     /** Answers each request with the next queued status and body, closing every connection. */
     private class Responder {
-        val socket = ServerSocket(0)
+        val socket = ServerSocket(0, 8, java.net.InetAddress.getLoopbackAddress())
         val replies = ConcurrentLinkedQueue<Pair<Int, String>>()
         val requests = AtomicInteger()
 

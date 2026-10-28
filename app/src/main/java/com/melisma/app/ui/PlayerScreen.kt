@@ -328,6 +328,7 @@ fun PlayerScreen(
             PopupContent(
                 document = document,
                 settings = settings,
+                creditRequired = document != null && container.lyrics.creditRequired(document.providerId),
                 snapshot = snapshot,
                 artwork = artwork,
                 positionProvider = rememberPositionProvider(snapshot, settings),
@@ -615,6 +616,7 @@ private fun MainContent(
 
         document != null -> {
             val positionProvider = rememberPositionProvider(snapshot, settings)
+            val sourceTap = sourceTap(LocalContext.current, container.lyrics.sourceLink(document.providerId))
             val lyrics: @Composable (Modifier) -> Unit = { mod ->
                 Column(mod) {
                     LyricsView(
@@ -628,6 +630,8 @@ private fun MainContent(
                         onLongPressLine = onLongPressLine,
                         jumpToActiveSignal = jumpSignal,
                         freeRead = settings.freeRead,
+                        creditRequired = container.lyrics.creditRequired(document.providerId),
+                        onSourceTap = sourceTap,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
                     UnsyncedNotice(visible = document.kind == LyricsKind.STATIC)
@@ -688,6 +692,19 @@ private fun MainContent(
     }
 }
 
+/** Opens [link] in the browser when the credit under the lyrics is tapped; nothing when there is none. */
+private fun sourceTap(context: android.content.Context, link: String?): (() -> Unit)? {
+    if (link == null) return null
+    return {
+        runCatching {
+            context.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link))
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+    }
+}
+
 /**
  * Cinema view: the album art beside the words in landscape, above them in portrait.
  *
@@ -737,6 +754,7 @@ private fun CinemaLayout(
 private fun PopupContent(
     document: LyricsDocument?,
     settings: Settings,
+    creditRequired: Boolean,
     snapshot: com.melisma.app.media.PlayerSnapshot,
     artwork: android.graphics.Bitmap?,
     positionProvider: () -> Long,
@@ -764,6 +782,7 @@ private fun PopupContent(
                     positionMsProvider = positionProvider,
                     onSeek = {},
                     compact = true,
+                    creditRequired = creditRequired,
                     modifier = mod,
                 )
             } else {

@@ -649,6 +649,13 @@ class LyricsRepository(
         }
     }
 
+    /** Where [providerId]'s credit leads, for a source that asks to be linked. */
+    fun sourceLink(providerId: String): String? = providers.firstOrNull { it.id == providerId }?.link
+
+    /** Whether [providerId]'s terms want its credit shown whatever the settings say. */
+    fun creditRequired(providerId: String): Boolean =
+        providers.firstOrNull { it.id == providerId }?.creditRequired == true
+
     /** A source the listener may choose for the playing track, and what it is known to have. */
     data class SourceOption(val id: String, val name: String, val outcome: LyricsCache.Outcome?)
 
