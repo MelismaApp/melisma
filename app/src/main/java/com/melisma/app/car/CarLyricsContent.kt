@@ -179,6 +179,8 @@ private fun CarLyrics(
         // The host swallows touches on this surface, so nothing can be tapped to seek. Handing it a
         // real seek anyway would be a control that silently does nothing.
         onSeek = {},
+        // A credit the words' terms insist on is owed on the car screen as much as on the phone.
+        creditRequired = container.lyrics.creditRequired(document),
         modifier = modifier,
     )
 }
