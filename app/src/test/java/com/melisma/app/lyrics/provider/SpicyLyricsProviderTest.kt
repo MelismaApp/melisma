@@ -153,13 +153,39 @@ class SpicyLyricsProviderTest {
     }
 
     @Test
-    fun `a commercial source credits the provider only, and an unnamed one says so`() = runBlocking {
+    fun `a commercial source is named as itself, credits nobody, and an unnamed one says so`() = runBlocking {
         val apple = community.replace("\"source\":\"spicy_lyrics\"", "\"source\":\"apple_music\"")
         server.routes["/v1/lyrics/"] = 200 to apple
-        assertEquals(emptyList<Any>(), provider.fetch(request.copy(spotifyTrackId = "x"))!!.credits)
+        val fromApple = provider.fetch(request.copy(spotifyTrackId = "x"))!!
+        assertEquals("Apple Music via Spicy Lyrics", fromApple.providerName)
+        assertEquals("spicylyrics", fromApple.providerId)
+        assertEquals(emptyList<Any>(), fromApple.credits)
 
         server.routes["/v1/lyrics/"] = 200 to community.replace("\"source\":\"spicy_lyrics\",", "")
-        assertEquals(listOf("Source not identified"), provider.fetch(request.copy(spotifyTrackId = "x"))!!.credits.map { it.text })
+        val unnamed = provider.fetch(request.copy(spotifyTrackId = "x"))!!
+        assertEquals("Spicy Lyrics (source not identified)", unnamed.providerName)
+        assertEquals(emptyList<Any>(), unnamed.credits)
+    }
+
+    @Test
+    fun `a backing group keeps its translation and readings, and a half-romanized line reads whole`() = runBlocking {
+        server.routes["/v1/lyrics/"] = 200 to """{"Status":200,"Body":{"Type":"Syllable","source":"spicy_lyrics","id":"x","ids":{"spotify":"x"},
+            "Content":[{"Type":"Vocal","Lead":{"StartTime":1.0,"EndTime":2.0,"TranslatedText":"You, baby",
+                "Syllables":[{"Text":"君","StartTime":1.0,"EndTime":1.5,"IsPartOfWord":false,"TransliteratedText":"kimi"},
+                             {"Text":"baby","StartTime":1.5,"EndTime":2.0,"IsPartOfWord":false}]},
+              "Background":[{"StartTime":1.2,"EndTime":1.9,"TranslatedText":"(ooh)","Syllables":[
+                 {"Text":"うー","StartTime":1.2,"EndTime":1.9,"IsPartOfWord":false,"TransliteratedText":"uu"}]}]}]}}"""
+        val document = provider.fetch(request.copy(spotifyTrackId = "x"))!!
+
+        val lead = document.lines.first { it.role == LineRole.LEAD }
+        assertEquals("kimi baby", lead.romanized)
+        assertEquals(listOf("kimi", "baby"), lead.syllables.map { it.romanized })
+        assertEquals("You, baby", lead.translated)
+        val backing = document.lines.first { it.role == LineRole.BACKGROUND }
+        assertEquals("うー", backing.text)
+        assertEquals("uu", backing.romanized)
+        assertEquals(listOf("uu"), backing.syllables.map { it.romanized })
+        assertEquals("(ooh)", backing.translated)
     }
 
     @Test
@@ -191,13 +217,32 @@ class SpicyLyricsProviderTest {
     }
 
     @Test
-    fun `a track they do not have is a miss, and a refused key says so`() = runBlocking {
+    fun `a track they do not have is a miss`() = runBlocking {
         assertNull(provider.fetch(request.copy(spotifyTrackId = "x")))
         assertEquals("Spicy Lyrics has no lyrics for this track", provider.noMatchReason)
+    }
 
+    /**
+     * A miss is remembered for the track; a bad key is not about the track. Reported as a failure,
+     * the lookup is retried once the key is fixed, instead of thirty days of silence per song.
+     */
+    @Test
+    fun `a refused key is a failure, by id and by search`() = runBlocking {
         server.routes["/v1/lyrics/"] = 403 to """{"Body":{"error":"forbidden","message":"origin not allowed"}}"""
-        assertNull(provider.fetch(request.copy(spotifyTrackId = "x")))
-        assertEquals("Spicy Lyrics refused the key", provider.noMatchReason)
+        try {
+            provider.fetch(request.copy(spotifyTrackId = "x"))
+            fail("a refusal must not become a settled miss")
+        } catch (expected: SpicyLyricsProvider.Refused) {
+            assertEquals("Spicy Lyrics refused the key (HTTP 403)", expected.message)
+        }
+
+        server.routes["/v1/tracks/search"] = 401 to """{"Body":{"error":"unauthorized"}}"""
+        try {
+            provider.fetch(request)
+            fail("a refusal must not become a settled miss")
+        } catch (expected: SpicyLyricsProvider.Refused) {
+            assertTrue(expected.message!!.endsWith("(HTTP 401)"))
+        }
     }
 
     @Test

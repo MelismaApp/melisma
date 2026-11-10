@@ -85,8 +85,8 @@ class SpicyLyricsProvider(
             runCatching { Http.json.parseToJsonElement(it).jsonObject }.getOrNull()
         }
         if (body == null) {
+            if (status == 401 || status == 403) throw Refused(status)
             noMatchReason = when (status) {
-                401, 403 -> "Spicy Lyrics refused the key"
                 404 -> "Spicy Lyrics has no lyrics for this track"
                 else -> "Spicy Lyrics answered HTTP $status"
             }
@@ -108,8 +108,15 @@ class SpicyLyricsProvider(
             noMatchReason = "Spicy Lyrics answered with nothing readable"
             return null
         }
-        return document.copy(credits = credits(content))
+        return document.copy(providerName = sourceName(content.string("source")), credits = credits(content))
     }
+
+    /**
+     * The key was turned away. An exception rather than a miss, because a miss is remembered for
+     * the track and a bad key is not about the track: once it is fixed, every song should be asked
+     * again, which is what a failed lookup gets and a settled miss does not.
+     */
+    class Refused(status: Int) : java.io.IOException("Spicy Lyrics refused the key (HTTP $status)")
 
     /**
      * The first result, when the API itself calls it an exact match. A `likely` or `version` hit
@@ -128,11 +135,13 @@ class SpicyLyricsProvider(
                 append("&duration=").append(String.format(Locale.ROOT, "%.3f", request.durationMs / 1000.0))
             }
         }
-        val first = Http.get(url, headers(key)) { raw ->
+        var status = 0
+        val first = Http.get(url, headers(key), onStatus = { status = it }) { raw ->
             runCatching { Http.json.parseToJsonElement(raw).jsonObject }.getOrNull()
                 ?.get("Body")?.asObject()?.get("results")?.asArray()?.firstOrNull()?.asObject()
         }
         if (first == null) {
+            if (status == 401 || status == 403) throw Refused(status)
             noMatchReason = "Spicy Lyrics does not know this track"
             return null
         }
@@ -158,14 +167,25 @@ class SpicyLyricsProvider(
         private val CLIENT_KEY = Regex("sl_pk_[A-Za-z0-9_-]{8,}")
 
         /**
-         * Who to name under the words, by the API's rule: the provider always, and for a community
-         * sync the maker and the uploader too, each linked where a profile is given. The commercial
-         * catalogues name nobody, and a response that does not say where it came from says so.
+         * What the footer names, by the API's rule: the catalogue that answered, always. A
+         * community sync is Spicy Lyrics' own; Apple's and Spotify's words are named as theirs,
+         * reached through Spicy Lyrics; and a response that does not say says so, rather than
+         * having the words put in anyone's mouth.
+         */
+        fun sourceName(source: String?): String = when (source?.trim()?.lowercase()?.replace('-', '_')) {
+            null, "" -> "Spicy Lyrics (source not identified)"
+            "spicy_lyrics", "spicy", "community" -> "Spicy Lyrics"
+            "apple_music", "apple" -> "Apple Music via Spicy Lyrics"
+            "spotify" -> "Spotify via Spicy Lyrics"
+            else -> "${source.trim()} via Spicy Lyrics"
+        }
+
+        /**
+         * Who to name beside the source: for a community sync the maker and the uploader, each
+         * linked where a profile is given. The commercial catalogues name nobody.
          */
         fun credits(body: JsonObject): List<Credit> {
-            val source = body.string("source")?.trim()?.lowercase()
-            if (source == null) return listOf(Credit("Source not identified"))
-            if (source != "spicy_lyrics") return emptyList()
+            if (body.string("source")?.trim()?.lowercase() != "spicy_lyrics") return emptyList()
             val attribution = body["UploadAttribution"]?.asObject() ?: return emptyList()
             val maker = attribution.contributor("Maker")
             val uploader = attribution.contributor("Uploader")
@@ -204,9 +224,11 @@ private fun JsonObject.flag(name: String): Boolean? =
  *
  * Three shapes, named by `Type`. `Syllable` content is a list of lines, each with a lead vocal of
  * timed syllables and any backing groups; `Line` content times whole lines; `Static` has only
- * `Lines[].Text`. Translations and romanizations ride along per line or per syllable. Going through
- * TTML rather than building lines directly keeps one path for duets, backing vocals, readings and
- * translations, which the parser already gets right for Apple's and lrc.red's files.
+ * `Lines[].Text`. Translations and romanizations ride along per line, per backing group and per
+ * syllable, and go into the metadata blocks the parser keys by line — `L3` for the lead, `L3.bg`
+ * for its backing vocal, `L3.2` for a syllable — so nothing a backing group carries is lost. Going
+ * through TTML rather than building lines directly keeps one path for duets, backing vocals,
+ * readings and translations, which the parser already gets right for Apple's and lrc.red's files.
  */
 object SpicyLyricsBody {
 
@@ -221,20 +243,24 @@ object SpicyLyricsBody {
         }
     }
 
+    /** One line's paragraph and the alternate text it contributes to the metadata blocks. */
+    private class Converted(val paragraph: String, val readings: String, val translations: String)
+
     private fun timed(body: JsonObject, content: JsonArray, syllable: Boolean): String? {
         val paragraphs = StringBuilder()
         val readings = StringBuilder()
+        val translations = StringBuilder()
         var count = 0
         for (element in content) {
             val item = element.asObject() ?: continue
             if (item.string("Type").equals("Interlude", ignoreCase = true)) continue
             val key = "L${count + 1}"
-            val paragraph = if (syllable) {
-                syllableLine(key, item, readings)
-            } else {
-                plainLine(key, item, readings)
-            } ?: continue
-            paragraphs.append(paragraph)
+            val line = (if (syllable) syllableLine(key, item) else plainLine(key, item)) ?: continue
+            paragraphs.append(line.paragraph)
+            if (line.readings.isNotEmpty()) readings.append("<text for=\"$key\">").append(line.readings).append("</text>")
+            if (line.translations.isNotEmpty()) {
+                translations.append("<text for=\"$key\">").append(line.translations).append("</text>")
+            }
             count++
         }
         if (count == 0) return null
@@ -242,64 +268,75 @@ object SpicyLyricsBody {
         val writers = body["SongWriters"]?.asArray().orEmpty()
             .mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { name -> name.isNotEmpty() } }
             .joinToString("") { "<songwriter>${xml(it)}</songwriter>" }
-        val transliterations = if (readings.isEmpty()) {
-            ""
-        } else {
-            "<transliterations><transliteration>$readings</transliteration></transliterations>"
+        val alternates = buildString {
+            if (readings.isNotEmpty()) append("<transliterations><transliteration>$readings</transliteration></transliterations>")
+            if (translations.isNotEmpty()) append("<translations><translation>$translations</translation></translations>")
         }
         return "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:ttm=\"http://www.w3.org/ns/ttml#metadata\" " +
             "xmlns:itunes=\"http://music.apple.com/lyric-ttml-internal\" " +
             "itunes:timing=\"${if (syllable) "Word" else "Line"}\">" +
             "<head><metadata><ttm:agent type=\"person\" xml:id=\"v1\"/><ttm:agent type=\"person\" xml:id=\"v2\"/>" +
             "<iTunesMetadata xmlns=\"http://music.apple.com/lyric-ttml-internal\">" +
-            "<songwriters>$writers</songwriters>$transliterations</iTunesMetadata></metadata></head>" +
+            "<songwriters>$writers</songwriters>$alternates</iTunesMetadata></metadata></head>" +
             "<body><div>$paragraphs</div></body></tt>"
     }
 
-    /** A word-timed line: the lead's syllables, then each backing group, then the translation. */
-    private fun syllableLine(key: String, item: JsonObject, readings: StringBuilder): String? {
+    /** A word-timed line: the lead's syllables, then each backing group, with what each carries. */
+    private fun syllableLine(key: String, item: JsonObject): Converted? {
         val lead = item["Lead"]?.asObject()
         val leadSyllables = lead?.get("Syllables")?.asArray()?.mapNotNull { it.asObject() }.orEmpty()
-        val groups = item["Background"]?.asArray()?.mapNotNull { group ->
-            group.asObject()?.get("Syllables")?.asArray()?.mapNotNull { it.asObject() }?.takeIf { it.isNotEmpty() }
-        }.orEmpty()
+        val groups = item["Background"]?.asArray()?.mapNotNull { it.asObject() }.orEmpty()
+            .map { group -> group to group["Syllables"]?.asArray()?.mapNotNull { it.asObject() }.orEmpty() }
+            .filter { (_, syllables) -> syllables.isNotEmpty() }
         if (leadSyllables.isEmpty() && groups.isEmpty()) return null
 
-        val all = leadSyllables + groups.flatten()
+        val all = leadSyllables + groups.flatMap { it.second }
         val begin = lead?.number("StartTime") ?: item.number("StartTime") ?: all.minOf { it.number("StartTime") ?: 0.0 }
         val end = lead?.number("EndTime") ?: item.number("EndTime") ?: all.maxOf { it.number("EndTime") ?: 0.0 }
 
-        val spans = StringBuilder()
-        spans.append(spans(leadSyllables))
-        for (group in groups) spans.append("<span ttm:role=\"x-bg\">").append(spans(group)).append("</span>")
-        spans.append(translation(lead?.string("TranslatedText") ?: item.string("TranslatedText")))
+        val spans = StringBuilder(spans(leadSyllables))
+        for ((_, syllables) in groups) spans.append("<span ttm:role=\"x-bg\">").append(spans(syllables)).append("</span>")
 
-        // Readings keyed to their syllables, the way Apple attaches its romanizations, so the
-        // highlight can carry the reading along word by word.
-        val read = readings(key, leadSyllables)
-        if (read.isNotEmpty()) readings.append("<text for=\"$key\">").append(read).append("</text>")
-
-        return "<p begin=\"${seconds(begin)}\" end=\"${seconds(end)}\" itunes:key=\"$key\"" +
-            " ttm:agent=\"${agent(item)}\">$spans</p>"
+        // The parser keys every backing syllable of a line into one backing vocal, in order, so
+        // their readings are numbered straight through the groups.
+        val backing = groups.flatMap { it.second }
+        val readings = buildString {
+            append(readings(key, leadSyllables))
+            readings("$key.bg", backing).takeIf { it.isNotEmpty() }?.let { append("<span ttm:role=\"x-bg\">$it</span>") }
+        }
+        val translations = buildString {
+            (lead?.string("TranslatedText") ?: item.string("TranslatedText"))?.trim()?.takeIf { it.isNotEmpty() }
+                ?.let { append(xml(it)) }
+            groups.mapNotNull { (group, _) -> group.string("TranslatedText")?.trim()?.takeIf { it.isNotEmpty() } }
+                .takeIf { it.isNotEmpty() }
+                ?.let { append("<span ttm:role=\"x-bg\">${xml(it.joinToString(" "))}</span>") }
+        }
+        return Converted(
+            "<p begin=\"${seconds(begin)}\" end=\"${seconds(end)}\" itunes:key=\"$key\" ttm:agent=\"${agent(item)}\">$spans</p>",
+            readings,
+            translations,
+        )
     }
 
     /** A line-timed line: its text, with the translation and the reading it may carry. */
-    private fun plainLine(key: String, item: JsonObject, readings: StringBuilder): String? {
+    private fun plainLine(key: String, item: JsonObject): Converted? {
         val text = item.string("Text")?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val begin = item.number("StartTime") ?: return null
         val end = item.number("EndTime") ?: begin
-        item.string("TransliteratedText")?.trim()?.takeIf { it.isNotEmpty() }?.let {
-            readings.append("<text for=\"$key\">").append(xml(it)).append("</text>")
-        }
-        return "<p begin=\"${seconds(begin)}\" end=\"${seconds(end)}\" itunes:key=\"$key\"" +
-            " ttm:agent=\"${agent(item)}\">${xml(text)}${translation(item.string("TranslatedText"))}</p>"
+        return Converted(
+            "<p begin=\"${seconds(begin)}\" end=\"${seconds(end)}\" itunes:key=\"$key\" ttm:agent=\"${agent(item)}\">${xml(text)}</p>",
+            item.string("TransliteratedText")?.trim()?.takeIf { it.isNotEmpty() }?.let(::xml).orEmpty(),
+            item.string("TranslatedText")?.trim()?.takeIf { it.isNotEmpty() }?.let(::xml).orEmpty(),
+        )
     }
 
     /** Untimed lines, each with its translation when there is one. */
     private fun static(lines: JsonArray): String? {
         val paragraphs = lines.mapNotNull { it.asObject() }.mapNotNull { line ->
             val text = line.string("Text")?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-            "<p>${xml(text)}${translation(line.string("TranslatedText"))}</p>"
+            val translation = line.string("TranslatedText")?.trim()?.takeIf { it.isNotEmpty() }
+                ?.let { "<span ttm:role=\"x-translation\">${xml(it)}</span>" }.orEmpty()
+            "<p>${xml(text)}$translation</p>"
         }
         if (paragraphs.isEmpty()) return null
         return "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:ttm=\"http://www.w3.org/ns/ttml#metadata\" " +
@@ -322,17 +359,23 @@ object SpicyLyricsBody {
         }
     }
 
-    private fun readings(key: String, syllables: List<JsonObject>): String = buildString {
-        syllables.forEachIndexed { index, syllable ->
-            val reading = syllable.string("TransliteratedText")?.trim()?.takeIf { it.isNotEmpty() }
-                ?: return@forEachIndexed
-            append("<span for=\"$key.${index + 1}\">${xml(reading)}</span>")
-            if (index < syllables.lastIndex && syllable.flag("IsPartOfWord") != true) append(' ')
+    /**
+     * Readings keyed to their syllables, the way Apple attaches its romanizations. A syllable with
+     * no reading of its own keeps its text, so the line's reading stays a whole line: 君 baby reads
+     * `kimi baby`, not `kimi`. Nothing at all when no syllable has one.
+     */
+    private fun readings(key: String, syllables: List<JsonObject>): String {
+        if (syllables.none { !it.string("TransliteratedText").isNullOrBlank() }) return ""
+        return buildString {
+            syllables.forEachIndexed { index, syllable ->
+                val reading = syllable.string("TransliteratedText")?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: syllable.string("Text")?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: return@forEachIndexed
+                append("<span for=\"$key.${index + 1}\">${xml(reading)}</span>")
+                if (index < syllables.lastIndex && syllable.flag("IsPartOfWord") != true) append(' ')
+            }
         }
     }
-
-    private fun translation(text: String?): String =
-        text?.trim()?.takeIf { it.isNotEmpty() }?.let { "<span ttm:role=\"x-translation\">${xml(it)}</span>" }.orEmpty()
 
     /** The second voice for a line the API pins to the far edge, as Apple does with a duet. */
     private fun agent(item: JsonObject): String = if (item.flag("OppositeAligned") == true) "v2" else "v1"
