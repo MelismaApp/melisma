@@ -99,6 +99,14 @@ translations all survive. This is the format Apple Music and the AMLL database u
   lyrics actually came from — `source` is used the same way if `providerName` is absent.
   Without either, every track claims to come from a cache server, which loses the
   attribution the upstream sources are owed.
+- `credits`, optional: people to name under the provider line, each on a row of its own that
+  opens their page when tapped — `[{"text": "Made by gc", "url": "https://…"}, …]`. Spicy
+  Lyrics' community syncs come with a maker and an uploader, and its terms want both shown and
+  linked wherever the words are; `url` must be `https`.
+- `sourceUrl`, optional: where the provider line itself leads when tapped, for a source whose
+  terms want a link back.
+- `creditRequired`, optional: `true` keeps the footer on screen even with credits switched off
+  in the app, for a source whose terms make the credit a condition rather than a courtesy.
 - Wrapping in `data` is optional; the fields may sit at the top level.
 
 **No lyrics**: any non-2xx, or an empty body. `404` is the obvious one. The app treats a

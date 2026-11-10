@@ -328,7 +328,7 @@ fun PlayerScreen(
             PopupContent(
                 document = document,
                 settings = settings,
-                creditRequired = document != null && container.lyrics.creditRequired(document.providerId),
+                creditRequired = document != null && container.lyrics.creditRequired(document),
                 snapshot = snapshot,
                 artwork = artwork,
                 positionProvider = rememberPositionProvider(snapshot, settings),
@@ -616,7 +616,7 @@ private fun MainContent(
 
         document != null -> {
             val positionProvider = rememberPositionProvider(snapshot, settings)
-            val sourceTap = sourceTap(LocalContext.current, container.lyrics.sourceLink(document.providerId), document)
+            val sourceTap = sourceTap(LocalContext.current, container.lyrics.sourceLink(document), document)
             val lyrics: @Composable (Modifier) -> Unit = { mod ->
                 Column(mod) {
                     LyricsView(
@@ -630,7 +630,7 @@ private fun MainContent(
                         onLongPressLine = onLongPressLine,
                         jumpToActiveSignal = jumpSignal,
                         freeRead = settings.freeRead,
-                        creditRequired = container.lyrics.creditRequired(document.providerId),
+                        creditRequired = container.lyrics.creditRequired(document),
                         onSourceTap = sourceTap,
                         modifier = Modifier.weight(1f).fillMaxWidth(),
                     )

@@ -652,9 +652,16 @@ class LyricsRepository(
     /** Where [providerId]'s credit leads, for a source that asks to be linked. */
     fun sourceLink(providerId: String): String? = providers.firstOrNull { it.id == providerId }?.link
 
+    /** Where [document]'s footer leads: its own link when it carries one, else its provider's. */
+    fun sourceLink(document: LyricsDocument): String? = document.sourceUrl ?: sourceLink(document.providerId)
+
     /** Whether [providerId]'s terms want its credit shown whatever the settings say. */
     fun creditRequired(providerId: String): Boolean =
         providers.firstOrNull { it.id == providerId }?.creditRequired == true
+
+    /** The same, for the words themselves: a document relayed by a cache server says so itself. */
+    fun creditRequired(document: LyricsDocument): Boolean =
+        document.creditRequired || creditRequired(document.providerId)
 
     /** A source the listener may choose for the playing track, and what it is known to have. */
     data class SourceOption(val id: String, val name: String, val outcome: LyricsCache.Outcome?)

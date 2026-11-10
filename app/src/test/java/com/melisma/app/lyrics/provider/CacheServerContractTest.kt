@@ -96,6 +96,35 @@ class CacheServerContractTest {
         assertTrue(document.lines.none { it.text.contains("merged by") })
     }
 
+    /**
+     * A source whose terms want people named and linked — Spicy Lyrics' community syncs — has to
+     * keep that through the hop, or the server would be the one breaking the terms.
+     */
+    @Test
+    fun `the upstream source's credits, link and insistence survive the hop`() {
+        val envelope = """{"status":200,"data":{"format":"ttml","source":"spicylyrics",
+            "providerName":"Spicy Lyrics","sourceUrl":"https://spicylyrics.org","creditRequired":true,
+            "credits":[{"text":"Made by gc","url":"https://spicylyrics.org/uid/2"},
+                       {"text":"Uploaded by spikerko","url":"http://insecure.example/ignored"},
+                       {"url":"https://nobody.example"}],
+            "lyrics":"<tt itunes:timing=\"Line\"><body><div><p begin=\"1.0\" end=\"2.0\">words</p></div></body></tt>"}}"""
+        val document = provider.documentFrom(envelope)!!
+
+        assertEquals("Spicy Lyrics", document.providerName)
+        assertEquals("cacheserver", document.providerId)
+        assertEquals(listOf("Made by gc", "Uploaded by spikerko"), document.credits.map { it.text })
+        // A link that is not https is dropped rather than opened; a credit with no text is nobody.
+        assertEquals(listOf("https://spicylyrics.org/uid/2", null), document.credits.map { it.url })
+        assertEquals("https://spicylyrics.org", document.sourceUrl)
+        assertTrue(document.creditRequired)
+
+        // An envelope from before these fields leaves them at their defaults.
+        val plain = provider.documentFrom("""{"data":{"lyrics":"[00:01.00]words","providerName":"LRCLIB"}}""")!!
+        assertTrue(plain.credits.isEmpty())
+        assertEquals(null, plain.sourceUrl)
+        assertTrue(!plain.creditRequired)
+    }
+
     @Test
     fun `a bare TTML body works without any envelope`() {
         // So the app can point at a directory of files, not only at a server that wraps them.

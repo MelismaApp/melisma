@@ -123,6 +123,13 @@ data class LyricsDocument(
      * the source's terms want each shown and linked wherever the lyrics are.
      */
     val credits: List<Credit> = emptyList(),
+    /**
+     * Where the source's own footer row leads, when the document knows better than its provider —
+     * lyrics that reached the app through a cache server still belong to whoever the server asked.
+     */
+    val sourceUrl: String? = null,
+    /** True when the words' terms want the footer shown whatever the settings say. */
+    val creditRequired: Boolean = false,
     /** BCP-47-ish language tag of the original text, when we could work it out. */
     val language: String? = null,
     val hasRomanization: Boolean = false,

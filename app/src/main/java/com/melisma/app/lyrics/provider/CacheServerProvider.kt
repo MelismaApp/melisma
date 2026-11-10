@@ -6,7 +6,10 @@ import com.melisma.app.lyrics.parse.LrcParser
 import com.melisma.app.lyrics.parse.TtmlParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.melisma.app.lyrics.model.Credit
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -169,7 +172,19 @@ class CacheServerProvider(
             ?: data.string("source")?.let { "$displayName · $it" }
             ?: displayName
 
-        return parse(lyrics.trim(), format = data.string("format")?.lowercase(), label = label)
+        val document = parse(lyrics.trim(), format = data.string("format")?.lowercase(), label = label)
+            ?: return null
+        // The upstream source's own attribution, carried through the hop: who to name beside the
+        // provider, where the credit leads, and whether its terms insist on it being shown.
+        val credits = runCatching { data["credits"]?.jsonArray }.getOrNull().orEmpty().mapNotNull { entry ->
+            val person = runCatching { entry.jsonObject }.getOrNull() ?: return@mapNotNull null
+            person.string("text")?.let { Credit(it, person.string("url")?.takeIf { url -> url.startsWith("https://") }) }
+        }
+        return document.copy(
+            credits = credits,
+            sourceUrl = data.string("sourceUrl")?.takeIf { it.startsWith("https://") },
+            creditRequired = runCatching { data["creditRequired"]?.jsonPrimitive?.booleanOrNull }.getOrNull() == true,
+        )
     }
 
     private fun parse(text: String, format: String?, label: String): LyricsDocument? = when {
