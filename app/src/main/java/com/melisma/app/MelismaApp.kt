@@ -9,6 +9,7 @@ import com.melisma.app.lyrics.SpokenLanguageStore
 import com.melisma.app.lyrics.provider.AmllTtmlProvider
 import com.melisma.app.lyrics.provider.AppleMusicProvider
 import com.melisma.app.lyrics.provider.CacheServerProvider
+import com.melisma.app.lyrics.provider.SpicyLyricsProvider
 import com.melisma.app.lyrics.provider.LocalLyricsStore
 import com.melisma.app.lyrics.provider.LrcLibProvider
 import com.melisma.app.lyrics.provider.LrcRedProvider
@@ -116,6 +117,7 @@ class AppContainer(context: Context) {
     val providers: List<LyricsProvider> = listOf(
         localLyrics,
         CacheServerProvider(settings, spokenLanguages),
+        SpicyLyricsProvider(settings),
         AppleMusicProvider(settings),
         LrcRedProvider(),
         AmllTtmlProvider(settings),

@@ -202,6 +202,9 @@ interface ProviderCredentials {
     val appleMusicUserToken: String?
     val appleStorefront: String
 
+    /** The user's own Spicy Lyrics client key (`sl_pk_…`), from the app's catalog page. */
+    val spicyLyricsKey: String?
+
     /** `sp_dc` cookie from a signed-in open.spotify.com session. No longer usable on its own. */
     var spDcCookie: String?
 

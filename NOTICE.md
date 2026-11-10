@@ -35,7 +35,9 @@ setting picks between the fonts already on the device instead.
 Two of its features are reached differently. Its **Artist Header** background reads the
 artist banner through Spotify's internal GraphQL gateway, which needs a persisted-query
 hash tied to a web-player release; this app uses the documented artist endpoint instead.
-Its **Spicy Lyrics API** is not used at all — see the note at the end of this file.
+Its **Spicy Lyrics API** is an optional source, with a key each user gets for themselves — see the
+note at the end of this file. Melisma is an unofficial port and is not made, endorsed or supported
+by Spicy Lyrics.
 
 ## Spring physics — Fraktality
 
@@ -167,9 +169,12 @@ extensions do:
 - **Apple Music** — official syllable-level lyrics, romanizations and translations. Needs
   your own tokens and an active subscription.
 
-**Spikerko's Spicy Lyrics API is deliberately not used.** Reaching it would mean posting a
-user's Spotify token to a third party and porting his bespoke binary payload format, and it
-is his service to run rather than this app's to lean on.
+- **[Spicy Lyrics API](https://developers.spicylyrics.org)** — community-made syncs, then
+  Apple Music's and Spotify's lyrics, by Spotify id or ISRC. Optional, and under its own terms:
+  each user holds a client key of their own, issued from Melisma's page in its catalog; the
+  provider is always named under the lyrics, and a community sync's maker and uploader are
+  named and linked beside it. Nothing it returns is passed on anywhere, and a cached copy is
+  dropped after thirty days.
 
 None of these are affiliated with this app, and none of them endorse it.
 

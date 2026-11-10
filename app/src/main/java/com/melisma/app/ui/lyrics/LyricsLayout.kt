@@ -202,6 +202,8 @@ class FooterRow(
     val sizePx: Float,
     val alpha: Float,
     val bold: Boolean,
+    /** Where this row leads when tapped; null for the source's own row, which the caller knows. */
+    val url: String? = null,
 )
 
 class LyricsLayout(
@@ -235,6 +237,12 @@ class LyricsLayout(
         val first = footer.firstOrNull() ?: return false
         val last = footer.last()
         return y >= first.baseline - first.sizePx * 1.2f && y <= last.baseline + last.sizePx * 0.5f
+    }
+
+    /** The footer row under [y], so a tap on a credited person goes to that person. */
+    fun footerRowAt(y: Float): FooterRow? {
+        if (!footerAt(y)) return null
+        return footer.firstOrNull { y <= it.baseline + it.sizePx * 0.5f } ?: footer.last()
     }
 }
 
@@ -361,6 +369,21 @@ object LyricsLayoutBuilder {
                     sizePx = metrics.providerFontSizePx,
                     alpha = 0.5f,
                     bold = false,
+                )
+            }
+        }
+        // The people behind a community sync, each on a row that leads to them.
+        for (credit in document.credits) {
+            for (row in wrap(credit.text, metrics.providerPaint, maxWidth)) {
+                y += metrics.providerFontSizePx * 1.5f
+                rows += FooterRow(
+                    text = row,
+                    x = 0f,
+                    baseline = y - metrics.providerFontSizePx * 0.4f,
+                    sizePx = metrics.providerFontSizePx,
+                    alpha = 0.5f,
+                    bold = false,
+                    url = credit.url,
                 )
             }
         }

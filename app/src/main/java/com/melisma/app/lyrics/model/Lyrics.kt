@@ -106,6 +106,10 @@ data class LyricLine(
 @Serializable
 data class Ruby(val start: Int, val end: Int, val kana: String, val wordStart: Int = start, val wordEnd: Int = end)
 
+/** Someone to credit under the lyrics, with somewhere to go when the line is tapped. */
+@Serializable
+data class Credit(val text: String, val url: String? = null)
+
 @Serializable
 data class LyricsDocument(
     val kind: LyricsKind,
@@ -114,6 +118,11 @@ data class LyricsDocument(
     val providerName: String,
     val providerId: String,
     val songWriters: List<String> = emptyList(),
+    /**
+     * People to name beside the source. A community-made sync has a maker and an uploader, and
+     * the source's terms want each shown and linked wherever the lyrics are.
+     */
+    val credits: List<Credit> = emptyList(),
     /** BCP-47-ish language tag of the original text, when we could work it out. */
     val language: String? = null,
     val hasRomanization: Boolean = false,

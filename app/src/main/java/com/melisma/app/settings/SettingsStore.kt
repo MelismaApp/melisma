@@ -2,6 +2,7 @@ package com.melisma.app.settings
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.melisma.app.lyrics.provider.bearerValue
 import com.melisma.app.lyrics.provider.ProviderCredentials
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -366,6 +367,7 @@ data class Settings(
     val appleDeveloperToken: String? = null,
     val appleMusicUserToken: String? = null,
     val appleStorefront: String = "us",
+    val spicyLyricsKey: String? = null,
 
     // ---- background --------------------------------------------------------
     /**
@@ -512,8 +514,10 @@ data class Settings(
             // the databases that have to guess from a title.
             // lrc.red serves Apple's own data by ISRC, so it sits with Apple: exact when the
             // recording is known, a guess from a title when it is not.
-            "local", "cacheserver", "applemusic", "lrcred", "spotify", "amll", "netease", "musixmatch",
-            "lrclib",
+            // Spicy Lyrics answers by Spotify id or ISRC too, and puts hand-made community syncs
+            // ahead of Apple's and Spotify's own, so it goes before them.
+            "local", "cacheserver", "spicylyrics", "applemusic", "lrcred", "spotify", "amll", "netease",
+            "musixmatch", "lrclib",
         )
 
         /**
@@ -530,13 +534,16 @@ data class Settings(
          * is a paid membership away.
          */
         val DEFAULT_ENABLED_PROVIDERS =
-            setOf("local", "cacheserver", "spotify", "lrcred", "amll", "netease", "musixmatch", "lrclib")
+            setOf(
+                "local", "cacheserver", "spicylyrics", "spotify", "lrcred", "amll", "netease", "musixmatch",
+                "lrclib",
+            )
 
         /**
          * Default-on sources added after installs started keeping their own list. An install
          * from before one of these existed has it switched on once; see [offerNewDefaults].
          */
-        val DEFAULTS_ADDED_LATER = setOf("lrcred")
+        val DEFAULTS_ADDED_LATER = setOf("lrcred", "spicylyrics")
 
         const val DEFAULT_LRCLIB_URL = "https://lrclib.net"
         const val DEFAULT_NETEASE_URL = "https://music.163.com"
@@ -798,6 +805,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         appleDeveloperToken = secrets.trimmed(KEY_APPLE_DEV_TOKEN),
         appleMusicUserToken = secrets.trimmed(KEY_APPLE_USER_TOKEN),
         appleStorefront = prefs.trimmed(KEY_APPLE_STOREFRONT) ?: "us",
+        spicyLyricsKey = secrets.trimmed(KEY_SPICY_KEY),
 
         backgroundTimeoutMinutes = prefs.getInt(KEY_BACKGROUND_TIMEOUT, 10),
         followBatterySaver = prefs.getBoolean(KEY_FOLLOW_SAVER, true),
@@ -1167,6 +1175,9 @@ class SettingsStore(context: Context) : ProviderCredentials {
     fun updateAppleMusicUserToken(value: String?) =
         editSecrets { putString(KEY_APPLE_USER_TOKEN, value?.trim()) }
 
+    fun updateSpicyLyricsKey(value: String?) =
+        editSecrets { putString(KEY_SPICY_KEY, bearerValue(value)) }
+
     fun updateAppleStorefront(value: String?) = edit {
         putString(KEY_APPLE_STOREFRONT, value?.trim()?.lowercase()?.takeIf { it.length == 2 })
     }
@@ -1195,6 +1206,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
     override val appleDeveloperToken: String? get() = current.appleDeveloperToken
     override val appleMusicUserToken: String? get() = current.appleMusicUserToken
     override val appleStorefront: String get() = current.appleStorefront
+    override val spicyLyricsKey: String? get() = current.spicyLyricsKey
 
     override var musixmatchGuestToken: String?
         get() = secrets.getString(KEY_MXM_GUEST_TOKEN, null)
@@ -1303,7 +1315,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
             "sp_dc", "sp_access_token", "sp_access_token_expiry",
             "mxm_token", "mxm_user_token",
             "netease_cookie", "apple_dev_token", "apple_user_token",
-            "cache_server_key", "sp_web_token",
+            "cache_server_key", "sp_web_token", "spicy_key",
         )
 
         const val KEY_SP_DC = "sp_dc"
@@ -1338,5 +1350,6 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_APPLE_DEV_TOKEN = "apple_dev_token"
         const val KEY_APPLE_USER_TOKEN = "apple_user_token"
         const val KEY_APPLE_STOREFRONT = "apple_storefront"
+        const val KEY_SPICY_KEY = "spicy_key"
     }
 }

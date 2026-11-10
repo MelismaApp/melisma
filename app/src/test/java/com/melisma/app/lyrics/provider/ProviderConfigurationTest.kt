@@ -29,6 +29,7 @@ class ProviderConfigurationTest {
         override val neteaseCookie: String? = null
         override val musixmatchUserToken: String? = null
         override val appleStorefront = "us"
+        override val spicyLyricsKey: String? = null
         override var musixmatchGuestToken: String? = null
         override var cachedSpotifyToken: String? = null
         override var cachedSpotifyTokenExpiresAt = 0L
@@ -107,6 +108,7 @@ class ProviderConfigurationTest {
             MusixmatchProvider(credentials).id,
             LrcLibProvider(credentials).id,
             LrcRedProvider().id,
+            SpicyLyricsProvider(credentials).id,
             "local",
         )
         // Guards against adding a provider to the settings order and forgetting to build

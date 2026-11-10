@@ -616,7 +616,7 @@ private fun MainContent(
 
         document != null -> {
             val positionProvider = rememberPositionProvider(snapshot, settings)
-            val sourceTap = sourceTap(LocalContext.current, container.lyrics.sourceLink(document.providerId))
+            val sourceTap = sourceTap(LocalContext.current, container.lyrics.sourceLink(document.providerId), document)
             val lyrics: @Composable (Modifier) -> Unit = { mod ->
                 Column(mod) {
                     LyricsView(
@@ -693,14 +693,24 @@ private fun MainContent(
 }
 
 /** Opens [link] in the browser when the credit under the lyrics is tapped; nothing when there is none. */
-private fun sourceTap(context: android.content.Context, link: String?): (() -> Unit)? {
-    if (link == null) return null
-    return {
-        runCatching {
-            context.startActivity(
-                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link))
-                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
-            )
+/**
+ * Opens the source's page, or the page of the person a tapped credit row names. Null when neither
+ * the source nor anyone credited has one, so the footer stays a plain footer.
+ */
+private fun sourceTap(
+    context: android.content.Context,
+    link: String?,
+    document: com.melisma.app.lyrics.model.LyricsDocument,
+): ((String?) -> Unit)? {
+    if (link == null && document.credits.none { it.url != null }) return null
+    return { rowLink ->
+        (rowLink ?: link)?.let { target ->
+            runCatching {
+                context.startActivity(
+                    android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(target))
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+            }
         }
     }
 }

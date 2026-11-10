@@ -96,8 +96,12 @@ fun LyricsView(
     jumpToActiveSignal: Int = 0,
     /** The source's terms want its credit shown whatever the settings say. */
     creditRequired: Boolean = false,
-    /** Called when the songwriters-and-source footer is tapped; null when there is nowhere to go. */
-    onSourceTap: (() -> Unit)? = null,
+    /**
+     * Called when the songwriters-and-source footer is tapped, with the tapped row's own link when
+     * it has one — a credited person — and null for the source's row. Null when there is nowhere
+     * to go.
+     */
+    onSourceTap: ((String?) -> Unit)? = null,
     /** Every line lit and the scroll left to the reader. See [LyricsRenderer.freeRead]. */
     freeRead: Boolean = false,
 ) {
@@ -334,8 +338,9 @@ fun LyricsView(
                                 } else if (line == null && onSourceTap != null &&
                                     renderer.footerAtViewY(down.position.y)
                                 ) {
-                                    // The credit under the last line leads to the source.
-                                    onSourceTap()
+                                    // The credit under the last line leads to the source, or to
+                                    // the person a row names.
+                                    onSourceTap(renderer.footerRowAtViewY(down.position.y)?.url)
                                 } else {
                                     // A tap that seeks nothing is a request to re-centre.
                                     renderer.jumpToActive()

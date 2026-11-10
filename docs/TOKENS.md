@@ -105,6 +105,26 @@ If you have an Apple Developer account you can generate a proper developer token
 key instead, which is the supported route and lasts up to six months. It is not worth $99 a year for
 this, which is why the browser's own token is documented first.
 
+## Spicy Lyrics
+
+**Gives you:** hand-made community syncs — word-by-word, often the most precise there are — and
+behind them Apple Music's and Spotify's own lyrics, all looked up by the exact recording.
+
+Spicy Lyrics' API wants every person who runs an app to hold a key of their own, and makes that a
+one-press affair. No developer account is needed.
+
+1. Open **Melisma's page in the Spicy Lyrics catalog**: *Settings → Tokens and endpoints → Get a
+   Spicy Lyrics key*, or <https://developers.spicylyrics.org/catalog/melisma>.
+2. Sign in and press **Add**. That creates an application for you, with the settings Melisma needs
+   already applied, and shows a client key beginning `sl_pk_`.
+3. Paste it into **Spicy Lyrics client key**.
+
+The key is yours: it has its own limit, and you can revoke it from the same site. Only a client key
+works here. A secret key (`sl_sk_`) belongs on a server and the app refuses one rather than send it.
+
+Community syncs are credited under the lyrics to the people who made and uploaded them, and tapping
+a name opens their page; that credit stays even with credits switched off, as the API's terms ask.
+
 ## Musixmatch
 
 **Gives you:** a wider catalogue, and no shared rate limit. Musixmatch works with nothing pasted —

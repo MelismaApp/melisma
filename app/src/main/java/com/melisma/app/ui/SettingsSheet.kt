@@ -111,6 +111,7 @@ import com.melisma.app.update.UpdateChecker
 import com.melisma.app.update.Updater
 import com.melisma.app.settings.ArtworkSource
 import com.melisma.app.media.ServerSource
+import com.melisma.app.lyrics.provider.SpicyLyricsProvider
 import com.melisma.app.lyrics.provider.SpotifyWebToken
 
 /**
@@ -150,6 +151,12 @@ private val PROVIDER_INFO = mapOf(
         "Your own server, holding what it has already fetched. Ranked first by default, because " +
             "an answer it already has cost nobody a request.",
         needs = "Needs a URL under Developer",
+    ),
+    "spicylyrics" to ProviderInfo(
+        "Spicy Lyrics",
+        "Hand-made community syncs first, then Apple Music's and Spotify's own lyrics, by the " +
+            "exact recording. Credits the people who made each sync, as its terms ask.",
+        needs = "Needs your own client key below — free, from Melisma's page in the Spicy Lyrics catalog",
     ),
     "applemusic" to ProviderInfo(
         "Apple Music",
@@ -1079,6 +1086,25 @@ fun SettingsSheet(
                 )
 
                 SecretField(
+                    label = "Spicy Lyrics client key",
+                    help = "Your own key, so the limit is yours alone. Open Melisma's page in the " +
+                        "Spicy Lyrics catalog, press Add — it makes an application for you, no " +
+                        "developer account needed — and paste the sl_pk_ key it shows. A secret " +
+                        "key (sl_sk_) is refused: that kind belongs on a server and must never " +
+                        "be in an app. Community syncs are credited to the people who made them " +
+                        "under the lyrics, and tapping a name opens their page.",
+                    value = settings.spicyLyricsKey.orEmpty(),
+                    accent = accent,
+                    onChange = { store.updateSpicyLyricsKey(it) },
+                )
+                ActionRow(
+                    title = "Get a Spicy Lyrics key",
+                    subtitle = "Melisma's page in the Spicy Lyrics catalog",
+                    accent = accent,
+                    onClick = { openUrl(context, SpicyLyricsProvider.CATALOG_URL) },
+                )
+
+                SecretField(
                     label = "Musixmatch user token",
                     help = "Optional — the app mints an anonymous token for itself, which is " +
                         "rate-limited per network. A signed-in one is not. The desktop app " +
@@ -1429,8 +1455,8 @@ fun SettingsSheet(
                 }
 
                 Text(
-                    "Word-by-word lyrics for whatever your phone is playing. A port of " +
-                        "Spicy Lyrics' renderer to Android, under the AGPL-3.0.",
+                    "Word-by-word lyrics for whatever your phone is playing. An unofficial port " +
+                        "of Spicy Lyrics' renderer to Android, under the AGPL-3.0.",
                     color = Color.White.copy(alpha = 0.6f),
                     fontSize = 13.sp,
                     modifier = Modifier.padding(bottom = 4.dp),

@@ -27,7 +27,7 @@ No login, no account, and it works out of the box.
 | ![](docs/cinema-portrait.png) | ![](docs/popup-lyrics.png) | ![](docs/copy-lines.png) |
 
 > [!NOTE]
-> This is a port of [**Spicy Lyrics**](https://github.com/Spikerko/spicy-lyrics) (a
+> This is an unofficial port of [**Spicy Lyrics**](https://github.com/Spikerko/spicy-lyrics) (a
 > [Spicetify](https://github.com/spicetify/cli) extension) to Android — its look, its motion and its
 > lyric model. Spicy Lyrics is AGPL-3.0, so this is too. [NOTICE.md](NOTICE.md) is the honest
 > accounting of what came from where.
@@ -153,6 +153,7 @@ really is word-timed wins even if you put it last.
 |---|---|---|
 | **Your own files** | up to word | `.lrc` / `.ttml` you import. Always wins. |
 | **lrc.red** | **word** | **Nothing.** Apple Music's lyrics, romanizations and translations by ISRC — exact for any song the app has identified. |
+| **Spicy Lyrics** | **word** | A free key of your own, one press from [the catalog](https://developers.spicylyrics.org/catalog/melisma) — see [tokens](#optional-tokens). Hand-made community syncs, then Apple Music's and Spotify's lyrics, by the exact recording. |
 | **AMLL TTML Database** | **word** | **Nothing.** Community-timed, hand-made, public domain. |
 | **NetEase Cloud Music** | **word** | **Nothing.** Best for Japanese, Korean and Chinese — ships hand-checked romanization and translation. |
 | **Musixmatch** | **word** | **Nothing.** Most Western music. |
@@ -307,7 +308,9 @@ of [Fraktality's `spr`](https://github.com/Fraktality/spr) (MIT) and the curves 
 (MIT). The word-by-word lyrics that arrive with no account come from the
 [**AMLL TTML Database**](https://github.com/amll-dev/amll-ttml-db), hand-timed by its contributors
 and dedicated to the public domain, and from [**lrc.red**](https://lrc.red), which serves Apple
-Music's lyrics by ISRC and asks only to be credited where they are shown. [**Beautiful Lyrics**](https://github.com/surfbryce/beautiful-lyrics)
+Music's lyrics by ISRC and asks only to be credited where they are shown. With a key of your own,
+[**Spicy Lyrics' API**](https://developers.spicylyrics.org) adds its community's hand-made syncs,
+credited under the words to the people who made them. [**Beautiful Lyrics**](https://github.com/surfbryce/beautiful-lyrics)
 by surfbryce is prior art and a reference point; no code from it is used.
 
 Lyrics belong to their writers and publishers. None of the sources here are affiliated with this app.

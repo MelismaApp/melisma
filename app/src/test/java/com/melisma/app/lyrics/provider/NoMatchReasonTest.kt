@@ -39,6 +39,7 @@ class NoMatchReasonTest {
         override val appleDeveloperToken: String? = null
         override val appleMusicUserToken: String? = null
         override val appleStorefront = "us"
+        override val spicyLyricsKey: String? = null
         override val cacheServerUrl: String? = null
         override val cacheServerKey: String? = null
         override var musixmatchGuestToken: String? = null

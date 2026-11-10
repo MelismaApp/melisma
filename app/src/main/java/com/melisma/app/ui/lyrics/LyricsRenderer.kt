@@ -211,6 +211,9 @@ class LyricsRenderer(
 
     fun footerAtViewY(yInView: Float): Boolean = layout.footerAt(yInView + scrollY)
 
+    /** The footer row under a view-space y, for a tap that should lead to that row's link. */
+    fun footerRowAtViewY(yInView: Float): FooterRow? = layout.footerRowAt(yInView + scrollY)
+
     /** Back to the playing line: a jump while following, a glide while reading freely. */
     fun jumpToActive() {
         userScrolling = false
