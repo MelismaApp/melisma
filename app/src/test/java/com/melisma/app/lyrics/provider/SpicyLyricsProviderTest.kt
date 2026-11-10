@@ -188,6 +188,19 @@ class SpicyLyricsProviderTest {
         assertEquals("(ooh)", backing.translated)
     }
 
+    /** A reading the API left out of a non-Latin word is for the on-device romanizer to supply. */
+    @Test
+    fun `a non-Latin syllable without a reading leaves the line to the romanizer`() = runBlocking {
+        server.routes["/v1/lyrics/"] = 200 to """{"Status":200,"Body":{"Type":"Syllable","source":"spicy_lyrics","id":"x","ids":{"spotify":"x"},
+            "Content":[{"Type":"Vocal","Lead":{"StartTime":1.0,"EndTime":2.0,
+                "Syllables":[{"Text":"音","StartTime":1.0,"EndTime":1.5,"IsPartOfWord":true,"TransliteratedText":"yīn"},
+                             {"Text":"乐","StartTime":1.5,"EndTime":2.0,"IsPartOfWord":false}]}}]}}"""
+        val lead = provider.fetch(request.copy(spotifyTrackId = "x"))!!.lines.first { it.role == LineRole.LEAD }
+
+        assertNull(lead.romanized)
+        assertEquals(listOf(null, null), lead.syllables.map { it.romanized })
+    }
+
     @Test
     fun `without a Spotify id the ISRC is asked for, and without either the title is searched`() = runBlocking {
         server.routes["/v1/lyrics/"] = 200 to community

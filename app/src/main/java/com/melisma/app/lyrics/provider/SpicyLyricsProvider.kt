@@ -360,22 +360,32 @@ object SpicyLyricsBody {
     }
 
     /**
-     * Readings keyed to their syllables, the way Apple attaches its romanizations. A syllable with
-     * no reading of its own keeps its text, so the line's reading stays a whole line: 君 baby reads
-     * `kimi baby`, not `kimi`. Nothing at all when no syllable has one.
+     * Readings keyed to their syllables, the way Apple attaches its romanizations.
+     *
+     * A Latin syllable with no reading is its own reading, so 君 baby reads `kimi baby` rather
+     * than `kimi`. A non-Latin syllable with none is a different matter: writing its text in as the
+     * reading would stop the on-device romanizer filling it, so a line with one of those gets no
+     * readings from here at all and the romanizer does the whole line. Nothing when no syllable has
+     * a reading.
      */
     private fun readings(key: String, syllables: List<JsonObject>): String {
-        if (syllables.none { !it.string("TransliteratedText").isNullOrBlank() }) return ""
+        fun reading(syllable: JsonObject) = syllable.string("TransliteratedText")?.trim()?.takeIf { it.isNotEmpty() }
+        if (syllables.none { reading(it) != null }) return ""
+        if (syllables.any { reading(it) == null && !(it.string("Text")?.isLatin() ?: true) }) return ""
         return buildString {
             syllables.forEachIndexed { index, syllable ->
-                val reading = syllable.string("TransliteratedText")?.trim()?.takeIf { it.isNotEmpty() }
+                val text = reading(syllable)
                     ?: syllable.string("Text")?.trim()?.takeIf { it.isNotEmpty() }
                     ?: return@forEachIndexed
-                append("<span for=\"$key.${index + 1}\">${xml(reading)}</span>")
+                append("<span for=\"$key.${index + 1}\">${xml(text)}</span>")
                 if (index < syllables.lastIndex && syllable.flag("IsPartOfWord") != true) append(' ')
             }
         }
     }
+
+    /** Whether every letter is Latin, so the text needs no romanizing. */
+    private fun String.isLatin(): Boolean =
+        all { !it.isLetter() || Character.UnicodeScript.of(it.code) == Character.UnicodeScript.LATIN }
 
     /** The second voice for a line the API pins to the far edge, as Apple does with a duet. */
     private fun agent(item: JsonObject): String = if (item.flag("OppositeAligned") == true) "v2" else "v1"
