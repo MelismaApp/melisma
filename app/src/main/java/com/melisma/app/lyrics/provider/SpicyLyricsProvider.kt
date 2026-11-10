@@ -3,8 +3,7 @@ package com.melisma.app.lyrics.provider
 import com.melisma.app.lyrics.model.Credit
 import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.lyrics.parse.TtmlParser
-import com.melisma.app.util.Script
-import com.melisma.app.util.detectScript
+import com.melisma.app.util.containsRomanizableScript
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
@@ -373,7 +372,7 @@ object SpicyLyricsBody {
     private fun readings(key: String, syllables: List<JsonObject>): String {
         fun reading(syllable: JsonObject) = syllable.string("TransliteratedText")?.trim()?.takeIf { it.isNotEmpty() }
         if (syllables.none { reading(it) != null }) return ""
-        if (syllables.any { reading(it) == null && detectScript(it.string("Text").orEmpty()) in ROMANIZABLE }) return ""
+        if (syllables.any { reading(it) == null && containsRomanizableScript(it.string("Text").orEmpty()) }) return ""
         return buildString {
             syllables.forEachIndexed { index, syllable ->
                 val reading = reading(syllable)
@@ -386,9 +385,6 @@ object SpicyLyricsBody {
             }
         }
     }
-
-    /** The scripts the on-device romanizer can read for itself. */
-    private val ROMANIZABLE = setOf(Script.JAPANESE, Script.CHINESE, Script.KOREAN, Script.CYRILLIC, Script.GREEK)
 
     /** The second voice for a line the API pins to the far edge, as Apple does with a duet. */
     private fun agent(item: JsonObject): String = if (item.flag("OppositeAligned") == true) "v2" else "v1"

@@ -200,6 +200,15 @@ class SpicyLyricsProviderTest {
 
         assertNull(lead.romanized)
         assertEquals(listOf(null, null), lead.syllables.map { it.romanized })
+
+        // One letter is enough to be a gap the romanizer should fill.
+        server.routes["/v1/lyrics/"] = 200 to """{"Status":200,"Body":{"Type":"Syllable","source":"spicy_lyrics","id":"x","ids":{"spotify":"x"},
+            "Content":[{"Type":"Vocal","Lead":{"StartTime":1.0,"EndTime":2.0,
+                "Syllables":[{"Text":"да","StartTime":1.0,"EndTime":1.5,"IsPartOfWord":false,"TransliteratedText":"da"},
+                             {"Text":"и","StartTime":1.5,"EndTime":2.0,"IsPartOfWord":false}]}}]}}"""
+        val cyrillic = provider.fetch(request.copy(spotifyTrackId = "x"))!!.lines.first { it.role == LineRole.LEAD }
+        assertNull(cyrillic.romanized)
+        assertEquals(listOf(null, null), cyrillic.syllables.map { it.romanized })
     }
 
     /** A script the romanizer cannot read keeps what the API did supply, with the gap left as text. */
