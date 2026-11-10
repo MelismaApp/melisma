@@ -179,7 +179,8 @@ class SpicyLyricsProviderTest {
 
         val lead = document.lines.first { it.role == LineRole.LEAD }
         assertEquals("kimi baby", lead.romanized)
-        assertEquals(listOf("kimi", "baby"), lead.syllables.map { it.romanized })
+        // "baby" needs no reading, and gets none of its own.
+        assertEquals(listOf("kimi", null), lead.syllables.map { it.romanized })
         assertEquals("You, baby", lead.translated)
         val backing = document.lines.first { it.role == LineRole.BACKGROUND }
         assertEquals("うー", backing.text)
@@ -199,6 +200,19 @@ class SpicyLyricsProviderTest {
 
         assertNull(lead.romanized)
         assertEquals(listOf(null, null), lead.syllables.map { it.romanized })
+    }
+
+    /** A script the romanizer cannot read keeps what the API did supply, with the gap left as text. */
+    @Test
+    fun `a script the romanizer does not know keeps its partial readings`() = runBlocking {
+        server.routes["/v1/lyrics/"] = 200 to """{"Status":200,"Body":{"Type":"Syllable","source":"spicy_lyrics","id":"x","ids":{"spotify":"x"},
+            "Content":[{"Type":"Vocal","Lead":{"StartTime":1.0,"EndTime":2.0,
+                "Syllables":[{"Text":"คุณ","StartTime":1.0,"EndTime":1.5,"IsPartOfWord":false,"TransliteratedText":"khun"},
+                             {"Text":"ครับ","StartTime":1.5,"EndTime":2.0,"IsPartOfWord":false}]}}]}}"""
+        val lead = provider.fetch(request.copy(spotifyTrackId = "x"))!!.lines.first { it.role == LineRole.LEAD }
+
+        assertEquals("khun ครับ", lead.romanized)
+        assertEquals(listOf("khun", null), lead.syllables.map { it.romanized })
     }
 
     @Test

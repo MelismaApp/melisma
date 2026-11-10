@@ -3,6 +3,8 @@ package com.melisma.app.lyrics.provider
 import com.melisma.app.lyrics.model.Credit
 import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.lyrics.parse.TtmlParser
+import com.melisma.app.util.Script
+import com.melisma.app.util.detectScript
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
@@ -362,30 +364,31 @@ object SpicyLyricsBody {
     /**
      * Readings keyed to their syllables, the way Apple attaches its romanizations.
      *
-     * A Latin syllable with no reading is its own reading, so 君 baby reads `kimi baby` rather
-     * than `kimi`. A non-Latin syllable with none is a different matter: writing its text in as the
-     * reading would stop the on-device romanizer filling it, so a line with one of those gets no
-     * readings from here at all and the romanizer does the whole line. Nothing when no syllable has
-     * a reading.
+     * A syllable the API left without a reading keeps its own text in the line's reading, unkeyed,
+     * so 君 baby reads `kimi baby` rather than `kimi` and the syllable itself stays unread. The
+     * exception is a syllable in a script the on-device romanizer handles: a reading written in for
+     * it would stop the romanizer filling the gap, so such a line gets no readings from here at all
+     * and the romanizer does the whole line. Nothing when no syllable has a reading.
      */
     private fun readings(key: String, syllables: List<JsonObject>): String {
         fun reading(syllable: JsonObject) = syllable.string("TransliteratedText")?.trim()?.takeIf { it.isNotEmpty() }
         if (syllables.none { reading(it) != null }) return ""
-        if (syllables.any { reading(it) == null && !(it.string("Text")?.isLatin() ?: true) }) return ""
+        if (syllables.any { reading(it) == null && detectScript(it.string("Text").orEmpty()) in ROMANIZABLE }) return ""
         return buildString {
             syllables.forEachIndexed { index, syllable ->
-                val text = reading(syllable)
-                    ?: syllable.string("Text")?.trim()?.takeIf { it.isNotEmpty() }
-                    ?: return@forEachIndexed
-                append("<span for=\"$key.${index + 1}\">${xml(text)}</span>")
+                val reading = reading(syllable)
+                if (reading != null) {
+                    append("<span for=\"$key.${index + 1}\">${xml(reading)}</span>")
+                } else {
+                    append(xml(syllable.string("Text")?.trim().orEmpty()))
+                }
                 if (index < syllables.lastIndex && syllable.flag("IsPartOfWord") != true) append(' ')
             }
         }
     }
 
-    /** Whether every letter is Latin, so the text needs no romanizing. */
-    private fun String.isLatin(): Boolean =
-        all { !it.isLetter() || Character.UnicodeScript.of(it.code) == Character.UnicodeScript.LATIN }
+    /** The scripts the on-device romanizer can read for itself. */
+    private val ROMANIZABLE = setOf(Script.JAPANESE, Script.CHINESE, Script.KOREAN, Script.CYRILLIC, Script.GREEK)
 
     /** The second voice for a line the API pins to the far edge, as Apple does with a duet. */
     private fun agent(item: JsonObject): String = if (item.flag("OppositeAligned") == true) "v2" else "v1"
