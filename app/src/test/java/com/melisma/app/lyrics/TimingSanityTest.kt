@@ -5,9 +5,13 @@ import com.melisma.app.lyrics.model.LyricLine
 import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.lyrics.model.LyricsKind
 import com.melisma.app.lyrics.model.Syllable
-import com.melisma.app.lyrics.parse.RichsyncParser
 import com.melisma.app.lyrics.parse.TtmlParser
 import com.melisma.app.lyrics.parse.YrcParser
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.double
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -29,11 +33,11 @@ import org.robolectric.annotation.Config
 class TimingSanityTest {
 
     /**
-     * 咏春 by 七朵组合 as Musixmatch richsync: one fragment per line, each holding eleven Chinese
-     * characters. Musixmatch calls this word-synced. Across the archive 45 "syllables" covered
-     * this song where NetEase used 467.
+     * 咏春 by 七朵组合 as one source served it: one fragment per line, each holding eleven Chinese
+     * characters, and the whole thing labelled word-synced. Across the archive 45 "syllables"
+     * covered this song where NetEase used 467. Kept in that source's own JSON shape, as recorded.
      */
-    private val coarseRichsync = """
+    private val coarseFragments = """
         [{"ts": 25.23, "te": 27.969, "l": [{"c": "拾一片落葉仰望新舊交疊", "o": 0}], "x": "拾一片落葉仰望新舊交疊"},
          {"ts": 28.61, "te": 31.304, "l": [{"c": "嫩綠自梢頭微微微微露臉", "o": 0}], "x": "嫩綠自梢頭微微微微露臉"},
          {"ts": 31.64, "te": 34.406, "l": [{"c": "被清風忽略花開得猶豫不決", "o": 0}], "x": "被清風忽略花開得猶豫不決"},
@@ -70,14 +74,23 @@ class TimingSanityTest {
         providerId = provider,
     )
 
-    private fun richsync() =
-        document(RichsyncParser.parse(coarseRichsync, 271_000)!!, "musixmatch")
+    /** One syllable per line, spanning the line: what that shape amounts to once read. */
+    private fun coarse() = document(
+        Json.parseToJsonElement(coarseFragments).jsonArray.map { element ->
+            val line = element.jsonObject
+            val start = (line["ts"]!!.jsonPrimitive.double * 1000).toInt()
+            val end = (line["te"]!!.jsonPrimitive.double * 1000).toInt()
+            val text = line["x"]!!.jsonPrimitive.content
+            LyricLine(LineRole.LEAD, start, end, text, syllables = listOf(Syllable(text, start, end)))
+        },
+        "coarse",
+    )
 
     private fun yrc() = document(YrcParser.parse(genuineYrc), "netease")
 
     @Test
     fun `a fragment per line is not word timing, whatever the provider calls it`() {
-        val coarse = richsync()
+        val coarse = coarse()
         // It really does claim the syllable tier: every line has a syllable in it.
         assertEquals(LyricsKind.SYLLABLE, coarse.kind)
         assertTrue(coarse.vocalLines.all { it.syllables.isNotEmpty() })
@@ -96,11 +109,11 @@ class TimingSanityTest {
 
     @Test
     fun `and it wins even ranked last, because the tier is not a preference`() {
-        // The reported complaint, in the one arrangement that proves the point: Musixmatch ranked
-        // first and NetEase last. Real word timings still win, because coarse ones are not word
-        // timings at all. Ranking was never reversed — it was being asked the wrong question.
-        val answers = listOf("musixmatch" to richsync(), "netease" to yrc())
-        val order = listOf("musixmatch", "netease")
+        // The reported complaint, in the one arrangement that proves the point: the coarse source
+        // ranked first and NetEase last. Real word timings still win, because coarse ones are not
+        // word timings at all. Ranking was never reversed — it was being asked the wrong question.
+        val answers = listOf("coarse" to coarse(), "netease" to yrc())
+        val order = listOf("coarse", "netease")
         val bestLines = answers.maxOf { lineCount(it.second) }
 
         assertEquals("netease", pickBest(answers, order, bestLines)?.providerId)

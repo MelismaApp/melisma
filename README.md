@@ -144,8 +144,8 @@ most of a song beats a scrap of one, and **after that your order decides**. Hold
 you get, for every song where two sources answer equally well.
 
 "Word-by-word" is checked rather than taken on trust, because a source can claim it and not mean it.
-A line whose every word arrives in one block is line timing however it is labelled — which is what
-Musixmatch returns for a lot of Chinese and Japanese — and timings that run past the end of the track
+A line whose every word arrives in one block is line timing however it is labelled — which some
+sources return for a lot of Chinese and Japanese — and timings that run past the end of the track
 belong to some other recording. Either one drops a source a rank for that song, so a source that
 really is word-timed wins even if you put it last.
 
@@ -156,13 +156,12 @@ really is word-timed wins even if you put it last.
 | **Spicy Lyrics** | **word** | A free key of your own, one press from [the catalog](https://developers.spicylyrics.org/catalog/melisma) — see [tokens](#optional-tokens). Hand-made community syncs, then Apple Music's and Spotify's lyrics, by the exact recording. |
 | **AMLL TTML Database** | **word** | **Nothing.** Community-timed, hand-made, public domain. |
 | **NetEase Cloud Music** | **word** | **Nothing.** Best for Japanese, Korean and Chinese — ships hand-checked romanization and translation. |
-| **Musixmatch** | **word** | **Nothing.** Most Western music. |
 | **LRCLIB** | line | **Nothing.** Open community database. |
 | **Spotify** | line | An access token — see [tokens](#optional-tokens). |
 | **Apple Music** | **word** | Two tokens. The best data there is: official romanizations and translations. |
 | **Your own cache server** | any | Optional, for putting one server in front of the free ones — [CACHE-SERVER.md](docs/CACHE-SERVER.md). |
 
-**Five sources need no account at all** — the five in the middle — and they are the ones switched on
+**Four sources need no account at all** — the four in the middle — and they are the ones switched on
 when you install it. The rest are there for the tracks the free ones miss.
 
 ## Optional tokens
@@ -173,7 +172,7 @@ Skip this unless something is missing. Pasting your own credentials adds:
 |---|---|
 | **Spotify** | Its own lyrics, the artist's image, and the song's tempo (the full-size cover already comes free from the Spotify app) |
 | **Apple Music** | Word-by-word lyrics with official romanizations and translations |
-| **Musixmatch / NetEase** | Higher rate limits and a wider catalogue |
+| **NetEase** | Higher rate limits and regional catalogues |
 
 They are read out of a browser session you are already signed in to — there is no Melisma
 account and no server in between. They stay in the app's private storage and each is sent only to the

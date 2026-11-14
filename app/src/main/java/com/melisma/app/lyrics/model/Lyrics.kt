@@ -88,7 +88,7 @@ data class LyricLine(
 
     /**
      * Whether the line's one syllable is the line itself: the same text over the same window. A
-     * source that times by line but writes word-timed data, as Musixmatch does, produces these,
+     * source that times by line but writes word-timed data produces these,
      * and they are line-timed lines in all but shape. A genuinely one-word line whose syllable is
      * timed more closely than the line is not one.
      */

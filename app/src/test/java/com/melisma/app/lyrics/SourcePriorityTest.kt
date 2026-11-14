@@ -12,8 +12,7 @@ import org.junit.Test
 /**
  * Whether ranking a source actually does anything.
  *
- * Reported as "Boompala uses Musixmatch even though it is at the bottom of the list — is the priority
- * reversed?" It was not reversed. It was barely consulted: quality was one number combining the timing
+ * Reported as "Boompala uses the source at the bottom of the list — is the priority reversed?" It was not reversed. It was barely consulted: quality was one number combining the timing
  * tier with completeness and bonus points, so the user's order only broke an *exact* tie between two
  * totals, and the fourteen points below the tier almost always broke it first.
  *
@@ -58,7 +57,7 @@ class SourcePriorityTest {
 
     /** The default order, most preferred first. */
     private val order = listOf(
-        "local", "cacheserver", "applemusic", "spotify", "amll", "netease", "musixmatch", "lrclib",
+        "local", "cacheserver", "applemusic", "spotify", "amll", "netease", "lrcred", "lrclib",
     )
 
     private fun pick(vararg answers: Pair<String, LyricsDocument>): String? {
@@ -69,12 +68,12 @@ class SourcePriorityTest {
 
     @Test
     fun `the source ranked higher wins between two equally timed answers`() {
-        // The report. Both word-timed and complete; AMLL is fifth in the order and Musixmatch seventh,
+        // The report. Both word-timed and complete; AMLL is fifth in the order and lrc.red seventh,
         // so AMLL takes it — and used to lose to a single extra line.
         assertEquals(
             "amll",
             pick(
-                "musixmatch" to document("musixmatch", LyricsKind.SYLLABLE, lines = 21),
+                "lrcred" to document("lrcred", LyricsKind.SYLLABLE, lines = 21),
                 "amll" to document("amll", LyricsKind.SYLLABLE, lines = 20),
             ),
         )
@@ -87,7 +86,7 @@ class SourcePriorityTest {
         assertEquals(
             "netease",
             pick(
-                "musixmatch" to document("musixmatch", LyricsKind.SYLLABLE, lines = 40),
+                "lrcred" to document("lrcred", LyricsKind.SYLLABLE, lines = 40),
                 "netease" to document("netease", LyricsKind.SYLLABLE, lines = 25),
             ),
         )
@@ -98,8 +97,8 @@ class SourcePriorityTest {
         assertEquals(
             "amll",
             pick(
-                "musixmatch" to document(
-                    "musixmatch",
+                "lrcred" to document(
+                    "lrcred",
                     LyricsKind.SYLLABLE,
                     lines = 20,
                     romanized = true,
@@ -155,14 +154,14 @@ class SourcePriorityTest {
         // The whole point of the setting, and the thing that was not true before: moving a source up
         // has to change which lyrics appear.
         val answers = listOf(
-            "musixmatch" to document("musixmatch", LyricsKind.SYLLABLE, lines = 20),
+            "lrcred" to document("lrcred", LyricsKind.SYLLABLE, lines = 20),
             "amll" to document("amll", LyricsKind.SYLLABLE, lines = 20),
         )
         val best = answers.maxOf { (_, document) -> lineCount(document) }
 
         assertEquals("amll", pickBest(answers, order, best)?.providerId)
-        val musixmatchFirst = listOf("musixmatch") + order.filterNot { it == "musixmatch" }
-        assertEquals("musixmatch", pickBest(answers, musixmatchFirst, best)?.providerId)
+        val lrcredFirst = listOf("lrcred") + order.filterNot { it == "lrcred" }
+        assertEquals("lrcred", pickBest(answers, lrcredFirst, best)?.providerId)
     }
 
     /**
@@ -175,7 +174,7 @@ class SourcePriorityTest {
      */
     @Test
     fun `an equally good answer from a higher-ranked source replaces the cached one`() {
-        val cached = document("musixmatch", LyricsKind.SYLLABLE, lines = 20)
+        val cached = document("lrcred", LyricsKind.SYLLABLE, lines = 20)
         val arrived = document("amll", LyricsKind.SYLLABLE, lines = 20)
         // The user has since put AMLL first.
         val reordered = listOf("amll") + order.filterNot { it == "amll" }
@@ -183,7 +182,7 @@ class SourcePriorityTest {
         assertEquals(
             "amll",
             pickBest(
-                listOf("musixmatch" to cached, "amll" to arrived),
+                listOf("lrcred" to cached, "amll" to arrived),
                 reordered,
                 bestLines = 20,
             )?.providerId,

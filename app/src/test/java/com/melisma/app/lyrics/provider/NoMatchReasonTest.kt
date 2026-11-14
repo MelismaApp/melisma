@@ -35,14 +35,12 @@ class NoMatchReasonTest {
         override val lrcLibBaseUrl = Settings.DEFAULT_LRCLIB_URL
         override val amllBaseUrl = Settings.DEFAULT_AMLL_URL
         override val neteaseCookie: String? = null
-        override val musixmatchUserToken: String? = null
         override val appleDeveloperToken: String? = null
         override val appleMusicUserToken: String? = null
         override val appleStorefront = "us"
         override val spicyLyricsKey: String? = null
         override val cacheServerUrl: String? = null
         override val cacheServerKey: String? = null
-        override var musixmatchGuestToken: String? = null
         override var cachedSpotifyToken: String? = null
         override var cachedSpotifyTokenExpiresAt = 0L
     }
@@ -256,7 +254,7 @@ class NoMatchReasonTest {
         // token that gets refused is replaced and the same lookup asks again, so the answer arrives
         // on the attempt the user is actually watching.
         val lyrics = """
-            {"lyrics":{"syncType":"LINE_SYNCED","providerDisplayName":"Musixmatch",
+            {"lyrics":{"syncType":"LINE_SYNCED","providerDisplayName":"Spotify",
              "lines":[{"startTimeMs":"1000","words":"Yeah","endTimeMs":"0"},
                       {"startTimeMs":"2000","words":"I said ooh","endTimeMs":"0"}]}}
         """.trimIndent()

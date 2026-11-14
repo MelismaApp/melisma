@@ -30,7 +30,7 @@ import javax.crypto.spec.SecretKeySpec
  * sources are on, how long to wait before standing down.
  *
  * The credentials are a different question and get a different answer. They are live keys to the
- * user's own Spotify, Apple and Musixmatch accounts, and the app's promise is that they stay on the
+ * user's own Spotify, Apple, Spicy Lyrics and NetEase accounts, and the app's promise is that they stay on the
  * device — which is why they live in a preferences file excluded from Android's backup. Writing them
  * into a plain file in Downloads would undo that quietly, for the convenience of one restore. So they
  * are opt-in, and when opted into they are encrypted under a passphrase the user chooses: AES-256-GCM

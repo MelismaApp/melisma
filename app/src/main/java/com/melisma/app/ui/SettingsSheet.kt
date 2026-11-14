@@ -182,11 +182,6 @@ private val PROVIDER_INFO = mapOf(
         "NetEase Cloud Music",
         "Word-by-word plus hand-checked romanization and translation. Best for Japanese, Korean and Chinese.",
     ),
-    "musixmatch" to ProviderInfo(
-        "Musixmatch",
-        "Word-by-word for most Western music. No account needed; a signed-in token avoids " +
-            "the anonymous rate limit.",
-    ),
     "lrclib" to ProviderInfo(
         "LRCLIB",
         "Open community database, no account needed.",
@@ -1102,23 +1097,6 @@ fun SettingsSheet(
                     subtitle = "Melisma's page in the Spicy Lyrics catalog",
                     accent = accent,
                     onClick = { openUrl(context, SpicyLyricsProvider.CATALOG_URL) },
-                )
-
-                SecretField(
-                    label = "Musixmatch user token",
-                    help = "Optional — the app mints an anonymous token for itself, which is " +
-                        "rate-limited per network. A signed-in one is not. The desktop app " +
-                        "this used to come from is discontinued, so take it from the site: " +
-                        "sign in at musixmatch.com, then copy the whole musixmatchUserToken " +
-                        "cookie from your browser's developer tools and paste it here. The " +
-                        "cookie holds one token per Musixmatch client and only some of them " +
-                        "work, so paste the whole thing rather than picking one — it finds the " +
-                        "right one. A bare token works too if you know which client it belongs " +
-                        "to. Anything this endpoint rejects is ignored rather than allowed to " +
-                        "break the source.",
-                    value = settings.musixmatchUserToken.orEmpty(),
-                    accent = accent,
-                    onChange = { store.updateMusixmatchUserToken(it) },
                 )
 
                 SecretField(
@@ -2110,8 +2088,8 @@ private fun CreditsPanel(accent: Color, onBack: () -> Unit) {
     )
     Credit(
         title = "Lyrics sources",
-        body = "The AMLL TTML Database, LRCLIB, NetEase Cloud Music, Musixmatch, Spotify " +
-            "and Apple Music. None are affiliated with this app. Lyrics belong to their " +
+        body = "The AMLL TTML Database, lrc.red, LRCLIB, NetEase Cloud Music, Spicy Lyrics, " +
+            "Spotify and Apple Music. None are affiliated with this app. Lyrics belong to their " +
             "writers and publishers; nothing is stored anywhere but this device's own cache.",
         link = null,
         accent = accent,
@@ -2832,7 +2810,7 @@ private fun SettingsBackupRows(container: AppContainer, accent: Color) {
     )
     Help(
         "Off, the file holds settings only and is plain readable JSON — safe to keep anywhere, and " +
-            "it restores with no passphrase.\n\nOn, your Spotify, Apple, Musixmatch and NetEase " +
+            "it restores with no passphrase.\n\nOn, your Spotify, Apple, Spicy Lyrics and NetEase " +
             "credentials go in as well, encrypted with AES-256 under a key stretched from your " +
             "passphrase. They are otherwise deliberately kept out of Android's own backup, which is " +
             "a promise this would break if it wrote them in the clear. Lose the passphrase and that " +

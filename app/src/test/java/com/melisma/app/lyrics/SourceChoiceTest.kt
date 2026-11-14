@@ -86,7 +86,7 @@ class SourceChoiceTest {
 
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private lateinit var settings: SettingsStore
-    private val word = Fake("musixmatch", "Musixmatch", null).also { it.document = document(it, LyricsKind.SYLLABLE) }
+    private val word = Fake("amll", "AMLL", null).also { it.document = document(it, LyricsKind.SYLLABLE) }
     private val line = Fake("lrclib", "LRCLIB", null).also { it.document = document(it, LyricsKind.LINE) }
     /** Whatever a lookup threw, so a test fails with the cause rather than a timeout. */
     private var failure: Throwable? = null
@@ -165,7 +165,7 @@ class SourceChoiceTest {
     fun `the ranking's answer shows until a source is chosen, and again when the choice is cleared`() = runBlocking {
         val repository = repository()
         repository.setTrack(track)
-        assertEquals(LyricsKind.SYLLABLE, repository.shown("musixmatch").kind)
+        assertEquals(LyricsKind.SYLLABLE, repository.shown("amll").kind)
 
         repository.chooseSource(track.cacheKey, "lrclib")
         assertEquals(LyricsKind.LINE, repository.shown("lrclib").kind)
@@ -174,7 +174,7 @@ class SourceChoiceTest {
         // Back to the ranking's answer from the cache: nobody is asked again.
         val asked = word.fetches
         repository.chooseSource(track.cacheKey, null)
-        repository.shown("musixmatch")
+        repository.shown("amll")
         assertEquals(asked, word.fetches)
         assertNull(settings.current.sourceChoices[track.cacheKey])
     }
@@ -183,7 +183,7 @@ class SourceChoiceTest {
     fun `the choice is remembered for the next play`() = runBlocking {
         val first = repository()
         first.setTrack(track)
-        first.shown("musixmatch")
+        first.shown("amll")
         first.chooseSource(track.cacheKey, "lrclib")
         first.shown("lrclib")
 
@@ -199,7 +199,7 @@ class SourceChoiceTest {
     fun `looking the track up again asks the chosen source afresh`() = runBlocking {
         val repository = repository()
         repository.setTrack(track)
-        repository.shown("musixmatch")
+        repository.shown("amll")
         repository.chooseSource(track.cacheKey, "lrclib")
         repository.shown("lrclib")
 
@@ -213,7 +213,7 @@ class SourceChoiceTest {
     fun `a choice for a track that is not the one being looked up is only remembered`() = runBlocking {
         val repository = repository()
         repository.setTrack(track)
-        repository.shown("musixmatch")
+        repository.shown("amll")
 
         val other = TrackInfo(title = "Ditto", artist = "NewJeans", album = "", durationMs = 185_000)
         val asked = line.fetches
@@ -231,7 +231,7 @@ class SourceChoiceTest {
         line.document = null
         val repository = repository()
         repository.setTrack(track)
-        repository.shown("musixmatch")
+        repository.shown("amll")
 
         val lineAsked = line.fetches
         val wordAsked = word.fetches
@@ -239,7 +239,7 @@ class SourceChoiceTest {
         // Asked once, not again by the ranking, then the ranking's answer again — and the choice is
         // kept, so the row can say why.
         eventually("asking LRCLIB") { line.fetches == lineAsked + 1 }
-        assertEquals("musixmatch", repository.shown("musixmatch").providerId)
+        assertEquals("amll", repository.shown("amll").providerId)
         assertEquals("lrclib", settings.current.sourceChoices[track.cacheKey])
         assertEquals(lineAsked + 1, line.fetches)
         assertEquals(wordAsked, word.fetches)
@@ -250,7 +250,7 @@ class SourceChoiceTest {
     fun `a chosen source that stops having the track does not come back from its cache`() = runBlocking {
         val first = repository()
         first.setTrack(track)
-        first.shown("musixmatch")
+        first.shown("amll")
         first.chooseSource(track.cacheKey, "lrclib")
         first.shown("lrclib")
 
@@ -259,11 +259,11 @@ class SourceChoiceTest {
         val asked = line.fetches
         first.retry()
         eventually("asking LRCLIB again") { line.fetches == asked + 1 }
-        first.shown("musixmatch")
+        first.shown("amll")
 
         // The next play must not show the words it used to have.
         val next = repository()
         next.setTrack(track)
-        assertEquals("musixmatch", next.shown("musixmatch").providerId)
+        assertEquals("amll", next.shown("amll").providerId)
     }
 }

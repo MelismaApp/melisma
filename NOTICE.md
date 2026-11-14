@@ -163,9 +163,8 @@ extensions do:
   read their guidelines before pointing anything high-volume at it.
 - **NetEase Cloud Music** — public web endpoints. Also the source of the hand-checked
   romanizations and translations that make East Asian tracks work well.
-- **Musixmatch** — via the anonymous token the desktop web player issues. Undocumented.
-- **Spotify** (`color-lyrics`) — the lyrics the Spotify app shows, Musixmatch-provided.
-  Undocumented, and needs your own signed-in cookie.
+- **Spotify** (`color-lyrics`) — the lyrics the Spotify app shows. Undocumented, and needs
+  your own signed-in cookie.
 - **Apple Music** — official syllable-level lyrics, romanizations and translations. Needs
   your own tokens and an active subscription.
 

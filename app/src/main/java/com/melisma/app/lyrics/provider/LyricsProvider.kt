@@ -194,9 +194,6 @@ interface ProviderCredentials {
     /** Optional: raises NetEase's per-IP limits and unlocks some regional catalogues. */
     val neteaseCookie: String?
 
-    /** Optional: a real Musixmatch token beats the anonymous one for coverage. */
-    val musixmatchUserToken: String?
-
     /** Apple Music needs both, plus an active subscription on the account. */
     val appleDeveloperToken: String?
     val appleMusicUserToken: String?
@@ -215,9 +212,6 @@ interface ProviderCredentials {
      * is a real one: the endpoints it opens are alive and answer to it.
      */
     val spotifyWebToken: String?
-
-    /** Anonymous Musixmatch token, cached between launches. */
-    var musixmatchGuestToken: String?
 
     /** Short-lived Spotify web token minted from [spDcCookie]. */
     var cachedSpotifyToken: String?

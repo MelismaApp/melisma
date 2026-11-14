@@ -27,10 +27,8 @@ class ProviderConfigurationTest {
         override val neteaseBaseUrl = Settings.DEFAULT_NETEASE_URL
         override val amllBaseUrl = Settings.DEFAULT_AMLL_URL
         override val neteaseCookie: String? = null
-        override val musixmatchUserToken: String? = null
         override val appleStorefront = "us"
         override val spicyLyricsKey: String? = null
-        override var musixmatchGuestToken: String? = null
         override var cachedSpotifyToken: String? = null
         override var cachedSpotifyTokenExpiresAt = 0L
     }
@@ -78,8 +76,6 @@ class ProviderConfigurationTest {
         val credentials = FakeCredentials()
         assertTrue(LrcLibProvider(credentials).isConfigured)
         assertTrue(NeteaseProvider(credentials).isConfigured)
-        // Musixmatch can mint an anonymous token for itself, so it needs nothing either.
-        assertTrue(MusixmatchProvider(credentials).isConfigured)
         // The community database is public and needs no account at all.
         assertTrue(AmllTtmlProvider(credentials).isConfigured)
     }
@@ -89,7 +85,6 @@ class ProviderConfigurationTest {
         val credentials = FakeCredentials()
         assertTrue(AppleMusicProvider(credentials).canBeWordSynced)
         assertTrue(NeteaseProvider(credentials).canBeWordSynced)
-        assertTrue(MusixmatchProvider(credentials).canBeWordSynced)
         assertTrue(AmllTtmlProvider(credentials).canBeWordSynced)
         // Spotify's colour-lyrics endpoint is line-synced only.
         assertFalse(SpotifyLyricsProvider(credentials).canBeWordSynced)
@@ -105,7 +100,6 @@ class ProviderConfigurationTest {
             AmllTtmlProvider(credentials).id,
             SpotifyLyricsProvider(credentials).id,
             NeteaseProvider(credentials).id,
-            MusixmatchProvider(credentials).id,
             LrcLibProvider(credentials).id,
             LrcRedProvider().id,
             SpicyLyricsProvider(credentials).id,
@@ -130,7 +124,6 @@ class ProviderConfigurationTest {
             SpotifyLyricsProvider(credentials),
             AmllTtmlProvider(credentials),
             NeteaseProvider(credentials),
-            MusixmatchProvider(credentials),
             LrcLibProvider(credentials),
         )
         for (provider in implementations) {

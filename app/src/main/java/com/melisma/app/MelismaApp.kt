@@ -14,7 +14,6 @@ import com.melisma.app.lyrics.provider.LocalLyricsStore
 import com.melisma.app.lyrics.provider.LrcLibProvider
 import com.melisma.app.lyrics.provider.LrcRedProvider
 import com.melisma.app.lyrics.provider.LyricsProvider
-import com.melisma.app.lyrics.provider.MusixmatchProvider
 import com.melisma.app.lyrics.provider.NeteaseProvider
 import com.melisma.app.lyrics.provider.SpotifyBrowserToken
 import com.melisma.app.lyrics.provider.SpotifyWebToken
@@ -123,7 +122,6 @@ class AppContainer(context: Context) {
         AmllTtmlProvider(settings),
         SpotifyLyricsProvider(settings),
         NeteaseProvider(settings),
-        MusixmatchProvider(settings),
         LrcLibProvider(settings),
     )
 
@@ -304,6 +302,15 @@ class AppContainer(context: Context) {
 
     init {
         scope.launch { watchForIdle() }
+
+        // Words from a source the app no longer has are not shown from the cache either. Once,
+        // because after the sweep nothing can put them back.
+        if (!settings.isDone(SettingsStore.KEY_MUSIXMATCH_PURGED)) {
+            scope.launch {
+                cache.forget("musixmatch")
+                settings.markDone(SettingsStore.KEY_MUSIXMATCH_PURGED)
+            }
+        }
 
         // The only place with both a Context and the settings. Installed unconditionally; whether it
         // ever runs is decided per call by `spotifyBrowserTokenEnabled`.

@@ -7,7 +7,7 @@ import com.melisma.app.lyrics.model.LyricsKind
 /**
  * Whether a document's timings agree with the song they claim to describe.
  *
- * Reported as "Musixmatch timing always seems worse — the Apple one should beat it at least".
+ * Reported as "one source's timing always seems worse — the Apple one should beat it at least".
  * Ranking alone could not fix that, because both answers called themselves word-synced and the
  * tier is the one thing a preference may not overrule. The question is whether the claim is true.
  *
@@ -19,11 +19,11 @@ import com.melisma.app.lyrics.model.LyricsKind
  *
  * Two things the archive showed, and one it disproved:
  *
- *  - **A fragment per line, called word-sync.** For Chinese and Japanese, Musixmatch richsync
- *    routinely returns one fragment holding an entire line: 咏春 came back as 45 "syllables" of
- *    ten characters each where NetEase had 467 of one character, and Lemon as 47 against Apple's
+ *  - **A fragment per line, called word-sync.** For Chinese and Japanese, one source's word-level
+ *    format routinely returned one fragment holding an entire line: 咏春 came back as 45 "syllables"
+ *    of ten characters each where NetEase had 467 of one character, and Lemon as 47 against Apple's
  *    273 and AMLL's 520. Nothing is out of order and nothing is missing — every line simply
- *    highlights in one block, which is line-sync wearing a word-sync hat. 18 of 135 Musixmatch
+ *    highlights in one block, which is line-sync wearing a word-sync hat. 18 of 135 of that source's
  *    documents were more than half made of such lines, against 0 of 80 from NetEase, 0 of 12
  *    from AMLL, and 1 of 157 from Apple. See [hasWordTimings].
  *

@@ -23,12 +23,12 @@ class NewDefaultSourceTest {
 
     @Test
     fun `an install from before the source existed gets it switched on, and keeps its own choices`() {
-        // Written by a version without lrc.red, with Musixmatch deliberately switched off.
-        prefs.edit().putStringSet(SettingsStore.KEY_PROVIDERS_ON, setOf("local", "cacheserver", "spotify", "amll", "netease", "lrclib")).commit()
+        // Written by a version without lrc.red, with NetEase deliberately switched off.
+        prefs.edit().putStringSet(SettingsStore.KEY_PROVIDERS_ON, setOf("local", "cacheserver", "spotify", "amll", "lrclib")).commit()
 
         val enabled = SettingsStore(context).current.enabledProviders
         assertTrue(enabled.toString(), "lrcred" in enabled)
-        assertFalse(enabled.toString(), "musixmatch" in enabled)
+        assertFalse(enabled.toString(), "netease" in enabled)
     }
 
     @Test

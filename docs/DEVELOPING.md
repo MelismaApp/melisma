@@ -122,7 +122,7 @@ a background collector calling `republish()` while a session callback inserted i
   a case that never happens. Debug builds keep both.
 - **Right-to-left lyrics** animate per word, not per syllable: splitting an Arabic or Hebrew run into
   syllables breaks the letter joins.
-- **Musixmatch, Spotify and Apple Music** are undocumented endpoints, treated as optional throughout —
+- **Spotify and Apple Music** are undocumented endpoints, treated as optional throughout —
   a failure drops the provider, never the app.
 - **Depth blur** relies on drawing text as transparent glyphs plus a shadow layer. If it renders oddly
   on some device, *Depth blur* in Settings turns it off.

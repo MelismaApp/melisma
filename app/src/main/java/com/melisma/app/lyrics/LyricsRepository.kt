@@ -364,7 +364,7 @@ class LyricsRepository(
             // Said out loud, because this was a button with no visible effect. Dropping the cached
             // answer and asking again usually produces the same words from the same source, so the
             // screen is identical and the only honest report is a sentence naming what answered. It
-            // is also the answer to "why does this track keep coming from Musixmatch".
+            // is also the answer to "why does this track keep coming from the same source".
             announce()
         }
     }
@@ -1208,7 +1208,7 @@ class LyricsRepository(
  * 4. **How complete exactly, and does it bring its own romanization?** Only as a last resort, between
  *    sources the user never expressed an opinion about.
  *
- * Reported as "Musixmatch is at the bottom of the list and still wins — is the list reversed?" It was
+ * Reported as "a source at the bottom of the list still wins — is the list reversed?" It was
  * not reversed. It was barely consulted: the score used to be one number combining the tier with
  * completeness and extras, so the user's order only broke an *exact* tie between two totals, and the
  * fourteen points of completeness and extras almost always broke it first. A source at the bottom of

@@ -113,7 +113,7 @@ class PlainLineFuriganaTest {
 
     @Test
     fun `a word-timed song's line that arrived as one block is read like a plain line`() {
-        // Musixmatch times some lines as a single syllable; one reading over the whole line is no
+        // Some sources time a line as a single syllable; one reading over the whole line is no
         // gloss, so the readings go against the text and the line is placed piece by piece.
         val block = line().copy(syllables = listOf(com.melisma.app.lyrics.model.Syllable("夜に駆ける", 1_000, 4_000)))
         val units = layout(block, kind = LyricsKind.SYLLABLE).units

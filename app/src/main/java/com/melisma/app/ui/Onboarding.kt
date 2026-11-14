@@ -119,7 +119,8 @@ fun WelcomeSheet(
                     "•  AMLL TTML Database — community-timed word-by-word lyrics, made by " +
                     "hand and released to the public domain\n" +
                     "•  LRCLIB — open community database\n" +
-                    "•  Musixmatch — word-by-word for most Western music\n" +
+                    "•  lrc.red — Apple Music's word-by-word lyrics, romanizations and " +
+                    "translations, by the exact recording\n" +
                     "•  NetEase — word-by-word for East Asian music, with hand-checked " +
                     "romanization and translation\n\nTranslations that come with the lyrics " +
                     "are shown as they are. Translating into a language of your own choosing " +
@@ -142,10 +143,9 @@ fun WelcomeSheet(
                     "•  Apple Music developer + user token — the best data there is: " +
                     "syllable timings with official romanizations and translations. Needs a " +
                     "subscription.\n\n" +
-                    "•  Musixmatch cookie — optional. It works without one, using a token it " +
-                    "mints for itself, but that is rate-limited per network. Paste the " +
-                    "musixmatchUserToken cookie from a signed-in musixmatch.com session and " +
-                    "that limit does not apply.\n\n" +
+                    "•  Spicy Lyrics client key — free, one press on Melisma's page in their " +
+                    "catalog. Hand-made community syncs, credited to the people who made " +
+                    "them.\n\n" +
                     "Skip all of them and the app still works. A source with no token stays " +
                     "quiet rather than failing.",
                 accent = accent,

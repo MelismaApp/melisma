@@ -359,7 +359,6 @@ data class Settings(
 
     // ---- credentials and endpoints ---------------------------------------
     val spDcCookie: String? = null,
-    val musixmatchUserToken: String? = null,
     val lrcLibBaseUrl: String = DEFAULT_LRCLIB_URL,
     val neteaseBaseUrl: String = DEFAULT_NETEASE_URL,
     val amllBaseUrl: String = DEFAULT_AMLL_URL,
@@ -517,7 +516,7 @@ data class Settings(
             // Spicy Lyrics answers by Spotify id or ISRC too, and puts hand-made community syncs
             // ahead of Apple's and Spotify's own, so it goes before them.
             "local", "cacheserver", "spicylyrics", "applemusic", "lrcred", "spotify", "amll", "netease",
-            "musixmatch", "lrclib",
+            "lrclib",
         )
 
         /**
@@ -534,10 +533,7 @@ data class Settings(
          * is a paid membership away.
          */
         val DEFAULT_ENABLED_PROVIDERS =
-            setOf(
-                "local", "cacheserver", "spicylyrics", "spotify", "lrcred", "amll", "netease", "musixmatch",
-                "lrclib",
-            )
+            setOf("local", "cacheserver", "spicylyrics", "spotify", "lrcred", "amll", "netease", "lrclib")
 
         /**
          * Default-on sources added after installs started keeping their own list. An install
@@ -580,6 +576,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
     init {
         adoptPreRenameFiles(context)
         migrateSecrets()
+        retireSecrets()
         offerNewDefaults()
     }
 
@@ -690,6 +687,19 @@ class SettingsStore(context: Context) : ProviderCredentials {
      * Anything already carried into a backup is beyond reach here; this stops it happening
      * again, and re-entering a cookie is a smaller cost than leaving one in the cloud.
      */
+    /** Credentials for sources the app no longer has are deleted, wherever an old version left them. */
+    private fun retireSecrets() {
+        val inPrefs = RETIRED_SECRET_KEYS.filter { prefs.contains(it) }
+        val inSecrets = RETIRED_SECRET_KEYS.filter { secrets.contains(it) }
+        if (inPrefs.isNotEmpty()) prefs.edit().apply { inPrefs.forEach { remove(it) } }.commit()
+        if (inSecrets.isNotEmpty()) secrets.edit().apply { inSecrets.forEach { remove(it) } }.commit()
+    }
+
+    /** Whether the one-time clean-up named by [key] has run. */
+    fun isDone(key: String): Boolean = prefs.getBoolean(key, false)
+
+    fun markDone(key: String) = edit { putBoolean(key, true) }
+
     private fun migrateSecrets() {
         val present = SECRET_KEYS.filter { prefs.contains(it) }
         if (present.isEmpty()) return
@@ -773,6 +783,7 @@ class SettingsStore(context: Context) : ProviderCredentials {
         prefetchNextTrack = prefs.getBoolean(KEY_PREFETCH_NEXT, true),
         identifyTracks = prefs.getBoolean(KEY_IDENTIFY_TRACKS, true),
         enabledProviders = prefs.getStringSet(KEY_PROVIDERS_ON, null)
+            ?.filter { it in Settings.DEFAULT_PROVIDER_ORDER }?.toSet()
             ?: Settings.DEFAULT_ENABLED_PROVIDERS,
         ignoredPlayers = prefs.getStringSet(KEY_PLAYERS_IGNORED, null).orEmpty(),
         seenPlayers = prefs.getStringSet(KEY_PLAYERS_SEEN, null).orEmpty()
@@ -785,11 +796,13 @@ class SettingsStore(context: Context) : ProviderCredentials {
             .toMap(),
         providerOrder = prefs.getString(KEY_PROVIDER_ORDER, null)
             ?.split(',')?.filter { it.isNotBlank() }
+            ?.filter { it in Settings.DEFAULT_PROVIDER_ORDER }
             ?.let { stored ->
                 // Keep any provider added in a later version, even if the stored order predates it.
                 // Appended at the end, because a source nobody has ranked should not outrank the
                 // ones they have — except the cache server, whose whole purpose is to answer before
-                // anything goes to the network. Last would make it pointless.
+                // anything goes to the network. Last would make it pointless. A source removed in a
+                // later version is dropped on the way in, so no row is drawn for it.
                 val added = Settings.DEFAULT_PROVIDER_ORDER.filterNot { it in stored }
                 val front = added.filter { it == "cacheserver" }
                 front + stored + added.filterNot { it == "cacheserver" }
@@ -797,7 +810,6 @@ class SettingsStore(context: Context) : ProviderCredentials {
             ?: Settings.DEFAULT_PROVIDER_ORDER,
 
         spDcCookie = secrets.trimmed(KEY_SP_DC),
-        musixmatchUserToken = secrets.trimmed(KEY_MXM_USER_TOKEN),
         lrcLibBaseUrl = prefs.trimmed(KEY_LRCLIB_URL) ?: Settings.DEFAULT_LRCLIB_URL,
         neteaseBaseUrl = prefs.trimmed(KEY_NETEASE_URL) ?: Settings.DEFAULT_NETEASE_URL,
         amllBaseUrl = prefs.trimmed(KEY_AMLL_URL) ?: Settings.DEFAULT_AMLL_URL,
@@ -1076,12 +1088,6 @@ class SettingsStore(context: Context) : ProviderCredentials {
         remove(KEY_SP_TOKEN_EXPIRY)
     }
 
-    fun updateMusixmatchUserToken(value: String?) = editSecrets {
-        putString(KEY_MXM_USER_TOKEN, value?.trim())
-        // Stop using the anonymous token so the user's own one takes effect at once.
-        remove(KEY_MXM_GUEST_TOKEN)
-    }
-
     fun updateLrcLibBaseUrl(value: String?) = edit {
         putString(KEY_LRCLIB_URL, value?.trim()?.trimEnd('/'))
     }
@@ -1202,17 +1208,10 @@ class SettingsStore(context: Context) : ProviderCredentials {
     override val cacheServerKey: String?
         get() = current.cacheServerKey?.takeIf { current.developerMode }
     override val neteaseCookie: String? get() = current.neteaseCookie
-    override val musixmatchUserToken: String? get() = current.musixmatchUserToken
     override val appleDeveloperToken: String? get() = current.appleDeveloperToken
     override val appleMusicUserToken: String? get() = current.appleMusicUserToken
     override val appleStorefront: String get() = current.appleStorefront
     override val spicyLyricsKey: String? get() = current.spicyLyricsKey
-
-    override var musixmatchGuestToken: String?
-        get() = secrets.getString(KEY_MXM_GUEST_TOKEN, null)
-        set(value) {
-            secrets.edit().putString(KEY_MXM_GUEST_TOKEN, value).apply()
-        }
 
     override var spDcCookie: String?
         get() = secrets.getString(KEY_SP_DC, null)
@@ -1313,7 +1312,6 @@ class SettingsStore(context: Context) : ProviderCredentials {
         /** Everything that authenticates as the user. Nothing here may be backed up. */
         val SECRET_KEYS = listOf(
             "sp_dc", "sp_access_token", "sp_access_token_expiry",
-            "mxm_token", "mxm_user_token",
             "netease_cookie", "apple_dev_token", "apple_user_token",
             "cache_server_key", "sp_web_token", "spicy_key",
         )
@@ -1321,8 +1319,14 @@ class SettingsStore(context: Context) : ProviderCredentials {
         const val KEY_SP_DC = "sp_dc"
         const val KEY_SP_TOKEN = "sp_access_token"
         const val KEY_SP_TOKEN_EXPIRY = "sp_access_token_expiry"
-        const val KEY_MXM_GUEST_TOKEN = "mxm_token"
-        const val KEY_MXM_USER_TOKEN = "mxm_user_token"
+        /**
+         * Credentials for a source the app no longer has. Deleted from both files on every start,
+         * so a copy left by an earlier version does not outlive the integration it belonged to.
+         */
+        val RETIRED_SECRET_KEYS = listOf("mxm_token", "mxm_user_token")
+
+        /** Set once the lyrics cache has been swept of that source's words; see MelismaApp. */
+        const val KEY_MUSIXMATCH_PURGED = "musixmatch_purged"
         const val KEY_LRCLIB_URL = "lrclib_url"
         const val KEY_NETEASE_URL = "netease_url"
         const val KEY_AMLL_URL = "amll_url"

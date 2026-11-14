@@ -130,6 +130,22 @@ class LyricsCache(context: Context) {
         Unit
     }
 
+    /**
+     * Drop every cached document that came from [providerId], and return how many went.
+     *
+     * For a source that is no longer part of the app: its words must not keep being shown from the
+     * cache for a month after the integration is gone. What other sources said about those tracks
+     * is kept, so the next lookup asks only where it needs to.
+     */
+    suspend fun forget(providerId: String): Int = withContext(Dispatchers.IO) {
+        var removed = 0
+        directory.listFiles()?.forEach { file ->
+            val entry = runCatching { json.decodeFromString<Entry>(file.readText()) }.getOrNull()
+            if (entry?.document?.providerId == providerId && file.delete()) removed++
+        }
+        removed
+    }
+
     suspend fun clear() = withContext(Dispatchers.IO) {
         directory.listFiles()?.forEach { it.delete() }
         Unit

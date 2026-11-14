@@ -14,7 +14,6 @@ to. There is no Melisma account and no server in between.
 | The lyrics the Spotify app shows | [Spotify access token](#spotify) | ~1 hour |
 | Bigger cover art, artist images, tempo | [Spotify access token](#spotify) | ~1 hour |
 | Apple's word-by-word lyrics and translations | [Apple developer + user token](#apple-music) | months / session |
-| A wider Musixmatch catalogue | [Musixmatch token](#musixmatch) | months |
 | Regional NetEase catalogues | [NetEase cookie](#netease) | months |
 
 Where they go: **Settings → Tokens and endpoints**, except the Spotify access token, which lives
@@ -124,19 +123,6 @@ works here. A secret key (`sl_sk_`) belongs on a server and the app refuses one 
 
 Community syncs are credited under the lyrics to the people who made and uploaded them, and tapping
 a name opens their page; that credit stays even with credits switched off, as the API's terms ask.
-
-## Musixmatch
-
-**Gives you:** a wider catalogue, and no shared rate limit. Musixmatch works with nothing pasted —
-the app mints an anonymous token for itself — so this only matters if you hit its limits.
-
-1. Sign in at <https://www.musixmatch.com>.
-2. Developer tools → **Application → Cookies → `https://www.musixmatch.com`**.
-3. Copy the value of `musixmatchUserToken`.
-4. Paste into **Settings → Tokens and endpoints → Musixmatch user token**.
-
-That cookie holds a small JSON object rather than a bare token. Paste the whole thing; the app pulls
-the token out itself, whichever of the several it contains turns out to work.
 
 ## NetEase
 

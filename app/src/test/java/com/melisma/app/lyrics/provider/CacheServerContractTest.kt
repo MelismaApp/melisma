@@ -34,13 +34,11 @@ class CacheServerContractTest {
         override val amllBaseUrl = Settings.DEFAULT_AMLL_URL
         override val spotifyWebToken: String? = null
         override val neteaseCookie: String? = null
-        override val musixmatchUserToken: String? = null
         override val appleDeveloperToken: String? = null
         override val appleMusicUserToken: String? = null
         override val appleStorefront = "us"
         override val spicyLyricsKey: String? = null
         override var spDcCookie: String? = null
-        override var musixmatchGuestToken: String? = null
         override var cachedSpotifyToken: String? = null
         override var cachedSpotifyTokenExpiresAt = 0L
     }

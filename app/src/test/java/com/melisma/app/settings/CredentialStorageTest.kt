@@ -54,12 +54,10 @@ class CredentialStorageTest {
     fun `every credential lands in the excluded file`() {
         val store = SettingsStore(context)
         store.updateSpDcCookie("cookie")
-        store.updateMusixmatchUserToken("mxm")
         store.updateNeteaseCookie("ne")
         store.updateAppleDeveloperToken("jwt")
         store.updateAppleMusicUserToken("user")
         store.updateCacheServerKey("bearer-key")
-        store.musixmatchGuestToken = "guest"
         store.cachedSpotifyToken = "access"
         store.cachedSpotifyTokenExpiresAt = 123L
 

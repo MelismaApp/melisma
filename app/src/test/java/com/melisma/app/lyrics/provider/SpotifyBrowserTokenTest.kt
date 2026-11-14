@@ -37,14 +37,12 @@ class SpotifyBrowserTokenTest {
         override val neteaseBaseUrl = Settings.DEFAULT_NETEASE_URL
         override val amllBaseUrl = Settings.DEFAULT_AMLL_URL
         override val neteaseCookie: String? = null
-        override val musixmatchUserToken: String? = null
         override val appleDeveloperToken: String? = null
         override val appleMusicUserToken: String? = null
         override val appleStorefront = "us"
         override val spicyLyricsKey: String? = null
         override val cacheServerUrl: String? = null
         override val cacheServerKey: String? = null
-        override var musixmatchGuestToken: String? = null
         override var cachedSpotifyToken: String? = null
         override var cachedSpotifyTokenExpiresAt = 0L
     }
