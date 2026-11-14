@@ -93,4 +93,21 @@ class RetiredSourceTest {
         // Nothing left to sweep: the second pass finds nothing and harms nothing.
         assertEquals(0, cache.forget("musixmatch"))
     }
+
+    /**
+     * The sweep runs in the background, and a lookup can get to a track before it does. Whatever is
+     * read first, its words are not shown, and reading them is what removes them.
+     */
+    @Test
+    fun `its words are refused on read, before any sweep`() = runBlocking {
+        val cache = LyricsCache(context)
+        cache.clear()
+        cache.put(
+            "track-d",
+            LyricsDocument(LyricsKind.LINE, listOf(LyricLine(LineRole.LEAD, 0, 1000, "words")), "musixmatch", "musixmatch"),
+        )
+
+        assertNull(cache.get("track-d"))
+        assertEquals(0, cache.forget("musixmatch"))
+    }
 }

@@ -81,6 +81,14 @@ class LyricsCache(context: Context) {
             return@withContext null
         }
 
+        // Words from a source the app no longer has are never served, however they got here. The
+        // one-time sweep in MelismaApp clears the disk; this is what makes a lookup that races it, or
+        // an upgrade that would write the old answer back, come to nothing.
+        if (entry.document.providerId in RETIRED_PROVIDERS) {
+            file.delete()
+            return@withContext null
+        }
+
         Result.Hit(
             document = entry.document,
             savedAtMs = entry.savedAtMs,
@@ -181,8 +189,11 @@ class LyricsCache(context: Context) {
         ) : Result
     }
 
-    private companion object {
-        val POSITIVE_TTL_MS = TimeUnit.DAYS.toMillis(30)
-        const val MAX_ENTRIES = 500
+    companion object {
+        /** Sources the app has removed. What they left in the cache is dropped on sight. */
+        val RETIRED_PROVIDERS = setOf("musixmatch")
+
+        private val POSITIVE_TTL_MS = TimeUnit.DAYS.toMillis(30)
+        private const val MAX_ENTRIES = 500
     }
 }
