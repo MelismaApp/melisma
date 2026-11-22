@@ -308,8 +308,8 @@ class AppContainer(context: Context) {
         // because after the sweep nothing can put them back.
         if (!settings.isDone(SettingsStore.KEY_MUSIXMATCH_PURGED)) {
             scope.launch {
-                cache.forget("musixmatch")
-                settings.markDone(SettingsStore.KEY_MUSIXMATCH_PURGED)
+                // Only a pass that saw every entry counts; an incomplete one is tried again next start.
+                if (cache.forget("musixmatch") != null) settings.markDone(SettingsStore.KEY_MUSIXMATCH_PURGED)
             }
         }
 

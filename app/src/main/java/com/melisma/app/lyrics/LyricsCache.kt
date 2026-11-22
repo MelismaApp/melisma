@@ -245,19 +245,21 @@ class LyricsCache(
      *
      * For a source that is no longer part of the app: its words must not keep being shown from the
      * cache for a month after the integration is gone. What other sources said about those tracks
-     * is kept, so the next lookup asks only where it needs to.
+     * is kept, so the next lookup asks only where it needs to. Null when the pass was incomplete.
      */
-    suspend fun forget(providerId: String): Int = withContext(Dispatchers.IO) {
+    suspend fun forget(providerId: String): Int? = withContext(Dispatchers.IO) {
         var removed = 0
+        var complete = true
         directory.listFiles()?.filter { it.name.endsWith(ENTRY) }?.forEach { file ->
             runCatching {
                 locked {
                     val entry = runCatching { json.decodeFromString<Entry>(file.readText()) }.getOrNull()
                     if (entry?.document?.providerId == providerId && file.delete()) removed++
                 }
-            }
+            }.onFailure { complete = false }
         }
-        removed
+        // Null when an entry could not be looked at, so the caller knows to come back.
+        removed.takeIf { complete }
     }
 
     suspend fun clear() = withContext(Dispatchers.IO) {

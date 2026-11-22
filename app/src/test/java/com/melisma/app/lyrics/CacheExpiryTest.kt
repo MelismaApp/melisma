@@ -219,7 +219,8 @@ class CacheExpiryTest {
             cache.put("other", document("lrclib"))
             // What a lookup does after a miss that finds nothing: it must not delete blind either.
             cache.remove("track")
-            assertEquals(0, cache.forget("lrclib"))
+            // An incomplete pass says so, rather than passing for "nothing to forget".
+            assertNull(cache.forget("lrclib"))
             assertEquals(before, directory.listFiles()!!.map { it.name }.sorted())
         } finally {
             lockFile.deleteRecursively()
