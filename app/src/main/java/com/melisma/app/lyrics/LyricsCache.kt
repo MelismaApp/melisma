@@ -178,8 +178,12 @@ class LyricsCache(
         Unit
     }
 
+    /**
+     * Forget what is held for [key]. Under the lock like every other deletion, and left undone
+     * when the lock cannot be had: an entry nobody could inspect is not one to delete.
+     */
     suspend fun remove(key: String) = withContext(Dispatchers.IO) {
-        fileFor(key).delete()
+        runCatching { locked { fileFor(key).delete() } }
         Unit
     }
 
@@ -246,8 +250,12 @@ class LyricsCache(
     suspend fun forget(providerId: String): Int = withContext(Dispatchers.IO) {
         var removed = 0
         directory.listFiles()?.filter { it.name.endsWith(ENTRY) }?.forEach { file ->
-            val entry = runCatching { json.decodeFromString<Entry>(file.readText()) }.getOrNull()
-            if (entry?.document?.providerId == providerId && file.delete()) removed++
+            runCatching {
+                locked {
+                    val entry = runCatching { json.decodeFromString<Entry>(file.readText()) }.getOrNull()
+                    if (entry?.document?.providerId == providerId && file.delete()) removed++
+                }
+            }
         }
         removed
     }
