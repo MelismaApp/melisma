@@ -173,8 +173,8 @@ extensions do:
   each user holds a client key of their own, issued from Melisma's page in its catalog; the
   provider is always named under the lyrics, and a community sync's maker and uploader are
   named and linked beside it. Nothing it returns is passed on anywhere, and a cached copy is
-  deleted within thirty days by a daily sweep, whether or not the track is played again and
-  whether or not there is a connection to replace it with.
+  never shown past 28 days and deleted the next time the app starts, whether or not the track is
+  played again and whether or not there is a connection to replace it with.
 
 None of these are affiliated with this app, and none of them endorse it.
 

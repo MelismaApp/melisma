@@ -1,6 +1,5 @@
 package com.melisma.app.lyrics
 
-import android.app.job.JobScheduler
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.melisma.app.lyrics.model.LineRole
@@ -26,7 +25,7 @@ import java.util.concurrent.TimeUnit
  * What becomes of a cached copy once its time is up, which depends on whose words they are.
  *
  * Raised by Spicy Lyrics' review of the app: the thirty-day limit was only checked on lookup, so a
- * file for a song nobody returned to sat on disk past it. Its words are now deleted on a schedule.
+ * file for a song nobody returned to sat on disk past it. Its words are now deleted when the app starts.
  * Every other source's are only old: kept, so a song played with no connection still has them.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -136,8 +135,8 @@ class CacheExpiryTest {
     }
 
     /**
-     * The sweep runs in another process, so a lookup can save a fresh answer between the sweep
-     * reading an expired entry and deleting it. Both take the same lock, so whichever goes second
+     * The sweep runs beside lookups, so one can save a fresh answer between the sweep reading an
+     * expired entry and deleting it. Both take the same lock, so whichever goes second
      * sees what the first one left: the fresh answer is there at the end, every time.
      */
     @Test
@@ -173,20 +172,6 @@ class CacheExpiryTest {
         assertNotNull(cache.get("track"))
     }
 
-    private val lockFile get() = java.io.File(context.noBackupFilesDir, "lyrics-cache.lock")
-
-    @Test
-    fun `clearing the cache does not take the lock with it`() = runBlocking {
-        cache.put("track", document("lrclib"))
-        assertTrue(lockFile.exists())
-
-        cache.clear()
-
-        assertTrue(lockFile.exists())
-        cache.put("track", document("lrclib"))
-        assertNotNull(cache.get("track"))
-    }
-
     /** A deadline that passes while a write waits for the lock: the words are not published late. */
     @Test
     fun `a deadline that passes during the write stops it, and leaves nothing behind`() = runBlocking {
@@ -201,36 +186,6 @@ class CacheExpiryTest {
         assertTrue(java.io.File(context.cacheDir, "lyrics-cache").listFiles().orEmpty().isEmpty())
     }
 
-    /** With no lock to be had the cache answers "nothing", and neither reads nor deletes unguarded. */
-    @Test
-    fun `when the lock cannot be taken the cache is a miss, not an error`() = runBlocking {
-        cache.put("track", document("lrclib"))
-        onDisk("capped", "spicylyrics", daysAgo(29))
-        val directory = java.io.File(context.cacheDir, "lyrics-cache")
-        val before = directory.listFiles()!!.map { it.name }.sorted()
-
-        // A directory where the lock file should be: it can be neither opened nor locked.
-        lockFile.delete()
-        lockFile.mkdirs()
-        try {
-            assertNull(cache.get("track"))
-            assertNull(cache.get("capped"))
-            assertEquals(0, cache.sweep())
-            cache.put("other", document("lrclib"))
-            // What a lookup does after a miss that finds nothing: it must not delete blind either.
-            cache.remove("track")
-            // An incomplete pass says so, rather than passing for "nothing to forget".
-            assertNull(cache.forget("lrclib"))
-            assertEquals(before, directory.listFiles()!!.map { it.name }.sorted())
-        } finally {
-            lockFile.deleteRecursively()
-        }
-
-        // And with the lock back, everything is as it was.
-        assertNotNull(cache.get("track"))
-        assertEquals(1, cache.sweep())
-    }
-
     @Test
     fun `keeping an entry's age through an upgrade does not extend its life`() = runBlocking {
         val saved = daysAgo(27)
@@ -243,19 +198,19 @@ class CacheExpiryTest {
         assertEquals(saved + TimeUnit.DAYS.toMillis(28), LyricsCache.expiryOf(saved, hit.document))
     }
 
+    /** What the app calls on every open: the first call sweeps, and the next waits a day. */
     @Test
-    fun `the sweep is scheduled once, daily, and survives a restart`() {
-        val scheduler = context.getSystemService(JobScheduler::class.java)
-        scheduler.cancelAll()
+    fun `opening the app again the same day does not sweep twice`() = runBlocking {
+        var time = now
+        val clocked = LyricsCache(context) { time }
+        onDisk("first", "spicylyrics", time - TimeUnit.DAYS.toMillis(29))
+        assertEquals(1, clocked.sweepIfDue())
 
-        CacheSweepService.schedule(context)
-        CacheSweepService.schedule(context)
+        onDisk("second", "spicylyrics", time - TimeUnit.DAYS.toMillis(29))
+        time += TimeUnit.HOURS.toMillis(23)
+        assertEquals(0, clocked.sweepIfDue())
 
-        val job = scheduler.allPendingJobs.single()
-        assertEquals(CacheSweepService.JOB_ID, job.id)
-        assertEquals(CacheSweepService::class.java.name, job.service.className)
-        assertTrue(job.isPeriodic)
-        assertEquals(TimeUnit.DAYS.toMillis(1), job.intervalMillis)
-        assertTrue(job.isPersisted)
+        time += TimeUnit.HOURS.toMillis(1)
+        assertEquals(1, clocked.sweepIfDue())
     }
 }

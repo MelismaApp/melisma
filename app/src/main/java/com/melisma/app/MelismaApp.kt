@@ -8,7 +8,6 @@ import com.melisma.app.lyrics.HokkienDictionary
 import com.melisma.app.lyrics.SpokenLanguageStore
 import com.melisma.app.lyrics.provider.AmllTtmlProvider
 import com.melisma.app.lyrics.provider.AppleMusicProvider
-import com.melisma.app.lyrics.CacheSweepService
 import com.melisma.app.lyrics.provider.CacheServerProvider
 import com.melisma.app.lyrics.provider.SpicyLyricsProvider
 import com.melisma.app.lyrics.provider.LocalLyricsStore
@@ -301,6 +300,16 @@ class AppContainer(context: Context) {
         }
     }
 
+    /**
+     * Delete cached lyrics that have outlived their source's limit, off the main thread.
+     *
+     * Run when the process starts and again when the app is opened, since the notification
+     * listener can keep one process alive for weeks.
+     */
+    fun sweepCache() {
+        scope.launch { cache.sweepIfDue() }
+    }
+
     init {
         scope.launch { watchForIdle() }
 
@@ -313,9 +322,7 @@ class AppContainer(context: Context) {
             }
         }
 
-        // Expired lyrics go now, and daily from here on whether or not the app is opened again.
-        scope.launch { cache.sweep() }
-        CacheSweepService.schedule(context)
+        sweepCache()
 
         // The only place with both a Context and the settings. Installed unconditionally; whether it
         // ever runs is decided per call by `spotifyBrowserTokenEnabled`.
@@ -730,10 +737,6 @@ class MelismaApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // The daily cache sweep runs in a process of its own with nobody looking. It needs the
-        // cache directory and nothing else, so the app is not built there: no media sessions
-        // watched, no token renewed, nothing asked of the network.
-        if (getProcessName().endsWith(CacheSweepService.PROCESS)) return
         container = AppContainer(this)
     }
 }

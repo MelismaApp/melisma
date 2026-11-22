@@ -143,6 +143,7 @@ class MainActivity : ComponentActivity() {
         // listener service is only bound after that happens.
         container.media.refresh()
         container.media.start()
+        container.sweepCache()
     }
 
     /**

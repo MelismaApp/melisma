@@ -8,7 +8,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
-import java.io.RandomAccessFile
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
@@ -64,19 +63,10 @@ class LyricsCache(
 
     private val directory: File = File(context.cacheDir, "lyrics-cache")
 
-    /**
-     * Outside the cache directory on purpose. Clearing the cache, or Android reclaiming it, would
-     * otherwise remove the lock from under a process holding it, and the next one would lock a
-     * different file at the same path — two holders of what is meant to be one lock.
-     */
-    private val lockFile: File = File(context.noBackupFilesDir, LOCK_FILE)
-
     suspend fun get(key: String): Result? = withContext(Dispatchers.IO) {
         val file = fileFor(key)
         if (!file.exists()) return@withContext null
-        // No lock, no answer: a miss sends the lookup on to the sources, where reading or
-        // deleting the entry unguarded could take a newer one with it.
-        runCatching { locked { read(file) } }.getOrNull()
+        locked { read(file) }
     }
 
     /** [get], with the lock held: what it decides to delete is still the file it read. */
@@ -148,8 +138,8 @@ class LyricsCache(
         runCatching {
             directory.mkdirs()
             val target = fileFor(key)
-            // Written beside the entry and moved into place, so a reader — the sweep runs in
-            // another process — sees the old entry or the new one and never half of either.
+            // Written beside the entry and moved into place, so a crash mid-write leaves the old
+            // entry or the new one and never half of either.
             val pending = File(directory, "${target.name}.${System.nanoTime()}$PENDING")
             pending.writeText(
                 json.encodeToString(
@@ -178,12 +168,9 @@ class LyricsCache(
         Unit
     }
 
-    /**
-     * Forget what is held for [key]. Under the lock like every other deletion, and left undone
-     * when the lock cannot be had: an entry nobody could inspect is not one to delete.
-     */
+    /** Forget what is held for [key]. Under the lock like every other deletion. */
     suspend fun remove(key: String) = withContext(Dispatchers.IO) {
-        runCatching { locked { fileFor(key).delete() } }
+        locked { fileFor(key).delete() }
         Unit
     }
 
@@ -194,8 +181,7 @@ class LyricsCache(
      * [get] already refuses such an entry, but only for a track that is played again; one that
      * never is would sit on disk indefinitely. Spicy Lyrics' terms make that a breach rather than
      * untidiness — a contributor's withdrawal only takes effect when stale copies are gone — so
-     * the cap is enforced here, on a schedule, whether or not anything is looked up. See
-     * [CacheSweepService].
+     * the cap is enforced here, each time the app starts, whether or not anything is looked up.
      *
      * Only capped words. An old answer from any other source is left where it is: it is what a
      * song played with no connection still has to show.
@@ -211,34 +197,33 @@ class LyricsCache(
             }
             if (!file.name.endsWith(ENTRY)) return@forEach
             // Read and deleted under the lock a write takes to replace an entry, so the file
-            // removed is the one that was judged and never a fresh answer saved in between. If the
-            // lock cannot be had the entry is left for the next sweep rather than deleted blind.
-            runCatching {
-                locked {
-                    if (!file.exists()) return@locked
-                    val entry = runCatching { json.decodeFromString<Entry>(file.readText()) }.getOrNull()
-                    val document = entry?.document
-                    // Unreadable, or a miss an older version stored: get() would delete it too.
-                    val gone = document == null || (isCapped(document) && now > expiryOf(entry.savedAtMs, document))
-                    if (gone && file.delete()) removed++
-                }
+            // removed is the one that was judged and never a fresh answer saved in between.
+            locked {
+                if (!file.exists()) return@locked
+                val entry = runCatching { json.decodeFromString<Entry>(file.readText()) }.getOrNull()
+                val document = entry?.document
+                // Unreadable, or a miss an older version stored: get() would delete it too.
+                val gone = document == null || (isCapped(document) && now > expiryOf(entry.savedAtMs, document))
+                if (gone && file.delete()) removed++
             }
         }
         removed
     }
 
-    /**
-     * Runs [block] with the cache's lock held, here and in every other process.
-     *
-     * The sweep runs in a process of its own, so a lock inside one process is not enough: a file
-     * lock is what both see. The monitor is for this process, where a second file lock on the same
-     * file would be refused rather than waited for.
-     */
-    private inline fun <T> locked(block: () -> T): T = synchronized(LOCK) {
-        RandomAccessFile(lockFile, "rw").channel.use { channel ->
-            channel.lock().use { block() }
+    private var sweptAtMs: Long? = null
+
+    /** [sweep], at most once a day: for a caller that asks every time the app is opened. */
+    suspend fun sweepIfDue(): Int {
+        val due = synchronized(this) {
+            val now = now()
+            val last = sweptAtMs
+            (last == null || now - last !in 0 until SWEEP_INTERVAL_MS).also { if (it) sweptAtMs = now }
         }
+        return if (due) sweep() else 0
     }
+
+    /** Runs [block] with the cache's lock held, across every instance in the process. */
+    private inline fun <T> locked(block: () -> T): T = synchronized(LOCK, block)
 
     /**
      * Drop every cached document that came from [providerId], and return how many went.
@@ -319,14 +304,14 @@ class LyricsCache(
 
         private const val ENTRY = ".json"
         private const val PENDING = ".pending"
-        private const val LOCK_FILE = "lyrics-cache.lock"
         private val LOCK = Any()
         private val ABANDONED_MS = TimeUnit.MINUTES.toMillis(10)
+        private val SWEEP_INTERVAL_MS = TimeUnit.DAYS.toMillis(1)
 
         /**
          * How long words from Spicy Lyrics are kept. Its terms say thirty days at the outside, and
-         * the sweep that enforces it runs daily at Android's convenience, so the cap sits two days
-         * inside the limit rather than on it.
+         * the sweep that enforces it runs when the app starts, so the cap sits two days inside the
+         * limit rather than on it.
          */
         private val SPICY_TTL_MS = TimeUnit.DAYS.toMillis(28)
 

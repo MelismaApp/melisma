@@ -190,13 +190,13 @@ while you go and find its token costs nothing.
 |---|---|---|
 | **Notification access** | The only way Android lets an app read another app's media session. The service that holds it ignores notifications entirely. | Nothing |
 | **Internet**, network state | Looking lyrics up, and noticing when there is no connection to look with. | The track title, artist, album and duration, to the lyrics sources you have enabled, and to MusicBrainz and Deezer to identify the recording (a Deezer track's id, for Deezer's own) — *Settings → Where lyrics come from → Identify the recording* switches the last part off |
-| **Run at startup** | Keeps one daily job scheduled across a restart: deleting cached lyrics from Spicy Lyrics once they pass the limit its terms set, which has to happen whether or not you open the app. Nothing else runs. | Nothing |
 | **Install packages** | Only when you press Install on an in-app update. On Android 12 and up it installs without Android's own confirmation screen when Android allows it, and shows that screen when not. Optionally through [Shizuku](docs/INSTALL.md#updating-through-shizuku), which asks nothing. Only an update signed with the release key installs. | Nothing |
 
 There is no analytics, no crash reporting and no account. Lyrics are cached on the device and
 nowhere else. After 30 days a song is looked up afresh the next time it plays, and the old copy is
 what shows if there is no connection. Words from Spicy Lyrics are the exception its terms require:
-they are deleted within 28 days by a daily sweep, played again or not.
+once 28 days old they are never shown again, and are deleted the next time the app starts, played
+again or not.
 
 ## FAQ
 
