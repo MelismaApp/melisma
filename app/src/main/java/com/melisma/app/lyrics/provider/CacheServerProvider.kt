@@ -10,6 +10,7 @@ import com.melisma.app.lyrics.model.Credit
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -184,6 +185,7 @@ class CacheServerProvider(
             credits = credits,
             sourceUrl = data.string("sourceUrl")?.takeIf { it.startsWith("https://") },
             creditRequired = runCatching { data["creditRequired"]?.jsonPrimitive?.booleanOrNull }.getOrNull() == true,
+            expiresAtMs = runCatching { data["expiresAt"]?.jsonPrimitive?.longOrNull }.getOrNull()?.takeIf { it > 0 },
         )
     }
 

@@ -107,6 +107,10 @@ translations all survive. This is the format Apple Music and the AMLL database u
   terms want a link back.
 - `creditRequired`, optional: `true` keeps the footer on screen even with credits switched off
   in the app, for a source whose terms make the credit a condition rather than a courtesy.
+- `expiresAt`, optional: epoch milliseconds after which the app must not keep its copy, for a
+  source that caps how long its words may be held. Counted from when the *server* fetched them, so
+  a copy the server has had for three weeks does not get a fresh month on the phone. The app
+  deletes the entry at that moment whether or not the track is played again.
 - Wrapping in `data` is optional; the fields may sit at the top level.
 
 **No lyrics**: any non-2xx, or an empty body. `404` is the obvious one. The app treats a

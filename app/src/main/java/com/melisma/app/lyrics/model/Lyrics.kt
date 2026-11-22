@@ -130,6 +130,12 @@ data class LyricsDocument(
     val sourceUrl: String? = null,
     /** True when the words' terms want the footer shown whatever the settings say. */
     val creditRequired: Boolean = false,
+    /**
+     * The moment after which this copy may not be kept, as epoch milliseconds; null when nothing
+     * says. A cache server sets it for words whose source caps how long anyone may hold them,
+     * counted from when the server fetched them rather than from when the app did.
+     */
+    val expiresAtMs: Long? = null,
     /** BCP-47-ish language tag of the original text, when we could work it out. */
     val language: String? = null,
     val hasRomanization: Boolean = false,

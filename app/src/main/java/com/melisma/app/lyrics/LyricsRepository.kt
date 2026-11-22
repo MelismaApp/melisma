@@ -334,7 +334,8 @@ class LyricsRepository(
             // The track on screen comes first, always.
             fetchJob?.join()
             if (currentRequest?.cacheIdentity() == key) return@launch
-            if (cache.get(key) != null || !isOnline()) return@launch
+            val held = cache.get(key) as? LyricsCache.Result.Hit
+            if ((held != null && !held.stale) || !isOnline()) return@launch
             if (localStore.fetch(request) != null) return@launch
 
             val answer = query(request)
@@ -502,9 +503,14 @@ class LyricsRepository(
             }
         }
 
+        // An answer past its thirty days: asked for afresh below when there is a connection, and
+        // what is shown when there is not, or when asking comes back with nothing.
+        var old: LyricsDocument? = null
         if (!freshen) {
             when (val cached = cache.get(key)) {
-                is LyricsCache.Result.Hit -> {
+                is LyricsCache.Result.Hit -> if (cached.stale) {
+                    old = cached.document
+                } else {
                     missing?.let { (id, outcome) ->
                         if (cached.outcomes[id] != outcome) {
                             cache.put(key, cached.document, cached.outcomes + (id to outcome), savedAtMs = cached.savedAtMs)
@@ -528,12 +534,12 @@ class LyricsRepository(
         }
 
         if (!isOnline()) {
-            base.value = Base.Offline
+            base.value = old?.let { Base.Ready(key, it) } ?: Base.Offline
             return
         }
 
         when (val answer = query(request, alreadyAsked = missing)) {
-            is Query.Broke -> base.value = Base.Failed(answer.message)
+            is Query.Broke -> base.value = old?.let { Base.Ready(key, it) } ?: Base.Failed(answer.message)
             is Query.Answered -> {
                 // A miss is only worth remembering when it is a real answer. If a source
                 // timed out or returned a 503, we do not know that this track has no
@@ -542,7 +548,7 @@ class LyricsRepository(
                 if (answer.document != null || !answer.provisional) {
                     cache.put(key, answer.document, answer.outcomes)
                 }
-                base.value = answer.document
+                base.value = (answer.document ?: old)
                     ?.let { Base.Ready(key, it) }
                     ?: Base.NotFound
                 if (request.isrc == null && answer.document?.kind != LyricsKind.SYLLABLE) {
@@ -595,11 +601,11 @@ class LyricsRepository(
         freshen: Boolean,
     ): Chosen? {
         val chosenKey = "$key|from=${provider.id}"
-        if (!freshen) {
-            (cache.get(chosenKey) as? LyricsCache.Result.Hit)?.let { hit ->
-                base.value = Base.Ready(key, hit.document)
-                return Chosen.SHOWN
-            }
+        val held = if (freshen) null else cache.get(chosenKey) as? LyricsCache.Result.Hit
+        // A stale answer is asked for again when the source can be reached, and shown when it cannot.
+        if (held != null && (!held.stale || !isOnline())) {
+            base.value = Base.Ready(key, held.document)
+            return Chosen.SHOWN
         }
         if (!isOnline()) return null
         var failed = false
@@ -616,7 +622,12 @@ class LyricsRepository(
         val document = finished?.document?.let { TimingSanity.honestKind(it, request.durationMs) }
         if (document == null) {
             // A settled "nothing" outdates whatever this source answered before; a timeout does not.
-            if (finished != null && !failed) cache.remove(chosenKey)
+            if (finished != null && !failed) {
+                cache.remove(chosenKey)
+            } else if (held != null) {
+                base.value = Base.Ready(key, held.document)
+                return Chosen.SHOWN
+            }
             return Chosen.Missing(if (finished == null || failed) LyricsCache.Outcome.FAILED else LyricsCache.Outcome.NONE)
         }
         cache.put(chosenKey, document, mapOf(provider.id to LyricsCache.Outcome.LYRICS))

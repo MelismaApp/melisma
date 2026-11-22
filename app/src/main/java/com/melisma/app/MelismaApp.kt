@@ -8,6 +8,7 @@ import com.melisma.app.lyrics.HokkienDictionary
 import com.melisma.app.lyrics.SpokenLanguageStore
 import com.melisma.app.lyrics.provider.AmllTtmlProvider
 import com.melisma.app.lyrics.provider.AppleMusicProvider
+import com.melisma.app.lyrics.CacheSweepService
 import com.melisma.app.lyrics.provider.CacheServerProvider
 import com.melisma.app.lyrics.provider.SpicyLyricsProvider
 import com.melisma.app.lyrics.provider.LocalLyricsStore
@@ -311,6 +312,10 @@ class AppContainer(context: Context) {
                 settings.markDone(SettingsStore.KEY_MUSIXMATCH_PURGED)
             }
         }
+
+        // Expired lyrics go now, and daily from here on whether or not the app is opened again.
+        scope.launch { cache.sweep() }
+        CacheSweepService.schedule(context)
 
         // The only place with both a Context and the settings. Installed unconditionally; whether it
         // ever runs is decided per call by `spotifyBrowserTokenEnabled`.

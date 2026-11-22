@@ -102,6 +102,7 @@ class CacheServerContractTest {
     fun `the upstream source's credits, link and insistence survive the hop`() {
         val envelope = """{"status":200,"data":{"format":"ttml","source":"spicylyrics",
             "providerName":"Spicy Lyrics","sourceUrl":"https://spicylyrics.org","creditRequired":true,
+            "expiresAt":1794000000000,
             "credits":[{"text":"Made by gc","url":"https://spicylyrics.org/uid/2"},
                        {"text":"Uploaded by spikerko","url":"http://insecure.example/ignored"},
                        {"url":"https://nobody.example"}],
@@ -115,12 +116,15 @@ class CacheServerContractTest {
         assertEquals(listOf("https://spicylyrics.org/uid/2", null), document.credits.map { it.url })
         assertEquals("https://spicylyrics.org", document.sourceUrl)
         assertTrue(document.creditRequired)
+        // The server's deadline for the words, which the phone's cache keeps to.
+        assertEquals(1_794_000_000_000, document.expiresAtMs)
 
         // An envelope from before these fields leaves them at their defaults.
         val plain = provider.documentFrom("""{"data":{"lyrics":"[00:01.00]words","providerName":"LRCLIB"}}""")!!
         assertTrue(plain.credits.isEmpty())
         assertEquals(null, plain.sourceUrl)
         assertTrue(!plain.creditRequired)
+        assertEquals(null, plain.expiresAtMs)
     }
 
     @Test

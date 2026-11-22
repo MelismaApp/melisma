@@ -38,10 +38,10 @@ class SpicyLyricsProvider(
     private val base: String = BASE,
 ) : LyricsProvider {
 
-    override val id = "spicylyrics"
+    override val id = ID
     override val displayName = "Spicy Lyrics"
     override val canBeWordSynced = true
-    override val link = "https://spicylyrics.org"
+    override val link = SITE
     override val creditRequired = true
 
     /** The pasted value, if it is a client key. Anything else leaves the source dormant. */
@@ -166,6 +166,16 @@ class SpicyLyricsProvider(
         const val CATALOG_URL = "https://developers.spicylyrics.org/catalog/melisma"
 
         private val CLIENT_KEY = Regex("sl_pk_[A-Za-z0-9_-]{8,}")
+
+        private const val ID = "spicylyrics"
+        private const val SITE = "https://spicylyrics.org"
+
+        /**
+         * Whether [document]'s words came from this API: asked for directly, or relayed by a cache
+         * server, which marks them with the link back. Its terms follow the words either way.
+         */
+        fun supplied(document: LyricsDocument): Boolean =
+            document.providerId == ID || document.sourceUrl == SITE
 
         /**
          * What the footer names, by the API's rule: the catalogue that answered, always. A

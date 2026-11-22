@@ -2,6 +2,7 @@ package com.melisma.app.lyrics
 
 import android.content.Context
 import com.melisma.app.lyrics.model.LyricsDocument
+import com.melisma.app.lyrics.provider.SpicyLyricsProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -76,7 +77,11 @@ class LyricsCache(context: Context) {
             return@withContext null
         }
 
-        if (System.currentTimeMillis() - entry.savedAtMs > POSITIVE_TTL_MS) {
+        // Past its time. Words a source caps are gone, and that is the end of it. Anything else is
+        // only old: still handed over, marked stale, so the caller can ask afresh when there is a
+        // connection and keep showing these when there is not.
+        val expired = System.currentTimeMillis() > expiryOf(entry.savedAtMs, entry.document)
+        if (expired && isCapped(entry.document)) {
             file.delete()
             return@withContext null
         }
@@ -96,6 +101,7 @@ class LyricsCache(context: Context) {
                 runCatching { Outcome.valueOf(name) }.getOrNull()?.let { id to it }
             }.toMap(),
             outcomesAtMs = entry.outcomesAtMs,
+            stale = expired,
         )
     }
 
@@ -136,6 +142,32 @@ class LyricsCache(context: Context) {
     suspend fun remove(key: String) = withContext(Dispatchers.IO) {
         fileFor(key).delete()
         Unit
+    }
+
+    /**
+     * Delete every entry whose source caps how long it may be kept and whose time is up, and
+     * return how many went.
+     *
+     * [get] already refuses such an entry, but only for a track that is played again; one that
+     * never is would sit on disk indefinitely. Spicy Lyrics' terms make that a breach rather than
+     * untidiness — a contributor's withdrawal only takes effect when stale copies are gone — so
+     * the cap is enforced here, on a schedule, whether or not anything is looked up. See
+     * [CacheSweepService].
+     *
+     * Only capped words. An old answer from any other source is left where it is: it is what a
+     * song played with no connection still has to show.
+     */
+    suspend fun sweep(): Int = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        var removed = 0
+        directory.listFiles()?.forEach { file ->
+            val entry = runCatching { json.decodeFromString<Entry>(file.readText()) }.getOrNull()
+            val document = entry?.document
+            // Unreadable, or a miss an older version stored: get() would delete it too.
+            val gone = document == null || (isCapped(document) && now > expiryOf(entry.savedAtMs, document))
+            if (gone && file.delete()) removed++
+        }
+        removed
     }
 
     /**
@@ -186,6 +218,11 @@ class LyricsCache(context: Context) {
             /** What each source said when this was cached. Empty for an entry written before this. */
             val outcomes: Map<String, Outcome> = emptyMap(),
             val outcomesAtMs: Long = 0L,
+            /**
+             * True when the entry is past its thirty days: worth replacing when the sources can be
+             * reached, and still the right thing to show when they cannot.
+             */
+            val stale: Boolean = false,
         ) : Result
     }
 
@@ -194,6 +231,30 @@ class LyricsCache(context: Context) {
         val RETIRED_PROVIDERS = setOf("musixmatch")
 
         private val POSITIVE_TTL_MS = TimeUnit.DAYS.toMillis(30)
+
+        /**
+         * How long words from Spicy Lyrics are kept. Its terms say thirty days at the outside, and
+         * the sweep that enforces it runs daily at Android's convenience, so the cap sits two days
+         * inside the limit rather than on it.
+         */
+        private val SPICY_TTL_MS = TimeUnit.DAYS.toMillis(28)
+
+        /**
+         * Whether the words' source limits how long a copy may exist, as opposed to the cache
+         * merely preferring a fresh one: Spicy Lyrics' words, or any a server sent with a deadline.
+         */
+        internal fun isCapped(document: LyricsDocument): Boolean =
+            SpicyLyricsProvider.supplied(document) || document.expiresAtMs != null
+
+        /**
+         * When a document saved at [savedAtMs] is past its time: the cache's own thirty days, the
+         * shorter life of Spicy Lyrics' words, or the moment the document itself names, whichever
+         * is first.
+         */
+        internal fun expiryOf(savedAtMs: Long, document: LyricsDocument): Long {
+            val life = if (SpicyLyricsProvider.supplied(document)) SPICY_TTL_MS else POSITIVE_TTL_MS
+            return minOf(savedAtMs + life, document.expiresAtMs ?: Long.MAX_VALUE)
+        }
         private const val MAX_ENTRIES = 500
     }
 }

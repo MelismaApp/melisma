@@ -25,6 +25,12 @@
       only way a car screen can show the same words moving the same way the phone does, which is the
       whole point of the feature. See docs/ANDROID-AUTO.md.
     -->
+    <!--
+      Keeps the daily cache sweep scheduled across a restart; see CacheSweepService. Nothing is
+      started at boot: the permission is what lets Android remember the job.
+    -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <uses-permission android:name="androidx.car.app.MAP_TEMPLATES" />
     <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
 
@@ -142,6 +148,15 @@
                 <category android:name="androidx.car.app.category.POI" />
             </intent-filter>
         </service>
+
+        <!--
+          Deletes cached lyrics that have outlived their time, once a day. Not exported, and
+          BIND_JOB_SERVICE means only Android's scheduler can start it.
+        -->
+        <service
+            android:name=".lyrics.CacheSweepService"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <!-- An update's install status, from Android; see InstallStatusReceiver. -->
         <receiver
