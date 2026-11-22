@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.RandomAccessFile
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
@@ -23,7 +24,11 @@ import java.util.concurrent.TimeUnit
  * "Nothing found" is cached too, with a shorter life: without it, a track with no
  * lyrics re-queries every provider every time it comes round on shuffle.
  */
-class LyricsCache(context: Context) {
+class LyricsCache(
+    context: Context,
+    /** The time, as epoch milliseconds. A parameter so a test can move it past a deadline. */
+    private val now: () -> Long = System::currentTimeMillis,
+) {
 
     @Serializable
     private data class Entry(
@@ -62,13 +67,16 @@ class LyricsCache(context: Context) {
     suspend fun get(key: String): Result? = withContext(Dispatchers.IO) {
         val file = fileFor(key)
         if (!file.exists()) return@withContext null
+        locked { read(file) }
+    }
 
-        val read = file.lastModified()
+    /** [get], with the lock held: what it decides to delete is still the file it read. */
+    private fun read(file: File): Result? {
         val entry = runCatching {
             json.decodeFromString<Entry>(file.readText())
         }.getOrNull() ?: run {
-            file.deleteIfUnchanged(read)
-            return@withContext null
+            file.delete()
+            return null
         }
 
         // A remembered miss is dropped on sight rather than honoured. Written by an older
@@ -76,28 +84,28 @@ class LyricsCache(context: Context) {
         // then may well be in the community database now, and the only moment the user
         // cares is the moment they play it again.
         if (entry.document == null) {
-            file.deleteIfUnchanged(read)
-            return@withContext null
+            file.delete()
+            return null
         }
 
         // Past its time. Words a source caps are gone, and that is the end of it. Anything else is
         // only old: still handed over, marked stale, so the caller can ask afresh when there is a
         // connection and keep showing these when there is not.
-        val expired = System.currentTimeMillis() > expiryOf(entry.savedAtMs, entry.document)
+        val expired = now() > expiryOf(entry.savedAtMs, entry.document)
         if (expired && isCapped(entry.document)) {
-            file.deleteIfUnchanged(read)
-            return@withContext null
+            file.delete()
+            return null
         }
 
         // Words from a source the app no longer has are never served, however they got here. The
         // one-time sweep in MelismaApp clears the disk; this is what makes a lookup that races it, or
         // an upgrade that would write the old answer back, come to nothing.
         if (entry.document.providerId in RETIRED_PROVIDERS) {
-            file.deleteIfUnchanged(read)
-            return@withContext null
+            file.delete()
+            return null
         }
 
-        Result.Hit(
+        return Result.Hit(
             document = entry.document,
             savedAtMs = entry.savedAtMs,
             outcomes = entry.outcomes.mapNotNull { (id, name) ->
@@ -124,7 +132,7 @@ class LyricsCache(context: Context) {
         savedAtMs: Long? = null,
     ) = withContext(Dispatchers.IO) {
         if (document == null) return@withContext
-        val now = System.currentTimeMillis()
+        val now = now()
         // Capped words whose time is already up are not written at all: a lookup that outlasted
         // the deadline, or an upgrade carrying an old age, must not put them back.
         if (isCapped(document) && now > expiryOf(savedAtMs ?: now, document)) return@withContext
@@ -144,7 +152,9 @@ class LyricsCache(context: Context) {
                     ),
                 ),
             )
-            Files.move(pending.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            locked {
+                Files.move(pending.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            }
             prune()
         }
         Unit
@@ -169,29 +179,42 @@ class LyricsCache(context: Context) {
      * song played with no connection still has to show.
      */
     suspend fun sweep(): Int = withContext(Dispatchers.IO) {
-        val now = System.currentTimeMillis()
+        val now = now()
         var removed = 0
         directory.listFiles()?.forEach { file ->
-            val read = file.lastModified()
             if (file.name.endsWith(PENDING)) {
                 // A write in flight is left alone; one abandoned by a crash is cleared.
-                if (now - read > ABANDONED_MS) file.delete()
+                if (now - file.lastModified() > ABANDONED_MS) file.delete()
                 return@forEach
             }
-            val entry = runCatching { json.decodeFromString<Entry>(file.readText()) }.getOrNull()
-            val document = entry?.document
-            // Unreadable, or a miss an older version stored: get() would delete it too.
-            val gone = document == null || (isCapped(document) && now > expiryOf(entry.savedAtMs, document))
-            if (gone && file.deleteIfUnchanged(read)) removed++
+            if (!file.name.endsWith(ENTRY)) return@forEach
+            // Read and deleted under the lock a write takes to replace an entry, so the file
+            // removed is the one that was judged and never a fresh answer saved in between.
+            locked {
+                if (!file.exists()) return@locked
+                val entry = runCatching { json.decodeFromString<Entry>(file.readText()) }.getOrNull()
+                val document = entry?.document
+                // Unreadable, or a miss an older version stored: get() would delete it too.
+                val gone = document == null || (isCapped(document) && now > expiryOf(entry.savedAtMs, document))
+                if (gone && file.delete()) removed++
+            }
         }
         removed
     }
 
     /**
-     * Delete the file unless it has been rewritten since [read], when it was last looked at. What
-     * was judged expired was the old contents; a fresh answer saved in the meantime is not it.
+     * Runs [block] with the cache's lock held, here and in every other process.
+     *
+     * The sweep runs in a process of its own, so a lock inside one process is not enough: a file
+     * lock is what both see. The monitor is for this process, where a second file lock on the same
+     * file would be refused rather than waited for.
      */
-    private fun File.deleteIfUnchanged(read: Long): Boolean = lastModified() == read && delete()
+    private inline fun <T> locked(block: () -> T): T = synchronized(LOCK) {
+        directory.mkdirs()
+        RandomAccessFile(File(directory, LOCK_FILE), "rw").channel.use { channel ->
+            channel.lock().use { block() }
+        }
+    }
 
     /**
      * Drop every cached document that came from [providerId], and return how many went.
@@ -257,6 +280,8 @@ class LyricsCache(context: Context) {
 
         private const val ENTRY = ".json"
         private const val PENDING = ".pending"
+        private const val LOCK_FILE = "cache.lock"
+        private val LOCK = Any()
         private val ABANDONED_MS = TimeUnit.MINUTES.toMillis(10)
 
         /**

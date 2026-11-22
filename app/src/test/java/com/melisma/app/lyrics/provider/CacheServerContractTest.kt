@@ -125,6 +125,15 @@ class CacheServerContractTest {
         assertTrue(bare.creditRequired)
         assertTrue(SpicyLyricsProvider.supplied(bare))
 
+        // And with a link of the server's own choosing: the cap follows the source, not the link.
+        val linked = provider.documentFrom(
+            """{"data":{"lyrics":"[00:01.00]words","source":"spicylyrics","sourceUrl":"https://example.org/credit"}}""",
+        )!!
+        assertEquals("https://example.org/credit", linked.sourceUrl)
+        assertEquals("spicylyrics", linked.sourceId)
+        assertTrue(SpicyLyricsProvider.supplied(linked))
+        assertTrue(com.melisma.app.lyrics.LyricsCache.isCapped(linked))
+
         // Words the server should already have let go of are not accepted at all.
         assertEquals(null, provider.documentFrom("""{"data":{"lyrics":"[00:01.00]words","expiresAt":1700000000000}}"""))
 

@@ -186,9 +186,11 @@ class CacheServerProvider(
         if (expiresAt != null && expiresAt <= System.currentTimeMillis()) return null
         // A server that names Spicy Lyrics as the source and leaves the rest out still owes its
         // terms: the link, the credit, and the cap on how long the copy is kept.
-        val fromSpicy = data.string("source") == SpicyLyricsProvider.ID
+        val source = data.string("source")
+        val fromSpicy = source == SpicyLyricsProvider.ID
         return document.copy(
             credits = credits,
+            sourceId = source,
             sourceUrl = data.string("sourceUrl")?.takeIf { it.startsWith("https://") }
                 ?: SpicyLyricsProvider.SITE.takeIf { fromSpicy },
             creditRequired = fromSpicy ||

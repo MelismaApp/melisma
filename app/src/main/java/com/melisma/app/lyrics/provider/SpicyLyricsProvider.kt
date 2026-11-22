@@ -175,7 +175,7 @@ class SpicyLyricsProvider(
          * server, which marks them with the link back. Its terms follow the words either way.
          */
         fun supplied(document: LyricsDocument): Boolean =
-            document.providerId == ID || document.sourceUrl == SITE
+            document.providerId == ID || document.sourceId == ID || document.sourceUrl == SITE
 
         /**
          * What the footer names, by the API's rule: the catalogue that answered, always. A

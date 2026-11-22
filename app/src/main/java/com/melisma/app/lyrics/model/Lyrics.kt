@@ -131,6 +131,12 @@ data class LyricsDocument(
     /** True when the words' terms want the footer shown whatever the settings say. */
     val creditRequired: Boolean = false,
     /**
+     * The id of the source a cache server got these words from, when it says. Kept apart from
+     * [sourceUrl], which is only where a tap goes: the source's terms follow the words whatever
+     * link the server chose to send.
+     */
+    val sourceId: String? = null,
+    /**
      * The moment after which this copy may not be kept, as epoch milliseconds; null when nothing
      * says. A cache server sets it for words whose source caps how long anyone may hold them,
      * counted from when the server fetched them rather than from when the app did.

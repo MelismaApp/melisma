@@ -7,6 +7,9 @@ import com.melisma.app.lyrics.model.LineRole
 import com.melisma.app.lyrics.model.LyricLine
 import com.melisma.app.lyrics.model.LyricsDocument
 import com.melisma.app.lyrics.model.LyricsKind
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -106,17 +109,19 @@ class CacheExpiryTest {
 
     @Test
     fun `a deadline the document carries is kept, however recently the app saved it`() = runBlocking {
-        // A server that had the words for four weeks before the phone asked: a moment left, not a month.
-        cache.put("nearly", document("cacheserver", expiresAtMs = now + TimeUnit.DAYS.toMillis(2)))
-        cache.put("brief", document("cacheserver", expiresAtMs = now + 150))
-        assertNotNull(cache.get("nearly"))
-        assertNotNull(cache.get("brief"))
+        // A clock the test moves, so the deadline passes when it says and not when CI gets round to it.
+        var time = 1_800_000_000_000
+        val clocked = LyricsCache(context) { time }
+        // A server that had the words for four weeks before the phone asked: two days left, not a month.
+        clocked.put("nearly", document("cacheserver", expiresAtMs = time + TimeUnit.DAYS.toMillis(2)))
+        clocked.put("later", document("cacheserver", expiresAtMs = time + TimeUnit.DAYS.toMillis(20)))
+        assertNotNull(clocked.get("nearly"))
 
-        Thread.sleep(300)
+        time += TimeUnit.DAYS.toMillis(3)
 
-        assertEquals(1, cache.sweep())
-        assertNull(cache.get("brief"))
-        assertNotNull(cache.get("nearly"))
+        assertEquals(1, clocked.sweep())
+        assertNull(clocked.get("nearly"))
+        assertNotNull(clocked.get("later"))
     }
 
     @Test
@@ -132,32 +137,29 @@ class CacheExpiryTest {
 
     /**
      * The sweep runs in another process, so a lookup can save a fresh answer between the sweep
-     * reading an expired entry and deleting it. What it judged was the old file, not this one.
+     * reading an expired entry and deleting it. Both take the same lock, so whichever goes second
+     * sees what the first one left: the fresh answer is there at the end, every time.
      */
     @Test
-    fun `an entry rewritten while it was being judged is not the one deleted`() = runBlocking {
-        val directory = java.io.File(context.cacheDir, "lyrics-cache")
-        cache.put("track", document("lrclib"))
-        val file = directory.listFiles()!!.single()
-        val read = file.lastModified()
+    fun `a fresh answer saved while the sweep runs is never the one deleted`() = runBlocking {
+        repeat(60) { round ->
+            onDisk("track", "spicylyrics", daysAgo(29))
+            coroutineScope {
+                launch(Dispatchers.IO) { LyricsCache(context).sweep() }
+                launch(Dispatchers.IO) { LyricsCache(context).put("track", document("lrclib")) }
+            }
 
-        // Saved again by someone else in the meantime.
-        cache.put("track", document("amll"))
-        file.setLastModified(read + 5_000)
-
-        val delete = LyricsCache::class.java.getDeclaredMethod("deleteIfUnchanged", java.io.File::class.java, Long::class.javaPrimitiveType)
-            .apply { isAccessible = true }
-        assertEquals(false, delete.invoke(cache, file, read))
-        assertEquals("amll", (cache.get("track") as LyricsCache.Result.Hit).document.providerId)
-        // Untouched since it was read, it goes.
-        assertEquals(true, delete.invoke(cache, file, file.lastModified()))
+            val held = cache.get("track") as? LyricsCache.Result.Hit
+            assertEquals("round $round", "lrclib", held?.document?.providerId)
+        }
     }
 
     @Test
     fun `a write leaves no half-written entry behind, and an abandoned one is cleared`() = runBlocking {
         val directory = java.io.File(context.cacheDir, "lyrics-cache")
         cache.put("track", document("lrclib"))
-        assertEquals(listOf(true), directory.listFiles()!!.map { it.name.endsWith(".json") })
+        // The entry and the lock that guards it, and nothing in between.
+        assertEquals(listOf("cache.lock", "json"), directory.listFiles()!!.map { it.name.substringAfterLast('.').let { ext -> if (ext == "lock") it.name else ext } }.sorted())
 
         val inFlight = java.io.File(directory, "x.json.1.pending").apply { writeText("{") }
         val abandoned = java.io.File(directory, "y.json.2.pending").apply {
@@ -169,6 +171,8 @@ class CacheExpiryTest {
         assertTrue(inFlight.exists())
         assertTrue(!abandoned.exists())
         assertNotNull(cache.get("track"))
+        // The lock is not an entry, and the sweep leaves it be.
+        assertTrue(java.io.File(directory, "cache.lock").exists())
     }
 
     @Test

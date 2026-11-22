@@ -235,7 +235,7 @@ class StaleLyricsTest {
         assertTrue(repository.settled() is LyricsState.Offline)
         // Reading it was what removed it.
         assertEquals(0, LyricsCache(context).sweep())
-        assertTrue(File(context.cacheDir, "lyrics-cache").listFiles().orEmpty().isEmpty())
+        assertTrue(File(context.cacheDir, "lyrics-cache").listFiles().orEmpty().none { it.name.endsWith(".json") })
     }
 
     @Test
