@@ -158,8 +158,8 @@ class CacheExpiryTest {
     fun `a write leaves no half-written entry behind, and an abandoned one is cleared`() = runBlocking {
         val directory = java.io.File(context.cacheDir, "lyrics-cache")
         cache.put("track", document("lrclib"))
-        // The entry and the lock that guards it, and nothing in between.
-        assertEquals(listOf("cache.lock", "json"), directory.listFiles()!!.map { it.name.substringAfterLast('.').let { ext -> if (ext == "lock") it.name else ext } }.sorted())
+        // The entry, and nothing in between.
+        assertEquals(listOf(true), directory.listFiles()!!.map { it.name.endsWith(".json") })
 
         val inFlight = java.io.File(directory, "x.json.1.pending").apply { writeText("{") }
         val abandoned = java.io.File(directory, "y.json.2.pending").apply {
@@ -171,8 +171,60 @@ class CacheExpiryTest {
         assertTrue(inFlight.exists())
         assertTrue(!abandoned.exists())
         assertNotNull(cache.get("track"))
-        // The lock is not an entry, and the sweep leaves it be.
-        assertTrue(java.io.File(directory, "cache.lock").exists())
+    }
+
+    private val lockFile get() = java.io.File(context.noBackupFilesDir, "lyrics-cache.lock")
+
+    @Test
+    fun `clearing the cache does not take the lock with it`() = runBlocking {
+        cache.put("track", document("lrclib"))
+        assertTrue(lockFile.exists())
+
+        cache.clear()
+
+        assertTrue(lockFile.exists())
+        cache.put("track", document("lrclib"))
+        assertNotNull(cache.get("track"))
+    }
+
+    /** A deadline that passes while a write waits for the lock: the words are not published late. */
+    @Test
+    fun `a deadline that passes during the write stops it, and leaves nothing behind`() = runBlocking {
+        val start = 1_800_000_000_000
+        // Each reading of the clock is a day later than the last: fine when the write begins,
+        // past the deadline by the time the lock is held.
+        var readings = 0
+        val slow = LyricsCache(context) { start + TimeUnit.DAYS.toMillis(readings++.toLong()) }
+
+        slow.put("track", document("cacheserver", expiresAtMs = start + TimeUnit.HOURS.toMillis(12)))
+
+        assertTrue(java.io.File(context.cacheDir, "lyrics-cache").listFiles().orEmpty().isEmpty())
+    }
+
+    /** With no lock to be had the cache answers "nothing", and neither reads nor deletes unguarded. */
+    @Test
+    fun `when the lock cannot be taken the cache is a miss, not an error`() = runBlocking {
+        cache.put("track", document("lrclib"))
+        onDisk("capped", "spicylyrics", daysAgo(29))
+        val directory = java.io.File(context.cacheDir, "lyrics-cache")
+        val before = directory.listFiles()!!.map { it.name }.sorted()
+
+        // A directory where the lock file should be: it can be neither opened nor locked.
+        lockFile.delete()
+        lockFile.mkdirs()
+        try {
+            assertNull(cache.get("track"))
+            assertNull(cache.get("capped"))
+            assertEquals(0, cache.sweep())
+            cache.put("other", document("lrclib"))
+            assertEquals(before, directory.listFiles()!!.map { it.name }.sorted())
+        } finally {
+            lockFile.deleteRecursively()
+        }
+
+        // And with the lock back, everything is as it was.
+        assertNotNull(cache.get("track"))
+        assertEquals(1, cache.sweep())
     }
 
     @Test

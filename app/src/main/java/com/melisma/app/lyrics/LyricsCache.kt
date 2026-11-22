@@ -64,10 +64,19 @@ class LyricsCache(
 
     private val directory: File = File(context.cacheDir, "lyrics-cache")
 
+    /**
+     * Outside the cache directory on purpose. Clearing the cache, or Android reclaiming it, would
+     * otherwise remove the lock from under a process holding it, and the next one would lock a
+     * different file at the same path — two holders of what is meant to be one lock.
+     */
+    private val lockFile: File = File(context.noBackupFilesDir, LOCK_FILE)
+
     suspend fun get(key: String): Result? = withContext(Dispatchers.IO) {
         val file = fileFor(key)
         if (!file.exists()) return@withContext null
-        locked { read(file) }
+        // No lock, no answer: a miss sends the lookup on to the sources, where reading or
+        // deleting the entry unguarded could take a newer one with it.
+        runCatching { locked { read(file) } }.getOrNull()
     }
 
     /** [get], with the lock held: what it decides to delete is still the file it read. */
@@ -152,8 +161,17 @@ class LyricsCache(
                     ),
                 ),
             )
-            locked {
-                Files.move(pending.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            try {
+                locked {
+                    // Checked again now the lock is held: waiting for it can outlast a deadline
+                    // that was still ahead when the write began.
+                    if (!isCapped(document) || now() <= expiryOf(savedAtMs ?: now, document)) {
+                        Files.move(pending.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+                    }
+                }
+            } finally {
+                // Moved into place, it is no longer here; anything else, it must not stay.
+                pending.delete()
             }
             prune()
         }
@@ -189,14 +207,17 @@ class LyricsCache(
             }
             if (!file.name.endsWith(ENTRY)) return@forEach
             // Read and deleted under the lock a write takes to replace an entry, so the file
-            // removed is the one that was judged and never a fresh answer saved in between.
-            locked {
-                if (!file.exists()) return@locked
-                val entry = runCatching { json.decodeFromString<Entry>(file.readText()) }.getOrNull()
-                val document = entry?.document
-                // Unreadable, or a miss an older version stored: get() would delete it too.
-                val gone = document == null || (isCapped(document) && now > expiryOf(entry.savedAtMs, document))
-                if (gone && file.delete()) removed++
+            // removed is the one that was judged and never a fresh answer saved in between. If the
+            // lock cannot be had the entry is left for the next sweep rather than deleted blind.
+            runCatching {
+                locked {
+                    if (!file.exists()) return@locked
+                    val entry = runCatching { json.decodeFromString<Entry>(file.readText()) }.getOrNull()
+                    val document = entry?.document
+                    // Unreadable, or a miss an older version stored: get() would delete it too.
+                    val gone = document == null || (isCapped(document) && now > expiryOf(entry.savedAtMs, document))
+                    if (gone && file.delete()) removed++
+                }
             }
         }
         removed
@@ -210,8 +231,7 @@ class LyricsCache(
      * file would be refused rather than waited for.
      */
     private inline fun <T> locked(block: () -> T): T = synchronized(LOCK) {
-        directory.mkdirs()
-        RandomAccessFile(File(directory, LOCK_FILE), "rw").channel.use { channel ->
+        RandomAccessFile(lockFile, "rw").channel.use { channel ->
             channel.lock().use { block() }
         }
     }
@@ -280,7 +300,7 @@ class LyricsCache(
 
         private const val ENTRY = ".json"
         private const val PENDING = ".pending"
-        private const val LOCK_FILE = "cache.lock"
+        private const val LOCK_FILE = "lyrics-cache.lock"
         private val LOCK = Any()
         private val ABANDONED_MS = TimeUnit.MINUTES.toMillis(10)
 
