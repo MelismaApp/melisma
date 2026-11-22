@@ -94,6 +94,20 @@ class RetiredSourceTest {
         assertEquals(0, cache.forget("musixmatch"))
     }
 
+    @Test
+    fun `an entry that cannot be read is cleared too, and an empty cache is a finished pass`() = runBlocking {
+        val cache = LyricsCache(context)
+        cache.clear()
+        val directory = java.io.File(context.cacheDir, "lyrics-cache").apply { mkdirs() }
+        java.io.File(directory, "broken.json").writeText("{ not an entry")
+
+        assertEquals(0, cache.forget("musixmatch"))
+        assertTrue(directory.listFiles().orEmpty().none { it.name.endsWith(".json") })
+
+        directory.deleteRecursively()
+        assertEquals(0, cache.forget("musixmatch"))
+    }
+
     /**
      * The sweep runs in the background, and a lookup can get to a track before it does. Whatever is
      * read first, its words are not shown, and reading them is what removes them.

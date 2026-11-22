@@ -248,17 +248,26 @@ class LyricsCache(
      * is kept, so the next lookup asks only where it needs to. Null when the pass was incomplete.
      */
     suspend fun forget(providerId: String): Int? = withContext(Dispatchers.IO) {
+        // No directory is an empty cache; one that cannot be listed is a pass that did not happen.
+        if (!directory.exists()) return@withContext 0
+        val files = directory.listFiles() ?: return@withContext null
         var removed = 0
         var complete = true
-        directory.listFiles()?.filter { it.name.endsWith(ENTRY) }?.forEach { file ->
+        files.filter { it.name.endsWith(ENTRY) }.forEach { file ->
             runCatching {
                 locked {
+                    if (!file.exists()) return@locked
                     val entry = runCatching { json.decodeFromString<Entry>(file.readText()) }.getOrNull()
-                    if (entry?.document?.providerId == providerId && file.delete()) removed++
+                    when {
+                        // Unreadable, so whose words it holds cannot be told: it goes, as it
+                        // would on being read.
+                        entry == null -> if (!file.delete()) complete = false
+                        entry.document?.providerId == providerId -> if (file.delete()) removed++ else complete = false
+                    }
                 }
             }.onFailure { complete = false }
         }
-        // Null when an entry could not be looked at, so the caller knows to come back.
+        // Null when an entry could not be looked at or removed, so the caller knows to come back.
         removed.takeIf { complete }
     }
 
