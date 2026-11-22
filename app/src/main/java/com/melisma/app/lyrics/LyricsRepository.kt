@@ -506,25 +506,25 @@ class LyricsRepository(
         // An answer past its thirty days: asked for afresh below when there is a connection, and
         // what is shown when there is not, or when asking comes back with nothing.
         var old: LyricsDocument? = null
-        if (!freshen) {
-            when (val cached = cache.get(key)) {
-                is LyricsCache.Result.Hit -> if (cached.stale) {
-                    old = cached.document
-                } else {
-                    missing?.let { (id, outcome) ->
-                        if (cached.outcomes[id] != outcome) {
-                            cache.put(key, cached.document, cached.outcomes + (id to outcome), savedAtMs = cached.savedAtMs)
-                        }
+        when (val cached = cache.get(key)) {
+            is LyricsCache.Result.Hit -> if (cached.stale) {
+                // Held on to whether or not this lookup is a forced one: the retry that follows a
+                // late ISRC skips the cache, and must not lose the fallback by doing so.
+                old = cached.document
+            } else if (!freshen) {
+                missing?.let { (id, outcome) ->
+                    if (cached.outcomes[id] != outcome) {
+                        cache.put(key, cached.document, cached.outcomes + (id to outcome), savedAtMs = cached.savedAtMs)
                     }
-                    base.value = Base.Ready(key, cached.document)
-                    // Answered from the cache, then quietly improved for next time if anyone was
-                    // never asked. Deliberately after the answer is on screen and never awaited.
-                    upgradeAfter(request, key, cached)
-                    return
                 }
-
-                null -> Unit
+                base.value = Base.Ready(key, cached.document)
+                // Answered from the cache, then quietly improved for next time if anyone was
+                // never asked. Deliberately after the answer is on screen and never awaited.
+                upgradeAfter(request, key, cached)
+                return
             }
+
+            null -> Unit
         }
 
         // A local file always wins, and answers without touching the network.

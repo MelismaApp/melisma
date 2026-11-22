@@ -105,6 +105,21 @@ class StaleLyricsTest {
         LyricsCache(context).put(key, document, savedAtMs = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(days))
     }
 
+    /**
+     * An entry as it sits on disk, written directly: the cache itself refuses to save capped words
+     * whose time is up, so one that has aged in place — or was left by an earlier version — can
+     * only be put there this way.
+     */
+    private fun onDisk(key: String, providerId: String, savedAtMs: Long, sourceUrl: String? = null) {
+        val name = java.security.MessageDigest.getInstance("SHA-1").digest(key.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val link = sourceUrl?.let { ""","sourceUrl":"$it"""" }.orEmpty()
+        java.io.File(context.cacheDir, "lyrics-cache").apply { mkdirs() }.resolve("$name.json").writeText(
+            """{"savedAtMs":$savedAtMs,"document":{"kind":"LINE","lines":[{"role":"LEAD","startMs":0,"endMs":1000,""" +
+                """"text":"words"}],"providerName":"$providerId","providerId":"$providerId"$link}}""",
+        )
+    }
+
     @Before
     fun freshPhone() {
         context.getSharedPreferences("melisma", Context.MODE_PRIVATE).edit().clear().commit()
@@ -172,16 +187,55 @@ class StaleLyricsTest {
         assertEquals(2, source.fetches)
     }
 
+    /**
+     * A source that names the recording while finding nothing sets off a second, forced lookup by
+     * ISRC. That one skips the cache, and used to take the old lyrics off the screen with it.
+     */
+    @Test
+    fun `the forced lookup that follows a late ISRC keeps them too`() = runBlocking {
+        cached(document("lrclib", "old"), days = 45)
+        val asked = ArrayList<String?>()
+        val naming = object : LyricsProvider {
+            override val id = "amll"
+            override val displayName = "AMLL"
+            override suspend fun fetch(request: LyricsRequest): LyricsDocument? {
+                synchronized(asked) { asked += request.isrc }
+                if (request.isrc == null) request.onIsrc?.invoke("JPU901900876")
+                return null
+            }
+        }
+        val repository = LyricsRepository(
+            context = context,
+            settingsStore = settings,
+            cache = LyricsCache(context),
+            romanizer = Romanizer(),
+            translator = LyricsTranslator(),
+            localStore = LocalLyricsStore(context),
+            isrcStore = IsrcStore(context),
+            spokenLanguages = SpokenLanguageStore(context),
+            providers = listOf(naming),
+            scope = scope,
+        )
+        repository.setTrack(track)
+
+        withTimeout(10_000) { while (synchronized(asked) { asked.size } < 2) kotlinx.coroutines.delay(20) }
+        assertEquals(listOf(null, "JPU901900876"), synchronized(asked) { asked.toList() })
+        kotlinx.coroutines.delay(300)
+        assertEquals("old 0", repository.settled().text())
+    }
+
     @Test
     fun `Spicy Lyrics' words past their limit are not shown, connection or not`() = runBlocking {
-        cached(document("spicylyrics", "capped"), days = 29)
+        onDisk(key, "spicylyrics", System.currentTimeMillis() - TimeUnit.DAYS.toMillis(29))
         online(false)
 
         val repository = repository()
         repository.setTrack(track)
 
         assertTrue(repository.settled() is LyricsState.Offline)
+        // Reading it was what removed it.
         assertEquals(0, LyricsCache(context).sweep())
+        assertTrue(File(context.cacheDir, "lyrics-cache").listFiles().orEmpty().isEmpty())
     }
 
     @Test

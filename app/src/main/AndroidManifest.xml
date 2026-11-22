@@ -151,12 +151,14 @@
 
         <!--
           Deletes cached lyrics that have outlived their time, once a day. Not exported, and
-          BIND_JOB_SERVICE means only Android's scheduler can start it.
+          BIND_JOB_SERVICE means only Android's scheduler can start it. In a process of its own
+          so that running it does not start the rest of the app; see MelismaApp.onCreate.
         -->
         <service
             android:name=".lyrics.CacheSweepService"
             android:exported="false"
-            android:permission="android.permission.BIND_JOB_SERVICE" />
+            android:permission="android.permission.BIND_JOB_SERVICE"
+            android:process=":sweep" />
 
         <!-- An update's install status, from Android; see InstallStatusReceiver. -->
         <receiver

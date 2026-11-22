@@ -167,8 +167,8 @@ class SpicyLyricsProvider(
 
         private val CLIENT_KEY = Regex("sl_pk_[A-Za-z0-9_-]{8,}")
 
-        private const val ID = "spicylyrics"
-        private const val SITE = "https://spicylyrics.org"
+        const val ID = "spicylyrics"
+        const val SITE = "https://spicylyrics.org"
 
         /**
          * Whether [document]'s words came from this API: asked for directly, or relayed by a cache

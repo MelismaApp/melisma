@@ -43,6 +43,9 @@ class CacheSweepService : JobService() {
     companion object {
         internal const val JOB_ID = 2801
 
+        /** The process the manifest runs this in, as the suffix Android gives its name. */
+        const val PROCESS = ":sweep"
+
         private val INTERVAL_MS = TimeUnit.DAYS.toMillis(1)
 
         /**

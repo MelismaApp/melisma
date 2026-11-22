@@ -730,6 +730,10 @@ class MelismaApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // The daily cache sweep runs in a process of its own with nobody looking. It needs the
+        // cache directory and nothing else, so the app is not built there: no media sessions
+        // watched, no token renewed, nothing asked of the network.
+        if (getProcessName().endsWith(CacheSweepService.PROCESS)) return
         container = AppContainer(this)
     }
 }

@@ -8,6 +8,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
@@ -61,10 +63,11 @@ class LyricsCache(context: Context) {
         val file = fileFor(key)
         if (!file.exists()) return@withContext null
 
+        val read = file.lastModified()
         val entry = runCatching {
             json.decodeFromString<Entry>(file.readText())
         }.getOrNull() ?: run {
-            file.delete()
+            file.deleteIfUnchanged(read)
             return@withContext null
         }
 
@@ -73,7 +76,7 @@ class LyricsCache(context: Context) {
         // then may well be in the community database now, and the only moment the user
         // cares is the moment they play it again.
         if (entry.document == null) {
-            file.delete()
+            file.deleteIfUnchanged(read)
             return@withContext null
         }
 
@@ -82,7 +85,7 @@ class LyricsCache(context: Context) {
         // connection and keep showing these when there is not.
         val expired = System.currentTimeMillis() > expiryOf(entry.savedAtMs, entry.document)
         if (expired && isCapped(entry.document)) {
-            file.delete()
+            file.deleteIfUnchanged(read)
             return@withContext null
         }
 
@@ -90,7 +93,7 @@ class LyricsCache(context: Context) {
         // one-time sweep in MelismaApp clears the disk; this is what makes a lookup that races it, or
         // an upgrade that would write the old answer back, come to nothing.
         if (entry.document.providerId in RETIRED_PROVIDERS) {
-            file.delete()
+            file.deleteIfUnchanged(read)
             return@withContext null
         }
 
@@ -122,9 +125,16 @@ class LyricsCache(context: Context) {
     ) = withContext(Dispatchers.IO) {
         if (document == null) return@withContext
         val now = System.currentTimeMillis()
+        // Capped words whose time is already up are not written at all: a lookup that outlasted
+        // the deadline, or an upgrade carrying an old age, must not put them back.
+        if (isCapped(document) && now > expiryOf(savedAtMs ?: now, document)) return@withContext
         runCatching {
             directory.mkdirs()
-            fileFor(key).writeText(
+            val target = fileFor(key)
+            // Written beside the entry and moved into place, so a reader — the sweep runs in
+            // another process — sees the old entry or the new one and never half of either.
+            val pending = File(directory, "${target.name}.${System.nanoTime()}$PENDING")
+            pending.writeText(
                 json.encodeToString(
                     Entry(
                         savedAtMs = savedAtMs ?: now,
@@ -134,6 +144,7 @@ class LyricsCache(context: Context) {
                     ),
                 ),
             )
+            Files.move(pending.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             prune()
         }
         Unit
@@ -161,14 +172,26 @@ class LyricsCache(context: Context) {
         val now = System.currentTimeMillis()
         var removed = 0
         directory.listFiles()?.forEach { file ->
+            val read = file.lastModified()
+            if (file.name.endsWith(PENDING)) {
+                // A write in flight is left alone; one abandoned by a crash is cleared.
+                if (now - read > ABANDONED_MS) file.delete()
+                return@forEach
+            }
             val entry = runCatching { json.decodeFromString<Entry>(file.readText()) }.getOrNull()
             val document = entry?.document
             // Unreadable, or a miss an older version stored: get() would delete it too.
             val gone = document == null || (isCapped(document) && now > expiryOf(entry.savedAtMs, document))
-            if (gone && file.delete()) removed++
+            if (gone && file.deleteIfUnchanged(read)) removed++
         }
         removed
     }
+
+    /**
+     * Delete the file unless it has been rewritten since [read], when it was last looked at. What
+     * was judged expired was the old contents; a fresh answer saved in the meantime is not it.
+     */
+    private fun File.deleteIfUnchanged(read: Long): Boolean = lastModified() == read && delete()
 
     /**
      * Drop every cached document that came from [providerId], and return how many went.
@@ -179,7 +202,7 @@ class LyricsCache(context: Context) {
      */
     suspend fun forget(providerId: String): Int = withContext(Dispatchers.IO) {
         var removed = 0
-        directory.listFiles()?.forEach { file ->
+        directory.listFiles()?.filter { it.name.endsWith(ENTRY) }?.forEach { file ->
             val entry = runCatching { json.decodeFromString<Entry>(file.readText()) }.getOrNull()
             if (entry?.document?.providerId == providerId && file.delete()) removed++
         }
@@ -196,14 +219,14 @@ class LyricsCache(context: Context) {
     }
 
     private fun prune() {
-        val files = directory.listFiles() ?: return
+        val files = directory.listFiles()?.filter { it.name.endsWith(ENTRY) } ?: return
         if (files.size <= MAX_ENTRIES) return
         files.sortedBy { it.lastModified() }
             .take(files.size - MAX_ENTRIES)
             .forEach { it.delete() }
     }
 
-    private fun fileFor(key: String): File = File(directory, "${sha1(key)}.json")
+    private fun fileFor(key: String): File = File(directory, "${sha1(key)}$ENTRY")
 
     private fun sha1(value: String): String =
         MessageDigest.getInstance("SHA-1")
@@ -231,6 +254,10 @@ class LyricsCache(context: Context) {
         val RETIRED_PROVIDERS = setOf("musixmatch")
 
         private val POSITIVE_TTL_MS = TimeUnit.DAYS.toMillis(30)
+
+        private const val ENTRY = ".json"
+        private const val PENDING = ".pending"
+        private val ABANDONED_MS = TimeUnit.MINUTES.toMillis(10)
 
         /**
          * How long words from Spicy Lyrics are kept. Its terms say thirty days at the outside, and

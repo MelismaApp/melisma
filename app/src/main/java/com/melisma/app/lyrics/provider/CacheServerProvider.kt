@@ -181,11 +181,19 @@ class CacheServerProvider(
             val person = runCatching { entry.jsonObject }.getOrNull() ?: return@mapNotNull null
             person.string("text")?.let { Credit(it, person.string("url")?.takeIf { url -> url.startsWith("https://") }) }
         }
+        val expiresAt = runCatching { data["expiresAt"]?.jsonPrimitive?.longOrNull }.getOrNull()?.takeIf { it > 0 }
+        // Words the server should no longer be holding are not shown, ranked or cached.
+        if (expiresAt != null && expiresAt <= System.currentTimeMillis()) return null
+        // A server that names Spicy Lyrics as the source and leaves the rest out still owes its
+        // terms: the link, the credit, and the cap on how long the copy is kept.
+        val fromSpicy = data.string("source") == SpicyLyricsProvider.ID
         return document.copy(
             credits = credits,
-            sourceUrl = data.string("sourceUrl")?.takeIf { it.startsWith("https://") },
-            creditRequired = runCatching { data["creditRequired"]?.jsonPrimitive?.booleanOrNull }.getOrNull() == true,
-            expiresAtMs = runCatching { data["expiresAt"]?.jsonPrimitive?.longOrNull }.getOrNull()?.takeIf { it > 0 },
+            sourceUrl = data.string("sourceUrl")?.takeIf { it.startsWith("https://") }
+                ?: SpicyLyricsProvider.SITE.takeIf { fromSpicy },
+            creditRequired = fromSpicy ||
+                runCatching { data["creditRequired"]?.jsonPrimitive?.booleanOrNull }.getOrNull() == true,
+            expiresAtMs = expiresAt,
         )
     }
 

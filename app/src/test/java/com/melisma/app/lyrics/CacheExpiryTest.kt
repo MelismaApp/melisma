@@ -52,6 +52,21 @@ class CacheExpiryTest {
     @Before
     fun setUp() = runBlocking { cache.clear() }
 
+    /**
+     * An entry as it sits on disk, written directly: the cache itself refuses to save capped words
+     * whose time is up, so one that has aged in place — or was left by an earlier version — can
+     * only be put there this way.
+     */
+    private fun onDisk(key: String, providerId: String, savedAtMs: Long, sourceUrl: String? = null) {
+        val name = java.security.MessageDigest.getInstance("SHA-1").digest(key.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val link = sourceUrl?.let { ""","sourceUrl":"$it"""" }.orEmpty()
+        java.io.File(context.cacheDir, "lyrics-cache").apply { mkdirs() }.resolve("$name.json").writeText(
+            """{"savedAtMs":$savedAtMs,"document":{"kind":"LINE","lines":[{"role":"LEAD","startMs":0,"endMs":1000,""" +
+                """"text":"words"}],"providerName":"$providerId","providerId":"$providerId"$link}}""",
+        )
+    }
+
     @Test
     fun `another source's old answer is kept and marked stale, not deleted`() = runBlocking {
         cache.put("old", document("lrclib"), savedAtMs = daysAgo(31))
@@ -67,8 +82,8 @@ class CacheExpiryTest {
 
     @Test
     fun `Spicy Lyrics' words are deleted two days inside its thirty, with nothing looked up`() = runBlocking {
-        cache.put("direct", document("spicylyrics"), savedAtMs = daysAgo(29))
-        cache.put("relayed", document("cacheserver", sourceUrl = "https://spicylyrics.org"), savedAtMs = daysAgo(29))
+        onDisk("direct", "spicylyrics", daysAgo(29))
+        onDisk("relayed", "cacheserver", daysAgo(29), sourceUrl = "https://spicylyrics.org")
         cache.put("direct-young", document("spicylyrics"), savedAtMs = daysAgo(27))
         // The same age from a source with no such limit stays.
         cache.put("other", document("cacheserver", sourceUrl = "https://lrc.red"), savedAtMs = daysAgo(29))
@@ -82,7 +97,7 @@ class CacheExpiryTest {
 
     @Test
     fun `and they are refused on read, never handed over as stale`() = runBlocking {
-        cache.put("direct", document("spicylyrics"), savedAtMs = daysAgo(29))
+        onDisk("direct", "spicylyrics", daysAgo(29))
 
         assertNull(cache.get("direct"))
         // Reading it deleted it, so there is nothing left for the sweep.
@@ -91,15 +106,69 @@ class CacheExpiryTest {
 
     @Test
     fun `a deadline the document carries is kept, however recently the app saved it`() = runBlocking {
-        // A server that had the words for four weeks before the phone asked: two days left, not a month.
+        // A server that had the words for four weeks before the phone asked: a moment left, not a month.
         cache.put("nearly", document("cacheserver", expiresAtMs = now + TimeUnit.DAYS.toMillis(2)))
-        cache.put("past", document("cacheserver", expiresAtMs = now - 1))
-
+        cache.put("brief", document("cacheserver", expiresAtMs = now + 150))
         assertNotNull(cache.get("nearly"))
-        // Refused on read as well as swept, so it is never shown in between.
-        assertNull(cache.get("past"))
-        cache.put("past", document("cacheserver", expiresAtMs = now - 1))
+        assertNotNull(cache.get("brief"))
+
+        Thread.sleep(300)
+
         assertEquals(1, cache.sweep())
+        assertNull(cache.get("brief"))
+        assertNotNull(cache.get("nearly"))
+    }
+
+    @Test
+    fun `words whose time is already up are never written`() = runBlocking {
+        cache.put("past", document("cacheserver", expiresAtMs = now - 1))
+        // An upgrade that keeps an old age must not put capped words back either.
+        cache.put("aged", document("spicylyrics"), savedAtMs = daysAgo(29))
+
+        assertEquals(0, cache.sweep())
+        assertNull(cache.get("past"))
+        assertNull(cache.get("aged"))
+    }
+
+    /**
+     * The sweep runs in another process, so a lookup can save a fresh answer between the sweep
+     * reading an expired entry and deleting it. What it judged was the old file, not this one.
+     */
+    @Test
+    fun `an entry rewritten while it was being judged is not the one deleted`() = runBlocking {
+        val directory = java.io.File(context.cacheDir, "lyrics-cache")
+        cache.put("track", document("lrclib"))
+        val file = directory.listFiles()!!.single()
+        val read = file.lastModified()
+
+        // Saved again by someone else in the meantime.
+        cache.put("track", document("amll"))
+        file.setLastModified(read + 5_000)
+
+        val delete = LyricsCache::class.java.getDeclaredMethod("deleteIfUnchanged", java.io.File::class.java, Long::class.javaPrimitiveType)
+            .apply { isAccessible = true }
+        assertEquals(false, delete.invoke(cache, file, read))
+        assertEquals("amll", (cache.get("track") as LyricsCache.Result.Hit).document.providerId)
+        // Untouched since it was read, it goes.
+        assertEquals(true, delete.invoke(cache, file, file.lastModified()))
+    }
+
+    @Test
+    fun `a write leaves no half-written entry behind, and an abandoned one is cleared`() = runBlocking {
+        val directory = java.io.File(context.cacheDir, "lyrics-cache")
+        cache.put("track", document("lrclib"))
+        assertEquals(listOf(true), directory.listFiles()!!.map { it.name.endsWith(".json") })
+
+        val inFlight = java.io.File(directory, "x.json.1.pending").apply { writeText("{") }
+        val abandoned = java.io.File(directory, "y.json.2.pending").apply {
+            writeText("{")
+            setLastModified(daysAgo(1))
+        }
+        assertEquals(0, cache.sweep())
+
+        assertTrue(inFlight.exists())
+        assertTrue(!abandoned.exists())
+        assertNotNull(cache.get("track"))
     }
 
     @Test
